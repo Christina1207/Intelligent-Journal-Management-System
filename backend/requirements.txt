@@ -2,7 +2,7 @@
 Django==5.0.6
 djangorestframework==3.15.2
 django-cors-headers==4.4.0
-django-environ==0.11.2
+python-decouple==3.8
 gunicorn==22.0.0
 
 # Database
@@ -12,20 +12,20 @@ pgvector==0.3.2
 # Auth
 djangorestframework-simplejwt==5.3.1
 
-# Async tasks
-celery==5.4.0
-redis==5.0.8
-django-celery-results==2.5.1
-
 # File handling
 Pillow==10.4.0
 PyMuPDF==1.24.9
 
-# NLP / AI
+# Dev tools
+django-debug-toolbar==4.4.6
+
+# Async tasks (uncomment when Celery work begins)
+# celery==5.4.0
+# redis==5.0.8
+# django-celery-results==2.5.1
+
+# NLP / AI (uncomment when AI sprint begins)
 # sentence-transformers==3.1.1
 # spacy==3.7.6
 # bertopic==0.16.4
 # scikit-learn==1.5.2
-
-# Dev tools
-django-debug-toolbar==4.4.6
