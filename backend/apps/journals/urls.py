@@ -1,0 +1,2 @@
+# Placeholder — section endpoints
+urlpatterns = []
