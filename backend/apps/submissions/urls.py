@@ -1,0 +1,2 @@
+# Placeholder — submission endpoints
+urlpatterns = []
