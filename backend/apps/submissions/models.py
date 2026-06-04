@@ -201,6 +201,7 @@ class Submission(models.Model):
         ASSIGNED = "ASSIGNED", "Assigned"
         UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
         SUSPENDED = "SUSPENDED", "Suspended"
+        REVIEWED = "REVIEWED", "Reviewed"
         # TODO Sprint N: add ACCEPTED, REJECTED, PUBLISHED when lifecycle is defined
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

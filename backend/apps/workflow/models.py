@@ -51,3 +51,46 @@ class SubmissionAssignment(models.Model):
             # Second most common: all assignments received by a user
             models.Index(fields=["assigned_to"], name="idx_assignment_assigned_to"),
         ]
+
+class ReviewerAssignment(models.Model):
+
+    class Status(models.TextChoices):
+        PENDING  = 'PENDING',  'Pending'
+        ACCEPTED = 'ACCEPTED', 'Accepted'
+        DECLINED = 'DECLINED', 'Declined'
+        EXPIRED  = 'EXPIRED',  'Expired'
+        OVERDUE  = 'OVERDUE',  'Overdue'
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission  = models.ForeignKey(
+                    'submissions.Submission',
+                    on_delete=models.PROTECT,
+                    related_name='reviewer_assignments',
+                  )
+    reviewer    = models.ForeignKey(
+                    'accounts.User',
+                    on_delete=models.PROTECT,
+                    related_name='reviewer_assignments',
+                  )
+    assigned_by = models.ForeignKey(
+                    'accounts.User',
+                    on_delete=models.PROTECT,
+                    related_name='reviewer_assignments_made',
+                  )
+    status          = models.CharField(
+                        max_length=20,
+                        choices=Status.choices,
+                        default=Status.PENDING,
+                      )
+    response_deadline = models.DateField()
+    review_deadline   = models.DateField()
+    assigned_at       = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['submission']),
+            models.Index(fields=['reviewer']),
+        ]
+
+    def __str__(self):
+        return f"ReviewerAssignment({self.reviewer_id} → {self.submission_id} [{self.status}])"
