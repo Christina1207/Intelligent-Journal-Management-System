@@ -84,6 +84,7 @@ class EditorQueueView(generics.ListAPIView):
             role=Role.RoleName.SECTION_EDITOR,
         ).values_list("submission_id", flat=True)
 
+        #TODO: shouldn't this also include UNDER_REVIEW submissions? or should those only be visible in the editor's review queue?
         return Submission.objects.filter(
             id__in=assigned_submission_ids,
             status=Submission.Status.ASSIGNED,
