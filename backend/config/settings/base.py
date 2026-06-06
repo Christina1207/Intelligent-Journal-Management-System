@@ -20,6 +20,8 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "rest_framework",
     "corsheaders",
+    "django_celery_beat",
+    "django_celery_results",
 ]
 
 LOCAL_APPS = [
@@ -111,8 +113,13 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-# TODO: uncomment when Celery sprint begins
-# CELERY_BROKER_URL = config("REDIS_URL")
-# CELERY_RESULT_BACKEND = "django-db"
-# CELERY_ACCEPT_CONTENT = ["json"]
-# CELERY_TASK_SERIALIZER = "json"
+# ------------------------------------------------------------------
+# Celery
+# ------------------------------------------------------------------
+CELERY_BROKER_URL = config('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
