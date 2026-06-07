@@ -17,6 +17,21 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: journal_migrate
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python manage.py migrate
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -32,28 +47,81 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     command: python manage.py runserver 0.0.0.0:8000
 
-  # --- Uncomment when Celery/Redis work is started ---
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: journal_redis
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis_data:/data
+  redis:
+    image: redis:7-alpine
+    container_name: journal_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # celery:
-  #   build: ./backend
-  #   container_name: journal_celery
-  #   command: celery -A config worker --loglevel=info
-  #   env_file:
-  #     - .env
-  #   volumes:
-  #     - ./backend:/app
-  #   depends_on:
-  #     - backend
-  #     - redis
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: journal_celery_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: celery -A config worker --loglevel=info --concurrency=2
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: journal_celery_beat
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  minio:
+    image: minio/minio:latest #TODO: Pin to a specific version for production
+    container_name: journal_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Web Console
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # --- Uncomment when frontend development starts ---
   # frontend:
@@ -69,4 +137,5 @@ services:
 
 volumes:
   postgres_data:
-  # redis_data:
+  redis_data:
+  minio_data:
