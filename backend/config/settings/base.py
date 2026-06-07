@@ -123,3 +123,18 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# ------------------------------------------------------------------
+# MinIO
+# ------------------------------------------------------------------
+MINIO_ENDPOINT    = config('MINIO_ENDPOINT')
+MINIO_ACCESS_KEY  = config('MINIO_ACCESS_KEY')
+MINIO_SECRET_KEY  = config('MINIO_SECRET_KEY')
+MINIO_BUCKET_NAME = config('MINIO_BUCKET_NAME')
+MINIO_USE_SSL     = config('MINIO_USE_SSL', default=False, cast=bool)
+
+# ------------------------------------------------------------------
+# AI / Embeddings
+# ------------------------------------------------------------------
+EMBEDDING_MODEL_NAME = config('EMBEDDING_MODEL_NAME', default='all-MiniLM-L6-v2')
+EMBEDDING_DIMENSIONS = config('EMBEDDING_DIMENSIONS', default=384, cast=int)

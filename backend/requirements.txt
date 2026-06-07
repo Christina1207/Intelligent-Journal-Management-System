@@ -19,7 +19,7 @@ PyMuPDF==1.24.9
 # Dev tools
 django-debug-toolbar==4.4.6
 
-# Async tasks (uncomment when Celery work begins)
+# Async tasks
 # celery==5.4.0
 # redis==5.0.8
 # django-celery-results==2.5.1
