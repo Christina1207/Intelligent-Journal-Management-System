@@ -18,6 +18,6 @@ class SubmissionAssignmentAdmin(admin.ModelAdmin):
 
 @admin.register(ReviewerAssignment)
 class ReviewerAssignmentAdmin(admin.ModelAdmin):
-    list_display  = ['id', 'submission', 'reviewer', 'assigned_by', 'status', 'response_deadline', 'review_deadline', 'assigned_at']
+    list_display  = ['id', 'version', 'reviewer', 'assigned_by', 'carried_from', 'status', 'response_deadline', 'review_deadline', 'assigned_at']
     list_filter   = ['status']
-    raw_id_fields = ['submission', 'reviewer', 'assigned_by']
+    raw_id_fields = ['version', 'reviewer', 'assigned_by', 'carried_from']

@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from pgvector.django import VectorField
 
 # ISO 639-1 language codes
 # Format: ("code", "Display Name") — e.g. ("en", "English")
@@ -202,6 +203,8 @@ class Submission(models.Model):
         UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
         SUSPENDED = "SUSPENDED", "Suspended"
         REVIEWED = "REVIEWED", "Reviewed"
+        UNDER_REVISION = 'UNDER_REVISION', 'Under Revision'
+        REVISED        = 'REVISED',        'Revised'
         # TODO Sprint N: add ACCEPTED, REJECTED, PUBLISHED when lifecycle is defined
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -236,8 +239,68 @@ class Submission(models.Model):
         # suspension logic handled at the view/service layer, not DB cascade
     )
 
+    assigned_editor  = models.ForeignKey(       # ← new
+                         'accounts.User',
+                         on_delete=models.PROTECT,
+                         related_name='assigned_submissions',
+                         null=True,
+                         blank=True,
+                       )
+    abstract_embedding = VectorField(           # ← new
+                           dimensions=384,
+                           null=True,
+                           blank=True,
+                         )
+
     def __str__(self):
         return f"{self.title} [{self.status}]"
 
     class Meta:
         ordering = ["-submitted_at"]
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['author']),
+            models.Index(fields=['assigned_editor']),
+        ]
+
+class SubmissionVersion(models.Model):
+
+    class Decision(models.TextChoices):
+        PENDING        = 'PENDING',        'Pending'
+        ACCEPTED       = 'ACCEPTED',       'Accepted'
+        REJECTED       = 'REJECTED',       'Rejected'
+        MAJOR_REVISION = 'MAJOR_REVISION', 'Major Revision'
+        MINOR_REVISION = 'MINOR_REVISION', 'Minor Revision'
+
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission     = models.ForeignKey(
+                       Submission,
+                       on_delete=models.PROTECT,
+                       related_name='versions',
+                     )
+    version_number = models.PositiveIntegerField()
+    file           = models.CharField(max_length=500, null=True, blank=True)  # MinIO object path
+    submitted_at   = models.DateTimeField(auto_now_add=True)
+    decision       = models.CharField(
+                       max_length=20,
+                       choices=Decision.choices,
+                       default=Decision.PENDING,
+                     )
+    decided_at     = models.DateTimeField(null=True, blank=True)
+    decided_by     = models.ForeignKey(
+        # i think it should be AUTH_USER_MODEL 
+                       'accounts.User',
+                       on_delete=models.PROTECT,
+                       related_name='version_decisions',
+                       null=True,
+                       blank=True,
+                     )
+
+    class Meta:
+        unique_together = [('submission', 'version_number')]
+        indexes = [
+            models.Index(fields=['submission']),
+        ]
+
+    def __str__(self):
+        return f"SubmissionVersion({self.submission_id} v{self.version_number} [{self.decision}])"

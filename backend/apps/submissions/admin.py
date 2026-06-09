@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Submission
+from .models import Submission , SubmissionVersion
 
 
 @admin.register(Submission)
@@ -9,3 +9,9 @@ class SubmissionAdmin(admin.ModelAdmin):
     search_fields = ["title", "abstract", "author__username", "author__email"]
     ordering = ["-submitted_at"]
     readonly_fields = ["id", "submitted_at"]
+
+@admin.register(SubmissionVersion)
+class SubmissionVersionAdmin(admin.ModelAdmin):
+    list_display  = ['id', 'submission', 'version_number', 'decision', 'decided_by', 'decided_at', 'submitted_at']
+    list_filter   = ['decision']
+    raw_id_fields = ['submission', 'decided_by']

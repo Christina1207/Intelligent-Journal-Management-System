@@ -62,12 +62,13 @@ class ReviewerAssignment(models.Model):
         OVERDUE  = 'OVERDUE',  'Overdue'
 
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    submission  = models.ForeignKey(
-                    'submissions.Submission',
+    version  = models.ForeignKey(
+                    'submissions.SubmissionVersion',
                     on_delete=models.PROTECT,
                     related_name='reviewer_assignments',
                   )
     reviewer    = models.ForeignKey(
+        # TODO : should this be AUTH_USER_MODEL , unify that over the codebase
                     'accounts.User',
                     on_delete=models.PROTECT,
                     related_name='reviewer_assignments',
@@ -77,6 +78,14 @@ class ReviewerAssignment(models.Model):
                     on_delete=models.PROTECT,
                     related_name='reviewer_assignments_made',
                   )
+    # why do we need this?
+    carried_from = models.ForeignKey(                     # ← new
+                     'self',
+                     on_delete=models.PROTECT,
+                     related_name='carried_forward',
+                     null=True,
+                     blank=True,
+                   )
     status          = models.CharField(
                         max_length=20,
                         choices=Status.choices,
@@ -88,9 +97,10 @@ class ReviewerAssignment(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['submission']),
+            # do we need an index for version ? we will often have no more than a couple versions
+            models.Index(fields=['version']),
             models.Index(fields=['reviewer']),
         ]
 
     def __str__(self):
-        return f"ReviewerAssignment({self.reviewer_id} → {self.submission_id} [{self.status}])"
+        return f"ReviewerAssignment({self.reviewer_id} → {self.version_id} [{self.status}])"
