@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from .models import User, Role
+from .models import ReviewerProfile, User, Role
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -58,8 +58,29 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+class ReviewerProfileSerializer(serializers.ModelSerializer):
+    """
+    Exposes reviewer expertise profile fields.
+    keywords and biography are writable by the reviewer.
+    publications, last_synced_at, sync_status are read-only (system-managed).
+    expertise_embedding is never exposed — internal vector field.
+    """
+
+    class Meta:
+        model = ReviewerProfile
+        fields = [
+            "keywords",
+            "biography",
+            "publications",
+            "last_synced_at",
+            "sync_status",
+        ]
+        read_only_fields = ["publications", "last_synced_at", "sync_status"]
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     roles = RoleSerializer(many=True, read_only=True)
+    reviewer_profile = ReviewerProfileSerializer(read_only=True)
 
     class Meta:
         model = User
@@ -74,5 +95,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "country",
             "status",
             "roles",
+            "reviewer_profile",
         ]
         read_only_fields = ["id", "status", "roles"]

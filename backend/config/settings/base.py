@@ -1,6 +1,7 @@
 from pathlib import Path
 from decouple import config, Csv
 from datetime import timedelta
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -123,6 +124,12 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SCHEDULE = {
+    "refresh-reviewer-orcid-profiles": {
+        "task": "apps.accounts.tasks.refresh_all_reviewer_orcid_profiles",
+        "schedule": crontab(hour=2, minute=0),  # Daily at 2am
+    },
+}
 
 # ------------------------------------------------------------------
 # MinIO

@@ -1,6 +1,8 @@
 import uuid
 from django.contrib.auth.models import AbstractUser
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from pgvector.django import VectorField
 
 
 class Role(models.Model):
@@ -43,6 +45,8 @@ class User(AbstractUser):
         default=Status.ACTIVE,
     )
     roles = models.ManyToManyField(Role, blank=True, related_name="users")
+    # TODO: REQUIRED_FIELDS should be reviewed — 'username' may need to be included
+    # or authentication should be switched to email-only. Defer to Phase 7 hardening.
     REQUIRED_FIELDS = ["email", "first_name", "last_name"]
 
     def __str__(self):
@@ -54,3 +58,56 @@ class User(AbstractUser):
 
     class Meta:
         ordering = ["username"]
+
+
+class ReviewerProfile(models.Model):
+    """
+    Stores reviewer-specific expertise data and ORCID publication cache.
+    One row per reviewer, created lazily on first sync or task execution.
+
+    # TODO: ReviewerProfile creation should be moved to UserService.assign_role()
+    # once the reviewer application workflow is implemented (deferred to Sprint 4).
+    # Currently created via get_or_create in the Celery task and sync endpoint.
+    """
+
+    class SyncStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        COMPLETED = "COMPLETED", "Completed"
+        FAILED = "FAILED", "Failed"
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.PROTECT,
+        related_name="reviewer_profile",
+    )
+    keywords = ArrayField(
+        base_field=models.CharField(max_length=100),
+        blank=True,
+        default=list,
+    )
+    biography = models.TextField(blank=True, default="")
+    expertise_embedding = VectorField(
+        dimensions=384,
+        null=True,
+        blank=True,
+        # TODO: Add pgvector IVFFlat or HNSW index on this field once
+        # reviewer count justifies it. Defer to Phase 7 hardening.
+    )
+    publications = models.JSONField(
+        default=list,
+        # Raw ORCID works data. Structure: [{title, year, doi}]
+        # TODO: If publication querying becomes a requirement (filtering, search),
+        # normalize into a separate ReviewerPublication model. Defer to Sprint 4.
+    )
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    sync_status = models.CharField(
+        max_length=10,
+        choices=SyncStatus.choices,
+        default=SyncStatus.PENDING,
+    )
+
+    def __str__(self):
+        return f"ReviewerProfile for {self.user.email}"
+
+    class Meta:
+        ordering = ["-last_synced_at"]
