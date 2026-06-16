@@ -69,18 +69,21 @@ class ReviewerAssignment(models.Model):
                   )
     reviewer    = models.ForeignKey(
         # TODO : should this be AUTH_USER_MODEL , unify that over the codebase
-                    'accounts.User',
+                    settings.AUTH_USER_MODEL,
                     on_delete=models.PROTECT,
                     related_name='reviewer_assignments',
                   )
     assigned_by = models.ForeignKey(
-                    'accounts.User',
+                    settings.AUTH_USER_MODEL,
                     on_delete=models.PROTECT,
                     related_name='reviewer_assignments_made',
                   )
     # why do we need this?
-    carried_from = models.ForeignKey(                     # ← new
-                     'self',
+    # Audit trail: tracks which previous ReviewerAssignment this was
+    # carried forward from on revision upload. Null on original assignments.
+    # Enables full reviewer history tracing across revision rounds.
+    carried_from = models.ForeignKey(  
+                    'self',                   
                      on_delete=models.PROTECT,
                      related_name='carried_forward',
                      null=True,

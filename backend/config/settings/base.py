@@ -128,6 +128,11 @@ CELERY_BEAT_SCHEDULE = {
     "refresh-reviewer-orcid-profiles": {
         "task": "apps.accounts.tasks.refresh_all_reviewer_orcid_profiles",
         "schedule": crontab(hour=2, minute=0),  # Daily at 2am
+
+    },
+    "expire-pending-reviewer-assignments": {
+        "task": "apps.accounts.tasks.expire_pending_reviewer_assignments",
+        "schedule": crontab(hour=3, minute=0),  # Daily at 3am
     },
 }
 

@@ -46,8 +46,8 @@ class AssignmentService:
             assigned_by=assigned_by,
             role=Role.RoleName.SECTION_EDITOR,
         )
-
+        submission.assigned_editor = editor
         submission.status = Submission.Status.ASSIGNED
-        submission.save(update_fields=["status"])
+        submission.save(update_fields=["assigned_editor", "status"])
 
         return assignment

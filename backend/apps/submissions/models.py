@@ -198,14 +198,16 @@ LANGUAGE_CHOICES = [
 
 class Submission(models.Model):
     class Status(models.TextChoices):
-        SUBMITTED = "SUBMITTED", "Submitted"
-        ASSIGNED = "ASSIGNED", "Assigned"
-        UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
-        SUSPENDED = "SUSPENDED", "Suspended"
-        REVIEWED = "REVIEWED", "Reviewed"
-        UNDER_REVISION = 'UNDER_REVISION', 'Under Revision'
-        REVISED        = 'REVISED',        'Revised'
-        # TODO Sprint N: add ACCEPTED, REJECTED, PUBLISHED when lifecycle is defined
+        SUBMITTED     = "SUBMITTED",     "Submitted"
+        ASSIGNED      = "ASSIGNED",      "Assigned"
+        UNDER_REVIEW  = "UNDER_REVIEW",  "Under Review"
+        SUSPENDED     = "SUSPENDED",     "Suspended"
+        REVIEWED      = "REVIEWED",      "Reviewed"
+        UNDER_REVISION = "UNDER_REVISION", "Under Revision"
+        REVISED       = "REVISED",       "Revised"
+        ACCEPTED      = "ACCEPTED",      "Accepted"
+        REJECTED      = "REJECTED",      "Rejected"
+    # TODO Sprint 4: add PUBLISHED when DOI assignment and publishing flow is built
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=500)
@@ -239,14 +241,14 @@ class Submission(models.Model):
         # suspension logic handled at the view/service layer, not DB cascade
     )
 
-    assigned_editor  = models.ForeignKey(       # ← new
-                         'accounts.User',
+    assigned_editor  = models.ForeignKey(      
+                         settings.AUTH_USER_MODEL,
                          on_delete=models.PROTECT,
                          related_name='assigned_submissions',
                          null=True,
                          blank=True,
                        )
-    abstract_embedding = VectorField(           # ← new
+    abstract_embedding = VectorField(       
                            dimensions=384,
                            null=True,
                            blank=True,
@@ -288,8 +290,7 @@ class SubmissionVersion(models.Model):
                      )
     decided_at     = models.DateTimeField(null=True, blank=True)
     decided_by     = models.ForeignKey(
-        # i think it should be AUTH_USER_MODEL 
-                       'accounts.User',
+                       settings.AUTH_USER_MODEL,
                        on_delete=models.PROTECT,
                        related_name='version_decisions',
                        null=True,

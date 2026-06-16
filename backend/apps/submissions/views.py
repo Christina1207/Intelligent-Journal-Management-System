@@ -1,12 +1,21 @@
+import logging
 from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Role
-from .models import Submission
-from .serializers import SubmissionCreateSerializer, SubmissionListSerializer
+from .models import Submission, SubmissionVersion
+from .serializers import (
+    SubmissionCreateSerializer,
+    SubmissionListSerializer,
+    SubmissionVersionSerializer,
+    RevisionUploadSerializer,
+    VersionDecisionSerializer,
+)
 from .services import SubmissionService
+
+logger = logging.getLogger(__name__)
 
 
 class SubmissionCreateView(APIView):
@@ -14,16 +23,17 @@ class SubmissionCreateView(APIView):
 
     def post(self, request):
         if not request.user.has_role(Role.RoleName.AUTHOR):
-            return Response(
-                {"detail": "Only authors can create submissions."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied("Only authors can create submissions.")
 
         serializer = SubmissionCreateSerializer(data=request.data)
         if serializer.is_valid():
+            data = serializer.validated_data
+            file = data.pop("file")
             submission = SubmissionService.create_submission(
                 author=request.user,
-                validated_data=serializer.validated_data,
+                validated_data=data,
+                file=file,
             )
             return Response(
                 SubmissionListSerializer(submission).data,
@@ -40,3 +50,91 @@ class MySubmissionsView(generics.ListAPIView):
         return Submission.objects.filter(
             author=self.request.user
         ).select_related("section")
+
+
+class SubmissionVersionListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SubmissionVersionSerializer
+
+    def get_queryset(self):
+        submission_id = self.kwargs["submission_id"]
+        # Authors see only their own submission versions
+        # Editors and reviewers access controlled at assignment level
+        # TODO Sprint 4: tighten access control with permission engine
+        return SubmissionVersion.objects.filter(
+            submission__id=submission_id
+        ).select_related("decided_by")
+
+
+class RevisionUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, submission_id):
+        if not request.user.has_role(Role.RoleName.AUTHOR):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied("Only authors can upload revisions.")
+
+        try:
+            submission = Submission.objects.get(id=submission_id)
+        except Submission.DoesNotExist:
+            return Response(
+                {"detail": "Submission not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RevisionUploadSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                version = SubmissionService.create_revision(
+                    author=request.user,
+                    submission=submission,
+                    file=serializer.validated_data["file"],
+                )
+                return Response(
+                    SubmissionVersionSerializer(version).data,
+                    status=status.HTTP_201_CREATED,
+                )
+            except Exception as e:
+                return Response(
+                    {"detail": str(e)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class VersionDecideView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, submission_id, version_id):
+        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied("Only section editors can set decisions.")
+
+        try:
+            version = SubmissionVersion.objects.select_related(
+                "submission"
+            ).get(id=version_id, submission__id=submission_id)
+        except SubmissionVersion.DoesNotExist:
+            return Response(
+                {"detail": "Version not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = VersionDecisionSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                version = SubmissionService.decide_version(
+                    editor=request.user,
+                    version=version,
+                    decision=serializer.validated_data["decision"],
+                )
+                return Response(
+                    SubmissionVersionSerializer(version).data,
+                    status=status.HTTP_200_OK,
+                )
+            except Exception as e:
+                return Response(
+                    {"detail": str(e)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

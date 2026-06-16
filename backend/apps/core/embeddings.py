@@ -45,6 +45,7 @@ class EmbeddingService:
         Used for reviewer expertise: keywords + biography + publications.
         Concatenates texts, generates one unified embedding.
         """
+        #TODO: clean up texts (remove empty, trim whitespace) and doi
         combined = " ".join(t for t in texts if t and t.strip())
         if not combined:
             raise ValueError("Cannot generate embedding from empty text list.")
