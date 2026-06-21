@@ -8,6 +8,7 @@ from apps.reviews.views import (
     RespondToAssignmentView,
     SubmitReviewView,
 )
+from apps.reviews.views import ReviewerRecommendationsView
 
 editor_urlpatterns = [
     path(
@@ -29,6 +30,11 @@ editor_urlpatterns = [
         'assignments/<uuid:assignment_id>/overdue/',
         OverdueAssignmentView.as_view(),
         name='overdue-assignment',
+    ),
+    path(
+        'submissions/<uuid:submission_id>/reviewer-recommendations/',
+        ReviewerRecommendationsView.as_view(),
+        name='reviewer-recommendations',
     ),
 ]
 

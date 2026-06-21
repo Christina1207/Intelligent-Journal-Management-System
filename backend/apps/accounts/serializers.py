@@ -52,7 +52,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         # Every registered user gets AUTHOR role by default
         #TODO: In the future, we may want to allow users to select additional roles during registration like reviewer
-        author_role, _ = Role.objects.get_or_create(name=Role.RoleName.AUTHOR)
+        author_role = Role.objects.get(name=Role.RoleName.AUTHOR)
         user.roles.add(author_role)
 
         return user

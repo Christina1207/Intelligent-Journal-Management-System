@@ -16,7 +16,8 @@ from apps.reviews.serializers import (
     ReviewSubmitSerializer,
     ReviewSerializer,
 )
-
+from config.constants import REVIEWER_RECOMMENDATION_COUNT
+from apps.core.recommendations import RecommendationService
 
 # ------------------------------------------------------------------ #
 #  EDITOR — ASSIGN REVIEWER                                           #
@@ -79,7 +80,7 @@ class SubmissionReviewsView(APIView):
         assignments = (
             ReviewerAssignment.objects
             .filter(
-                submission=submission,
+                version__submission=submission,
                 status=ReviewerAssignment.Status.ACCEPTED,
             )
             .select_related('review')
@@ -159,8 +160,7 @@ class MyAssignmentsView(APIView):
             ReviewerAssignment.objects
             .filter(reviewer=request.user)
             .select_related(
-                'submission',
-                'submission__section',
+                'version__submission__section',
                 'assigned_by',
             )
             .order_by('-assigned_at')
@@ -234,3 +234,44 @@ class SubmitReviewView(APIView):
             ReviewSerializer(review).data,
             status=status.HTTP_201_CREATED,
         )
+    
+ # ------------------------------------------------------------------ #
+#  EDITOR — REVIEWER RECOMMENDATIONS                                  #
+# ------------------------------------------------------------------ #
+
+class ReviewerRecommendationsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, submission_id):
+        from apps.accounts.models import Role
+        from django.core.exceptions import PermissionDenied
+
+        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
+            raise PermissionDenied("Only section editors can view recommendations.")
+
+        submission = get_object_or_404(
+            Submission.objects.select_related("author"),
+            pk=submission_id,
+        )
+
+        # Limit capped at REVIEWER_RECOMMENDATION_COUNT — prevents abuse
+        try:
+            requested_limit = int(request.query_params.get("limit", REVIEWER_RECOMMENDATION_COUNT))
+        except (ValueError, TypeError):
+            requested_limit = REVIEWER_RECOMMENDATION_COUNT
+
+        limit = min(requested_limit, REVIEWER_RECOMMENDATION_COUNT)
+
+        recommendations = RecommendationService.get_recommendations(
+            submission=submission,
+            limit=limit,
+        )
+
+        return Response(
+            {
+                "submission_id": str(submission_id),
+                "count": len(recommendations),
+                "recommendations": recommendations,
+            },
+            status=status.HTTP_200_OK,
+        )   

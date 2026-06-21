@@ -17,6 +17,7 @@ class ReviewService:
     @staticmethod
     @transaction.atomic
     def assign_reviewer(*, editor, reviewer, submission, response_deadline, review_deadline):
+        # TODO: fix bug here
         """
         Section Editor assigns a reviewer to a submission.
         Creates a ReviewerAssignment row.
@@ -41,9 +42,11 @@ class ReviewService:
             raise ValidationError(
                 f"Cannot assign reviewers to a submission with status '{submission.status}'."
             )
-
+        # Uniqueness enforced on current version only — append-only model
+        # TODO: when reviewer carry-forward is active, also check previous versions
+        # to avoid assigning a reviewer who was carried forward. Defer to Sprint 4.
         active_exists = ReviewerAssignment.objects.filter(
-            submission=submission,
+            version__submission=submission,
             reviewer=reviewer,
             status__in=[
                 ReviewerAssignment.Status.PENDING,
@@ -61,10 +64,14 @@ class ReviewService:
             raise ValidationError(
                 "Response deadline must be earlier than the review deadline."
             )
+        # Assign to the latest version of the submission
+        current_version = submission.versions.order_by("-version_number").first()
+        if current_version is None:
+          raise ValidationError("Submission has no versions. Cannot assign reviewer.")
 
         # --- create assignment ---
         assignment = ReviewerAssignment.objects.create(
-            submission=submission,
+            version=current_version,
             reviewer=reviewer,
             assigned_by=editor,
             status=ReviewerAssignment.Status.PENDING,
@@ -141,7 +148,7 @@ class ReviewService:
         submission = (
             Submission.objects
             .select_for_update()
-            .get(pk=assignment.submission_id)
+            .get(pk=assignment.version.submission_id)
         )
 
         # --- create the review ---
@@ -153,7 +160,7 @@ class ReviewService:
 
         # --- transition check ---
         submitted_count = ReviewerAssignment.objects.filter(
-            submission=submission,
+            version__submission=submission,
             status=ReviewerAssignment.Status.ACCEPTED,
             review__isnull=False,
         ).count()
