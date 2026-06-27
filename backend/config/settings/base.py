@@ -134,6 +134,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.accounts.tasks.expire_pending_reviewer_assignments",
         "schedule": crontab(hour=3, minute=0),  # Daily at 3am
     },
+    "check-section-clustering": {
+        "task": "apps.journals.tasks.check_and_trigger_section_clustering",
+        "schedule": crontab(hour=4, minute=0),  # Daily at 4am UTC
+    },
 }
 
 # ------------------------------------------------------------------

@@ -31,7 +31,7 @@ redis==5.0.3
 minio==7.2.7
 sentence-transformers==2.7.0
 pdfplumber==0.11.0
-
+bertopic==0.17.4
 
 # NLP / AI (uncomment when AI sprint begins)
 # sentence-transformers==3.1.1

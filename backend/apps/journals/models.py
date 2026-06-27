@@ -24,6 +24,12 @@ class Section(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    last_clustered_at = models.DateTimeField(
+    null=True,
+    blank=True,
+    help_text="Timestamp of the last successful BERTopic clustering run for this section.",
+    )
+
     def __str__(self):
         return self.name
 

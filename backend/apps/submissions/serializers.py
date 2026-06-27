@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Submission, SubmissionVersion
+from .models import Submission, SubmissionTopic, SubmissionVersion
 from apps.journals.serializers import SectionSerializer
 
 
@@ -54,8 +54,15 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class SubmissionTopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubmissionTopic
+        fields = ["label", "keywords"]
+        read_only_fields = fields
+
 class SubmissionListSerializer(serializers.ModelSerializer):
     section = SectionSerializer(read_only=True)
+    topics = SubmissionTopicSerializer(read_only=True)
 
     class Meta:
         model = Submission
@@ -66,6 +73,7 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "language",
             "status",
             "section",
+            "topics",
             "submitted_at",
         ]
         read_only_fields = fields

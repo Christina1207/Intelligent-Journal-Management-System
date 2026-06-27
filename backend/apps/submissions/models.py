@@ -305,3 +305,32 @@ class SubmissionVersion(models.Model):
 
     def __str__(self):
         return f"SubmissionVersion({self.submission_id} v{self.version_number} [{self.decision}])"
+    
+class SubmissionTopic(models.Model):
+    """
+    Stores BERTopic clustering output for a submission.
+    One row per submission, created/overwritten on each section re-cluster.
+    label=None and keywords=[] indicates an outlier (BERTopic topic -1)
+    or a submission processed but not assigned to any meaningful cluster.
+
+    Lives in submissions, not journals, to preserve dependency direction —
+    submissions already depends on journals, not the reverse.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.OneToOneField(
+        Submission,
+        on_delete=models.PROTECT,
+        related_name="topic",
+    )
+    label = models.CharField(max_length=255, null=True, blank=True)
+    keywords = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"SubmissionTopic({self.submission_id}: {self.label or 'outlier'})"
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["submission"]),
+        ]
