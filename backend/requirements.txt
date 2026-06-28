@@ -15,26 +15,22 @@ djangorestframework-simplejwt==5.3.1
 # File handling
 Pillow==10.4.0
 PyMuPDF==1.24.9
+minio==7.2.7
+pdfplumber==0.11.0
 
 # Dev tools
 django-debug-toolbar==4.4.6
+drf-spectacular==0.28.0
 
 # Async tasks
-# celery==5.4.0
-# redis==5.0.8
-# django-celery-results==2.5.1
-
 celery==5.3.6
 django-celery-beat==2.6.0
 django-celery-results==2.5.1
 redis==5.0.3
-minio==7.2.7
+
+# AI/NLP
 sentence-transformers==2.7.0
-pdfplumber==0.11.0
 bertopic==0.17.4
 
-# NLP / AI (uncomment when AI sprint begins)
-# sentence-transformers==3.1.1
 # spacy==3.7.6
-# bertopic==0.16.4
 # scikit-learn==1.5.2
