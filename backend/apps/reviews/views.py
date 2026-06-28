@@ -185,7 +185,7 @@ class RespondToAssignmentView(APIView):
 
     def post(self, request, assignment_id):
         assignment = get_object_or_404(
-            ReviewerAssignment.objects.select_related('submission', 'reviewer'),
+            ReviewerAssignment.objects.select_related('version__submission__section', 'reviewer'),
             pk=assignment_id,
         )
 
@@ -216,7 +216,7 @@ class SubmitReviewView(APIView):
 
     def post(self, request, assignment_id):
         assignment = get_object_or_404(
-            ReviewerAssignment.objects.select_related('submission', 'reviewer'),
+            ReviewerAssignment.objects.select_related('version__submission__section', 'reviewer'),
             pk=assignment_id,
         )
 

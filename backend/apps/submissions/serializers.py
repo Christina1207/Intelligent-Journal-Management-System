@@ -62,7 +62,7 @@ class SubmissionTopicSerializer(serializers.ModelSerializer):
 
 class SubmissionListSerializer(serializers.ModelSerializer):
     section = SectionSerializer(read_only=True)
-    topics = SubmissionTopicSerializer(read_only=True)
+    topic = SubmissionTopicSerializer(read_only=True)
 
     class Meta:
         model = Submission
@@ -73,7 +73,7 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "language",
             "status",
             "section",
-            "topics",
+            "topic",
             "submitted_at",
         ]
         read_only_fields = fields

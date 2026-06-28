@@ -65,8 +65,11 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     Full assignment detail.
     Pass context={'is_editor': True} to expose assigned_by.
     Reviewer-facing: assigned_by is hidden.
+    
+    `submission` is derived from version.submission — the model FK is
+    `version` (SubmissionVersion), not submission directly.
     """
-    submission  = SubmissionBriefSerializer(read_only=True)
+    submission  = serializers.SerializerMethodField()
     reviewer    = UserBriefSerializer(read_only=True)
     assigned_by = UserBriefSerializer(read_only=True)
 
@@ -82,7 +85,11 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
             'review_deadline',
             'assigned_at',
         ]
-
+        
+    def get_submission(self, instance):
+        # version is select_related in every callsite — no extra query.
+        return SubmissionBriefSerializer(instance.version.submission).data
+    
     def to_representation(self, instance):
         data = super().to_representation(instance)
         is_editor = self.context.get('is_editor', False)
