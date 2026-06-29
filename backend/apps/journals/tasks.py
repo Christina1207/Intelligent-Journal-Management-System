@@ -1,6 +1,8 @@
 import logging
+from bertopic import BERTopic
 from celery import shared_task
 from django.utils import timezone
+from umap import UMAP
 
 from config.constants import MIN_SUBMISSIONS_FOR_CLUSTERING, CELERY_TASK_MAX_RETRIES
 
@@ -103,8 +105,9 @@ def cluster_section_topics(self, section_id: str):
     embeddings = np.array([s.abstract_embedding for s in submissions])
 
     try:
-        topic_model = BERTopic(min_topic_size=2, umap_model=None)
-        topic_model.umap_model.n_neighbors = min(15, len(submissions) - 1)
+        n_neighbors = min(15, len(submissions) - 1)
+        umap_model = UMAP(n_neighbors=n_neighbors, n_components=5, min_dist=0.0, metric="cosine", random_state=42)
+        topic_model = BERTopic(min_topic_size=2, umap_model=umap_model)
         topics, _ = topic_model.fit_transform(docs, embeddings=embeddings)
     except Exception as exc:
         logger.error(
