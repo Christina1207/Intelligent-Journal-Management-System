@@ -30,7 +30,12 @@ def check_and_trigger_section_clustering(self):
         if section.last_clustered_at:
             filters["submitted_at__gt"] = section.last_clustered_at
 
-        new_count = Submission.objects.filter(**filters).count()
+        new_count = (
+            Submission.objects.filter(**filters)
+            .exclude(abstract__isnull=True)
+            .exclude(abstract__exact="")
+            .count()
+        )
 
         if new_count >= MIN_SUBMISSIONS_FOR_CLUSTERING:
             cluster_section_topics.delay(str(section.id))
@@ -82,6 +87,8 @@ def cluster_section_topics(self, section_id: str):
             section=section,
             abstract_embedding__isnull=False,
         )
+        .exclude(abstract__isnull=True)
+        .exclude(abstract__exact="")
     )
 
     if len(submissions) < MIN_SUBMISSIONS_FOR_CLUSTERING:
@@ -106,7 +113,8 @@ def cluster_section_topics(self, section_id: str):
 
     try:
         n_neighbors = min(15, len(submissions) - 1)
-        umap_model = UMAP(n_neighbors=n_neighbors, n_components=5, min_dist=0.0, metric="cosine", random_state=42)
+        n_components = min(5, max(1, len(submissions) - 2))
+        umap_model = UMAP(n_neighbors=n_neighbors, n_components=n_components, min_dist=0.0, metric="cosine", random_state=42)
         topic_model = BERTopic(min_topic_size=2, umap_model=umap_model)
         topics, _ = topic_model.fit_transform(docs, embeddings=embeddings)
     except Exception as exc:

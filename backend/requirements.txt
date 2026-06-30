@@ -32,6 +32,6 @@ redis==5.0.3
 sentence-transformers==2.7.0
 bertopic==0.17.4
 umap-learn==0.5.7
+scikit-learn==1.5.2
 
 # spacy==3.7.6
-# scikit-learn==1.5.2
