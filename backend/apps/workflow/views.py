@@ -1,5 +1,5 @@
 from rest_framework import status, generics
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,6 +11,17 @@ from apps.submissions.serializers import SubmissionListSerializer
 from .models import SubmissionAssignment
 from .serializers import AssignEditorSerializer, SubmissionAssignmentSerializer
 from .services import AssignmentService
+
+
+class IsSectionEditor(BasePermission):
+    message = "Only section editors can access this endpoint."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.has_role(Role.RoleName.SECTION_EDITOR)
+        )
 
 
 class ManagerQueueView(generics.ListAPIView):
@@ -71,13 +82,10 @@ class AssignEditorView(APIView):
 
 
 class EditorQueueView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSectionEditor]
     serializer_class = SubmissionListSerializer
 
     def get_queryset(self):
-        if not self.request.user.has_role(Role.RoleName.SECTION_EDITOR):
-            return Submission.objects.none()
-
         # Get submissions where the latest assignment points to this editor
         assigned_submission_ids = SubmissionAssignment.objects.filter(
             assigned_to=self.request.user,

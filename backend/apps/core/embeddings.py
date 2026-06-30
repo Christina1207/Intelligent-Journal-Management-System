@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Module-level singleton — model loads once per worker process
-# Loading inside a function would reload on every call
+#(Loading inside a function would reload on every call)
 _model = None
 
 

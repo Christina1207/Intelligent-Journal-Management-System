@@ -1,8 +1,10 @@
 import logging
 from rest_framework import status, generics
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from apps.accounts.models import Role
 from .models import Submission, SubmissionVersion
@@ -20,7 +22,12 @@ logger = logging.getLogger(__name__)
 
 class SubmissionCreateView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
+    @extend_schema(
+        request={"multipart/form-data": SubmissionCreateSerializer},
+        responses={201: SubmissionListSerializer},
+    )
     def post(self, request):
         if not request.user.has_role(Role.RoleName.AUTHOR):
             from django.core.exceptions import PermissionDenied
@@ -68,6 +75,7 @@ class SubmissionVersionListView(generics.ListAPIView):
 
 class RevisionUploadView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, submission_id):
         if not request.user.has_role(Role.RoleName.AUTHOR):
