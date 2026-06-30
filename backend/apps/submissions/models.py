@@ -240,7 +240,8 @@ class Submission(models.Model):
         # PROTECT: deactivating a section ≠ deleting its submissions
         # suspension logic handled at the view/service layer, not DB cascade
     )
-
+    # Use SubmissionAssignment as audit/history
+    # Use Submission.assigned_editor as current active editor
     assigned_editor  = models.ForeignKey(      
                          settings.AUTH_USER_MODEL,
                          on_delete=models.PROTECT,

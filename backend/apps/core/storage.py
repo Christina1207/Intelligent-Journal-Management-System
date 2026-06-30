@@ -1,7 +1,5 @@
-from minio import Minio
-from minio.error import S3Error
 from django.conf import settings
-import uuid
+from minio import Minio
 
 
 class StorageService:
@@ -12,14 +10,24 @@ class StorageService:
     """
 
     def __init__(self):
-        self.client = Minio(
-            endpoint=settings.MINIO_ENDPOINT,
+        self.client = self._build_client(settings.MINIO_ENDPOINT)
+        self.public_client = None
+        self.bucket = settings.MINIO_BUCKET_NAME
+        self._ensure_bucket()
+
+    def _build_client(self, endpoint: str) -> Minio:
+        return Minio(
+            endpoint=endpoint,
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_USE_SSL,
+            region=settings.MINIO_REGION,
         )
-        self.bucket = settings.MINIO_BUCKET_NAME
-        self._ensure_bucket()
+
+    def _get_public_client(self) -> Minio:
+        if self.public_client is None:
+            self.public_client = self._build_client(settings.MINIO_PUBLIC_ENDPOINT)
+        return self.public_client
 
     def _ensure_bucket(self):
         if not self.client.bucket_exists(self.bucket):
@@ -43,14 +51,29 @@ class StorageService:
 
         return object_name
 
-    def get_url(self, object_name: str, expires_in_seconds: int = 3600) -> str:
+    def get_url(
+        self,
+        object_name: str,
+        expires_in_seconds: int = 3600,
+        *,
+        public: bool = False,
+    ) -> str:
         """
         Generate a pre-signed URL for temporary access.
         Default expiry: 1 hour.
         """
         from datetime import timedelta
-        return self.client.presigned_get_object(
+
+        client = self._get_public_client() if public else self.client
+        return client.presigned_get_object(
             bucket_name=self.bucket,
             object_name=object_name,
             expires=timedelta(seconds=expires_in_seconds),
+        )
+
+    def get_public_url(self, object_name: str, expires_in_seconds: int = 3600) -> str:
+        return self.get_url(
+            object_name,
+            expires_in_seconds=expires_in_seconds,
+            public=True,
         )

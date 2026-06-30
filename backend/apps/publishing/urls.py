@@ -30,6 +30,11 @@ urlpatterns = [
         name="public-article-list",
     ),
     path(
+        "public/articles/<slug:slug>/download/",
+        views.PublicArticleDownloadView.as_view(),
+        name="public-article-download",
+    ),
+    path(
         "public/articles/<slug:slug>/",
         views.PublicArticleDetailView.as_view(),
         name="public-article-detail",

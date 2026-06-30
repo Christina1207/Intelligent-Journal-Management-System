@@ -1,5 +1,5 @@
+from typing import Optional
 from rest_framework import serializers
-
 from .models import PublishedArticle
 
 
@@ -43,7 +43,7 @@ class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerialize
         ]
         read_only_fields = fields
 
-    def get_pdf_file(self, obj):
+    def get_pdf_file(self, obj) -> Optional[str]:
         return obj.pdf_file.name if obj.pdf_file else None
 
 
@@ -91,3 +91,7 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
         if not isinstance(value, list):
             raise serializers.ValidationError("Keywords must be provided as a list.")
         return value
+
+class PublishedArticleDownloadSerializer(serializers.Serializer):
+    download_url = serializers.URLField(read_only=True)
+    expires_in = serializers.IntegerField(read_only=True)

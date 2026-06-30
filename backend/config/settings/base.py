@@ -169,9 +169,11 @@ CELERY_BEAT_SCHEDULE = {
 # MinIO
 # ------------------------------------------------------------------
 MINIO_ENDPOINT    = config('MINIO_ENDPOINT')
+MINIO_PUBLIC_ENDPOINT = config('MINIO_PUBLIC_ENDPOINT', default=MINIO_ENDPOINT)
 MINIO_ACCESS_KEY  = config('MINIO_ACCESS_KEY')
 MINIO_SECRET_KEY  = config('MINIO_SECRET_KEY')
 MINIO_BUCKET_NAME = config('MINIO_BUCKET_NAME')
+MINIO_REGION      = config('MINIO_REGION', default='us-east-1')
 MINIO_USE_SSL     = config('MINIO_USE_SSL', default=False, cast=bool)
 
 # ------------------------------------------------------------------
