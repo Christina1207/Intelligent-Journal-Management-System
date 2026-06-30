@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/v1/submissions/", include("apps.submissions.urls")),
     path("api/v1/manager/", include("apps.workflow.urls.manager")),
     path("api/v1/editor/", include("apps.workflow.urls.editor")),
+    path("api/v1/", include("apps.publishing.urls")),
 
     path('api/v1/editor/', include((editor_urlpatterns, 'editor-reviews'))),
     path('api/v1/reviewer/', include((reviewer_urlpatterns, 'reviewer'))),
