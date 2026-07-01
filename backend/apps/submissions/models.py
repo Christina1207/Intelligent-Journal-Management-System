@@ -207,7 +207,7 @@ class Submission(models.Model):
         REVISED       = "REVISED",       "Revised"
         ACCEPTED      = "ACCEPTED",      "Accepted"
         REJECTED      = "REJECTED",      "Rejected"
-    # TODO Sprint 4: add PUBLISHED when DOI assignment and publishing flow is built
+    # TODO: should i add PUBLISHED?
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=500)
@@ -248,6 +248,7 @@ class Submission(models.Model):
                          related_name='assigned_submissions',
                          null=True,
                          blank=True,
+                         help_text="Current responsible section editor. Historical assignments are stored in SubmissionAssignment.",
                        )
     abstract_embedding = VectorField(       
                            dimensions=384,

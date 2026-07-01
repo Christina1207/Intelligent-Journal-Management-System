@@ -1,3 +1,4 @@
+from time import timezone
 import uuid
 from django.db import models
 from django.conf import settings
@@ -59,7 +60,7 @@ class ReviewerAssignment(models.Model):
         ACCEPTED = 'ACCEPTED', 'Accepted'
         DECLINED = 'DECLINED', 'Declined'
         EXPIRED  = 'EXPIRED',  'Expired'
-        OVERDUE  = 'OVERDUE',  'Overdue'
+        #OVERDUE  = 'OVERDUE',  'Overdue'
 
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version  = models.ForeignKey(
@@ -94,15 +95,31 @@ class ReviewerAssignment(models.Model):
                         choices=Status.choices,
                         default=Status.PENDING,
                       )
-    response_deadline = models.DateField()
-    review_deadline   = models.DateField()
+    response_deadline = models.DateTimeField()
+    review_deadline   = models.DateTimeField()
     assigned_at       = models.DateTimeField(auto_now_add=True)
+    
+    @property
+    def is_overdue(self):
+        return (
+            self.status == self.Status.ACCEPTED
+            and self.review_deadline < timezone.localdate()
+            and not hasattr(self, "review")
+        )
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['version', 'reviewer'],
+                name='unique_reviewer_assignment_per_version',
+            ),
+        ]
         indexes = [
+            # TODO :wtf are these indexed? someone check them
             # do we need an index for version ? we will often have no more than a couple versions
-            models.Index(fields=['version']),
-            models.Index(fields=['reviewer']),
+            models.Index(fields=['version','status']),
+            models.Index(fields=["reviewer","status"]),
+            models.Index(fields=['assigned_by']),
         ]
 
     def __str__(self):

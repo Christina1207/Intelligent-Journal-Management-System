@@ -17,8 +17,14 @@ class Review(models.Model):
                    related_name='review',
                  )
     recommendation = models.CharField(max_length=20, choices=Recommendation.choices)
-    content        = models.TextField()
+    comments_for_author = models.TextField()
+    comments_for_editor = models.TextField(blank=True)
     submitted_at   = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Review({self.assignment.reviewer_id} → {self.assignment.submission_id} [{self.recommendation}])"
+    class Meta:
+        indexes = [
+            models.Index(fields=["recommendation"]),
+            models.Index(fields=["submitted_at"]),
+        ]

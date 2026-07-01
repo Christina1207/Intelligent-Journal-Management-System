@@ -69,6 +69,7 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     `submission` is derived from version.submission — the model FK is
     `version` (SubmissionVersion), not submission directly.
     """
+    is_overdue = serializers.BooleanField(read_only=True)
     submission  = serializers.SerializerMethodField()
     reviewer    = UserBriefSerializer(read_only=True)
     assigned_by = UserBriefSerializer(read_only=True)
@@ -77,6 +78,7 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
         model  = ReviewerAssignment
         fields = [
             'id',
+            # TODO: should this be version instead of submission?
             'submission',
             'reviewer',
             'assigned_by',
@@ -84,6 +86,7 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
             'response_deadline',
             'review_deadline',
             'assigned_at',
+            'is_overdue',
         ]
         
     def get_submission(self, instance):
