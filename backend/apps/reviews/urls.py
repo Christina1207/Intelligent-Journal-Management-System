@@ -3,7 +3,6 @@ from apps.reviews.views import (
     AssignReviewerView,
     SubmissionReviewsView,
     ExpireAssignmentView,
-    OverdueAssignmentView,
     MyAssignmentsView,
     RespondToAssignmentView,
     SubmitReviewView,
@@ -25,11 +24,6 @@ editor_urlpatterns = [
         'assignments/<uuid:assignment_id>/expire/',
         ExpireAssignmentView.as_view(),
         name='expire-assignment',
-    ),
-    path(
-        'assignments/<uuid:assignment_id>/overdue/',
-        OverdueAssignmentView.as_view(),
-        name='overdue-assignment',
     ),
     path(
         'submissions/<uuid:submission_id>/reviewer-recommendations/',

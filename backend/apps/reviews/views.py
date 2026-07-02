@@ -1,13 +1,11 @@
 from django.shortcuts import get_object_or_404
-from rest_framework.views import APIView
+from rest_framework.views import APIView, PermissionDenied
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-
 from apps.submissions.models import Submission
 from apps.workflow.models import ReviewerAssignment
-from apps.accounts.models import User
-from apps.reviews.models import Review
+from apps.accounts.models import Role, User
 from apps.reviews.services import ReviewService
 from apps.reviews.serializers import (
     ReviewerAssignmentCreateSerializer,
@@ -65,7 +63,15 @@ class SubmissionReviewsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, submission_id):
-        submission = get_object_or_404(Submission, pk=submission_id)
+        submission = get_object_or_404(Submission.objects.select_related('assigned_editor'), pk=submission_id)
+
+        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
+            raise PermissionDenied("Only section editors can view submission reviews.")
+        
+        if submission.assigned_editor_id != request.user.id:
+            raise PermissionDenied(
+                "Only the assigned section editor can view reviews for this submission."
+            )
 
         if submission.status != Submission.Status.REVIEWED:
             return Response(
@@ -76,14 +82,14 @@ class SubmissionReviewsView(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
-
+        current_version = submission.versions.order_by('-version_number').first()
         assignments = (
             ReviewerAssignment.objects
             .filter(
-                version__submission=submission,
+                version=current_version,
                 status=ReviewerAssignment.Status.ACCEPTED,
             )
-            .select_related('review')
+            .select_related('review',"reviewer")
         )
 
         reviews = [
@@ -108,33 +114,9 @@ class ExpireAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, assignment_id):
-        assignment = get_object_or_404(ReviewerAssignment, pk=assignment_id)
+        assignment = get_object_or_404(ReviewerAssignment.objects.select_related("version__submission"), pk=assignment_id)
 
         assignment = ReviewService.mark_assignment_expired(
-            editor=request.user,
-            assignment=assignment,
-        )
-
-        return Response(
-            ReviewerAssignmentSerializer(
-                assignment,
-                context={'is_editor': True, 'request': request},
-            ).data,
-            status=status.HTTP_200_OK,
-        )
-
-
-# ------------------------------------------------------------------ #
-#  EDITOR — OVERDUE ASSIGNMENT                                        #
-# ------------------------------------------------------------------ #
-
-class OverdueAssignmentView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, assignment_id):
-        assignment = get_object_or_404(ReviewerAssignment, pk=assignment_id)
-
-        assignment = ReviewService.mark_assignment_overdue(
             editor=request.user,
             assignment=assignment,
         )
@@ -227,7 +209,8 @@ class SubmitReviewView(APIView):
             reviewer=request.user,
             assignment=assignment,
             recommendation=serializer.validated_data['recommendation'],
-            content=serializer.validated_data['content'],
+            comments_for_author=serializer.validated_data["comments_for_author"],
+            comments_for_editor=serializer.validated_data.get("comments_for_editor", ""),
         )
 
         return Response(
@@ -240,11 +223,10 @@ class SubmitReviewView(APIView):
 # ------------------------------------------------------------------ #
 
 class ReviewerRecommendationsView(APIView):
+    from django.core.exceptions import PermissionDenied
     permission_classes = [IsAuthenticated]
 
     def get(self, request, submission_id):
-        from apps.accounts.models import Role
-        from django.core.exceptions import PermissionDenied
 
         if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
             raise PermissionDenied("Only section editors can view recommendations.")

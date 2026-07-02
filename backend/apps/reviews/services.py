@@ -13,7 +13,7 @@ class ReviewService:
     # ------------------------------------------------------------------ #
     #  ASSIGN REVIEWER                                                     #
     # ------------------------------------------------------------------ #
-
+    #TODO: move this maybe to workflow or rename app later
     @staticmethod
     @transaction.atomic
     def assign_reviewer(*, editor, reviewer, submission, response_deadline, review_deadline):
@@ -27,6 +27,9 @@ class ReviewService:
         # --- permission checks ---
         if not editor.has_role(Role.RoleName.SECTION_EDITOR):
             raise PermissionDenied("Only a Section Editor can assign reviewers.")
+        
+        if submission.assigned_editor_id != editor.id:
+            raise PermissionDenied("Only the section editor assigned to this submission can assign reviewers.")
 
         if not reviewer.has_role(Role.RoleName.REVIEWER):
             raise ValidationError("The target user does not have the Reviewer role.")
@@ -95,10 +98,17 @@ class ReviewService:
     def respond_to_assignment(*, reviewer, assignment, accept: bool):
         """
         Reviewer accepts or declines an assignment invitation.
-        Status is terminal once set — cannot be changed after this call.
+        Status is terminal once set.
+        When enough reviewers accept, remaining pending invitations expire.
         """
-
-        if assignment.reviewer != reviewer:
+        assignment = (
+        ReviewerAssignment.objects
+        .select_for_update()
+        .select_related("version")
+        .get(pk=assignment.pk)
+        )   
+        
+        if assignment.reviewer_id!= reviewer.id:
             raise PermissionDenied("You are not the reviewer on this assignment.")
 
         if assignment.status != ReviewerAssignment.Status.PENDING:
@@ -113,6 +123,20 @@ class ReviewService:
             else ReviewerAssignment.Status.DECLINED
         )
         assignment.save(update_fields=['status'])
+        if accept:
+            accepted_count = ReviewerAssignment.objects.filter(
+                version=assignment.version,
+                status=ReviewerAssignment.Status.ACCEPTED,
+            ).count()
+
+        if accepted_count >= REQUIRED_REVIEWS_COUNT:
+            ReviewerAssignment.objects.filter(
+                version=assignment.version,
+                status=ReviewerAssignment.Status.PENDING,
+            ).exclude(pk=assignment.pk).update(
+                status=ReviewerAssignment.Status.EXPIRED
+            )
+
 
         return assignment
 
@@ -122,7 +146,7 @@ class ReviewService:
 
     @staticmethod
     @transaction.atomic
-    def submit_review(*, reviewer, assignment, recommendation, content):
+    def submit_review(*, reviewer, assignment, recommendation,comments_for_author,comments_for_editor="", ):
         """
         Reviewer submits their evaluation.
         Uses select_for_update() on Submission to prevent race condition
@@ -155,19 +179,24 @@ class ReviewService:
         review = Review.objects.create(
             assignment=assignment,
             recommendation=recommendation,
-            content=content,
+            comments_for_author=comments_for_author,
+            comments_for_editor=comments_for_editor,
         )
+        accepted_count = ReviewerAssignment.objects.filter(
+            version=assignment.version,
+            status=ReviewerAssignment.Status.ACCEPTED,
+        ).count()
 
         # --- transition check ---
         submitted_count = ReviewerAssignment.objects.filter(
-            version__submission=submission,
+            version=assignment.version,
             status=ReviewerAssignment.Status.ACCEPTED,
             review__isnull=False,
         ).count()
 
-        if submitted_count >= REQUIRED_REVIEWS_COUNT:
+        if accepted_count >= REQUIRED_REVIEWS_COUNT and submitted_count == accepted_count:
             submission.status = Submission.Status.REVIEWED
-            submission.save(update_fields=['status'])
+            submission.save(update_fields=["status"])
 
         return review
 
@@ -186,6 +215,11 @@ class ReviewService:
 
         if not editor.has_role(Role.RoleName.SECTION_EDITOR):
             raise PermissionDenied("Only a Section Editor can expire assignments.")
+        
+        submission = assignment.version.submission
+
+        if submission.assigned_editor_id != editor.id:
+            raise PermissionDenied("Only the section editor assigned to this submission can expire assignments.")
 
         if assignment.status != ReviewerAssignment.Status.PENDING:
             raise ValidationError(
@@ -194,33 +228,6 @@ class ReviewService:
             )
 
         assignment.status = ReviewerAssignment.Status.EXPIRED
-        assignment.save(update_fields=['status'])
-
-        return assignment
-
-    # ------------------------------------------------------------------ #
-    #  MARK ASSIGNMENT OVERDUE                                             #
-    # ------------------------------------------------------------------ #
-
-    @staticmethod
-    @transaction.atomic
-    def mark_assignment_overdue(*, editor, assignment):
-        """
-        Section Editor manually marks an ACCEPTED assignment as OVERDUE.
-        Used when reviewer has not submitted by review_deadline.
-        Celery will automate this in a future sprint.
-        """
-
-        if not editor.has_role(Role.RoleName.SECTION_EDITOR):
-            raise PermissionDenied("Only a Section Editor can mark assignments as overdue.")
-
-        if assignment.status != ReviewerAssignment.Status.ACCEPTED:
-            raise ValidationError(
-                f"Cannot mark an assignment as overdue with status '{assignment.status}'. "
-                "Only ACCEPTED assignments can be marked overdue."
-            )
-
-        assignment.status = ReviewerAssignment.Status.OVERDUE
         assignment.save(update_fields=['status'])
 
         return assignment

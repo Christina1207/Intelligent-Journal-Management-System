@@ -26,7 +26,20 @@ class UserBriefSerializer(serializers.Serializer):
     """
     id    = serializers.UUIDField()
     email = serializers.EmailField()
+    full_name = serializers.SerializerMethodField()
 
+    def get_full_name(self, instance):
+        first_name = getattr(instance, "first_name", "") or ""
+        last_name = getattr(instance, "last_name", "") or ""
+        full_name = f"{first_name} {last_name}".strip()
+
+        return full_name or instance.email
+
+class SubmissionVersionBriefSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    version_number = serializers.IntegerField()
+    submitted_at = serializers.DateTimeField()
+    decision = serializers.CharField()
 
 # ------------------------------------------------------------------ #
 #  REVIEWER ASSIGNMENT — INPUT                                        #
@@ -71,6 +84,7 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     """
     is_overdue = serializers.BooleanField(read_only=True)
     submission  = serializers.SerializerMethodField()
+    version = serializers.SerializerMethodField()
     reviewer    = UserBriefSerializer(read_only=True)
     assigned_by = UserBriefSerializer(read_only=True)
 
@@ -78,8 +92,8 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
         model  = ReviewerAssignment
         fields = [
             'id',
-            # TODO: should this be version instead of submission?
             'submission',
+            'version',
             'reviewer',
             'assigned_by',
             'status',
@@ -92,6 +106,9 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     def get_submission(self, instance):
         # version is select_related in every callsite — no extra query.
         return SubmissionBriefSerializer(instance.version.submission).data
+    
+    def get_version(self, instance):
+        return SubmissionVersionBriefSerializer(instance.version).data
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -107,7 +124,12 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
 
 class ReviewSubmitSerializer(serializers.Serializer):
     recommendation = serializers.ChoiceField(choices=Review.Recommendation.choices)
-    content        = serializers.CharField(allow_blank=False)
+    comments_for_author = serializers.CharField(allow_blank=False)
+    comments_for_editor = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -116,17 +138,33 @@ class ReviewSubmitSerializer(serializers.Serializer):
 
 class ReviewSerializer(serializers.ModelSerializer):
     """
-    Full review detail — only exposed to editors when submission is REVIEWED.
-    Reviewer identity hidden to preserve double-blind integrity.
+    Editor-facing full review detail.
+    Includes reviewer identity for editorial decision-making.
     """
     recommendation = serializers.CharField(source='get_recommendation_display')
     submitted_at   = serializers.DateTimeField(read_only=True)
+    reviewer = serializers.SerializerMethodField()
 
     class Meta:
         model  = Review
         fields = [
             'id',
+            'reviewer',
             'recommendation',
-            'content',
+            'comments_for_author',
+            'comments_for_editor',
             'submitted_at',
+        ]
+    def get_reviewer(self, instance):
+        return UserBriefSerializer(instance.assignment.reviewer).data
+
+class AuthorReviewSerializer(serializers.ModelSerializer):
+    recommendation = serializers.CharField(source="get_recommendation_display")
+
+    class Meta:
+        model = Review
+        fields = [
+            "id",
+            "recommendation",
+            "comments_for_author",
         ]
