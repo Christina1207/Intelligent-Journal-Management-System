@@ -298,6 +298,7 @@ class SubmissionVersion(models.Model):
                        null=True,
                        blank=True,
                      )
+    decision_letter = models.TextField(blank=True)
 
     class Meta:
         unique_together = [('submission', 'version_number')]

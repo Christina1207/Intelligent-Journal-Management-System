@@ -1,8 +1,8 @@
 from django.db import transaction
 from django.core.exceptions import ValidationError, PermissionDenied
-
+from django.utils import timezone
 from apps.accounts.models import Role
-from apps.submissions.models import Submission
+from apps.submissions.models import Submission, SubmissionVersion
 from apps.workflow.models import ReviewerAssignment
 from apps.reviews.models import Review
 from config.constants import REQUIRED_REVIEWS_COUNT
@@ -231,3 +231,112 @@ class ReviewService:
         assignment.save(update_fields=['status'])
 
         return assignment
+
+    # ------------------------------------------------------------------ #
+    # MAKE EDITORIAL DECISION ON VERSION
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    @transaction.atomic
+    def make_editor_decision(*, editor, submission, decision, decision_letter=""):
+        """
+        Assigned section editor records the decision for the latest reviewed version.
+
+        ACCEPTED:
+            submission becomes ACCEPTED and can move to publishing.
+        REJECTED:
+            submission becomes REJECTED and stops.
+        MINOR_REVISION / MAJOR_REVISION:
+            submission becomes UNDER_REVISION and waits for author revision upload.
+        """
+
+        if not editor.has_role(Role.RoleName.SECTION_EDITOR):
+            raise PermissionDenied("Only a Section Editor can make editorial decisions.")
+
+        submission = (
+            Submission.objects
+            .select_for_update()
+            .select_related("assigned_editor")
+            .get(pk=submission.pk)
+        )
+
+        if submission.assigned_editor_id != editor.id:
+            raise PermissionDenied(
+                "Only the assigned section editor can decide this submission."
+            )
+
+        if submission.status != Submission.Status.REVIEWED:
+            raise ValidationError(
+                f"Cannot make a decision while submission status is '{submission.status}'. "
+                "The submission must be REVIEWED first."
+            )
+
+        current_version = (
+            submission.versions
+            .select_for_update()
+            .order_by("-version_number")
+            .first()
+        )
+
+        if current_version is None:
+            raise ValidationError("Submission has no versions to decide.")
+
+        if current_version.decision != SubmissionVersion.Decision.PENDING:
+            raise ValidationError("A decision has already been made for this version.")
+
+        if decision == SubmissionVersion.Decision.PENDING:
+            raise ValidationError("PENDING is not a valid editor decision.")
+
+        accepted_count = ReviewerAssignment.objects.filter(
+            version=current_version,
+            status=ReviewerAssignment.Status.ACCEPTED,
+        ).count()
+
+        submitted_count = ReviewerAssignment.objects.filter(
+            version=current_version,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            review__isnull=False,
+        ).count()
+
+        if accepted_count < REQUIRED_REVIEWS_COUNT:
+            raise ValidationError(
+                f"Cannot decide with only {accepted_count} accepted reviewers. "
+                f"At least {REQUIRED_REVIEWS_COUNT} are required."
+            )
+
+        if submitted_count != accepted_count:
+            raise ValidationError(
+                "Cannot decide until all accepted reviewers have submitted their reviews."
+            )
+
+        current_version.decision = decision
+        current_version.decided_by = editor
+        current_version.decided_at = timezone.now()
+
+        # Only if you add decision_letter to the model
+        current_version.decision_letter = decision_letter
+
+        current_version.save(
+            update_fields=[
+                "decision",
+                "decided_by",
+                "decided_at",
+                "decision_letter",
+            ]
+        )
+
+        if decision == SubmissionVersion.Decision.ACCEPTED:
+            submission.status = Submission.Status.ACCEPTED
+        elif decision == SubmissionVersion.Decision.REJECTED:
+            submission.status = Submission.Status.REJECTED
+        elif decision in (
+            SubmissionVersion.Decision.MINOR_REVISION,
+            SubmissionVersion.Decision.MAJOR_REVISION,
+        ):
+            submission.status = Submission.Status.UNDER_REVISION
+        else:
+            raise ValidationError(f"Unsupported decision '{decision}'.")
+
+        submission.save(update_fields=["status"])
+
+        return current_version
+     

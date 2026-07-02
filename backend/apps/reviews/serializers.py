@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from apps.workflow.models import ReviewerAssignment
 from apps.reviews.models import Review
+from apps.submissions.models import SubmissionVersion
 
 
 # ------------------------------------------------------------------ #
@@ -167,4 +168,34 @@ class AuthorReviewSerializer(serializers.ModelSerializer):
             "id",
             "recommendation",
             "comments_for_author",
+        ]
+
+class EditorDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(
+        choices=SubmissionVersion.Decision.choices
+    )
+    decision_letter = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+
+    def validate_decision(self, value):
+        if value == SubmissionVersion.Decision.PENDING:
+            raise serializers.ValidationError("PENDING is not a valid editor decision.")
+        return value
+    
+class SubmissionVersionDecisionSerializer(serializers.ModelSerializer):
+    decision = serializers.CharField(source="get_decision_display")
+    decided_by = UserBriefSerializer(read_only=True)
+
+    class Meta:
+        model = SubmissionVersion
+        fields = [
+            "id",
+            "version_number",
+            "decision",
+            "decision_letter",
+            "decided_at",
+            "decided_by",
         ]

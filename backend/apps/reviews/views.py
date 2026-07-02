@@ -8,11 +8,13 @@ from apps.workflow.models import ReviewerAssignment
 from apps.accounts.models import Role, User
 from apps.reviews.services import ReviewService
 from apps.reviews.serializers import (
+    EditorDecisionSerializer,
     ReviewerAssignmentCreateSerializer,
     ReviewerAssignmentResponseSerializer,
     ReviewerAssignmentSerializer,
     ReviewSubmitSerializer,
     ReviewSerializer,
+    SubmissionVersionDecisionSerializer,
 )
 from config.constants import REVIEWER_RECOMMENDATION_COUNT
 from apps.core.recommendations import RecommendationService
@@ -257,3 +259,32 @@ class ReviewerRecommendationsView(APIView):
             },
             status=status.HTTP_200_OK,
         )   
+    
+class MakeEditorDecisionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, submission_id):
+        submission = get_object_or_404(
+            Submission.objects.select_related("assigned_editor"),
+            pk=submission_id,
+        )
+
+        serializer = EditorDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        version = ReviewService.make_editor_decision(
+            editor=request.user,
+            submission=submission,
+            decision=serializer.validated_data["decision"],
+            decision_letter=serializer.validated_data.get("decision_letter", ""),
+        )
+        submission.refresh_from_db()  # Ensure we have the latest status after decision
+
+        return Response(
+            {
+                "submission_id": str(submission.id),
+                "submission_status": submission.status,
+                "version": SubmissionVersionDecisionSerializer(version).data,
+            },
+            status=status.HTTP_200_OK,
+        )
