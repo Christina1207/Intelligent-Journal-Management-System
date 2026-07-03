@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
-from rest_framework.views import APIView, PermissionDenied
+from rest_framework.views import APIView
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -18,6 +19,7 @@ from apps.reviews.serializers import (
 )
 from config.constants import REVIEWER_RECOMMENDATION_COUNT
 from apps.core.recommendations import RecommendationService
+from apps.core.storage import StorageService
 
 # ------------------------------------------------------------------ #
 #  EDITOR — ASSIGN REVIEWER                                           #
@@ -285,6 +287,55 @@ class MakeEditorDecisionView(APIView):
                 "submission_id": str(submission.id),
                 "submission_status": submission.status,
                 "version": SubmissionVersionDecisionSerializer(version).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+    
+class ReviewerManuscriptDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, assignment_id):
+        assignment = get_object_or_404(
+            ReviewerAssignment.objects.select_related(
+                "reviewer",
+                "version__submission",
+            ),
+            pk=assignment_id,
+        )
+
+        if assignment.reviewer_id != request.user.id:
+            raise PermissionDenied(
+                "You cannot access another reviewer's manuscript."
+            )
+
+        if assignment.status != ReviewerAssignment.Status.ACCEPTED:
+            raise PermissionDenied(
+                "You can access the manuscript only after accepting the review invitation."
+            )
+
+        object_name = assignment.version.file
+
+        if not object_name:
+            raise ValidationError(
+                "No manuscript file is attached to this submission version."
+            )
+
+        storage = StorageService()
+        expires_in_seconds = 600
+
+        manuscript_url = storage.get_public_url(
+            object_name=object_name,
+            expires_in_seconds=expires_in_seconds,
+        )
+
+        return Response(
+            {
+                "assignment_id": str(assignment.id),
+                "submission_id": str(assignment.version.submission_id),
+                "version_id": str(assignment.version_id),
+                "version_number": assignment.version.version_number,
+                "expires_in_seconds": expires_in_seconds,
+                "manuscript_url": manuscript_url,
             },
             status=status.HTTP_200_OK,
         )

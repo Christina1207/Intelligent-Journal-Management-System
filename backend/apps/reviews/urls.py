@@ -7,6 +7,7 @@ from apps.reviews.views import (
     MyAssignmentsView,
     RespondToAssignmentView,
     SubmitReviewView,
+    ReviewerManuscriptDownloadView,
 )
 from apps.reviews.views import ReviewerRecommendationsView
 
@@ -53,5 +54,10 @@ reviewer_urlpatterns = [
         'assignments/<uuid:assignment_id>/submit-review/',
         SubmitReviewView.as_view(),
         name='submit-review',
+    ),
+    path(
+        'assignments/<uuid:assignment_id>/manuscript/',
+        ReviewerManuscriptDownloadView.as_view(),
+        name='reviewer-manuscript-download',
     ),
 ]
