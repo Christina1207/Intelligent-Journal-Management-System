@@ -1,11 +1,12 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.accounts.models import Role
 from apps.journals.models import Section
 from apps.submissions.models import Submission, SubmissionTopic, SubmissionVersion
 
@@ -15,11 +16,20 @@ from .services import PublishingService
 
 class PublishingServiceTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
+        self.author = get_user_model().objects.create_user(
             username="author",
             email="author@example.com",
             password="testpass123",
         )
+        self.editor = get_user_model().objects.create_user(
+            username="section-editor",
+            email="section-editor@example.com",
+            password="testpass123",
+        )
+        self.section_editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR
+        )
+        self.editor.roles.add(self.section_editor_role)
         self.section = Section.objects.create(name="Computer Science")
 
     def _create_submission(
@@ -29,14 +39,16 @@ class PublishingServiceTests(TestCase):
         version_decision=SubmissionVersion.Decision.ACCEPTED,
         version_file="submissions/example/v1/manuscript.pdf",
         title="Semantic Matching in Editorial Workflows",
+        assigned_editor=None,
     ):
         submission = Submission.objects.create(
             title=title,
             abstract="A study about intelligent publishing workflow support.",
             language="en",
-            author=self.user,
+            author=self.author,
             section=self.section,
             status=status,
+            assigned_editor=assigned_editor or self.editor,
         )
         SubmissionVersion.objects.create(
             submission=submission,
@@ -47,26 +59,47 @@ class PublishingServiceTests(TestCase):
         return submission
 
     def test_cannot_create_draft_from_non_accepted_submission(self):
-        submission = self._create_submission(
-            status=Submission.Status.REVIEWED,
-            version_decision=SubmissionVersion.Decision.PENDING,
-        )
+        blocked_states = [
+            (Submission.Status.REJECTED, SubmissionVersion.Decision.REJECTED),
+            (Submission.Status.UNDER_REVIEW, SubmissionVersion.Decision.PENDING),
+            (Submission.Status.UNDER_REVISION, SubmissionVersion.Decision.MAJOR_REVISION),
+            (Submission.Status.REVIEWED, SubmissionVersion.Decision.PENDING),
+        ]
 
-        with self.assertRaises(ValidationError):
-            PublishingService.create_draft_from_submission(submission)
+        for submission_status, version_decision in blocked_states:
+            with self.subTest(submission_status=submission_status):
+                submission = self._create_submission(
+                    status=submission_status,
+                    version_decision=version_decision,
+                    title=f"Blocked {submission_status}",
+                )
+
+                with self.assertRaisesMessage(
+                    ValidationError,
+                    "Only accepted submissions can be moved to publishing",
+                ):
+                    PublishingService.create_draft_from_submission(
+                        editor=self.editor,
+                        submission=submission,
+                    )
 
     def test_create_draft_from_accepted_submission_copies_public_metadata(self):
         submission = self._create_submission()
+        latest_version = submission.versions.get(version_number=1)
         SubmissionTopic.objects.create(
             submission=submission,
             label="Editorial AI",
             keywords=["publishing", "semantic matching"],
         )
 
-        article = PublishingService.create_draft_from_submission(submission)
+        article = PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
 
         self.assertEqual(article.status, PublishedArticle.Status.DRAFT)
         self.assertEqual(article.submission, submission)
+        self.assertEqual(article.source_version, latest_version)
         self.assertEqual(article.section, submission.section)
         self.assertEqual(article.title, submission.title)
         self.assertEqual(article.abstract, submission.abstract)
@@ -74,18 +107,124 @@ class PublishingServiceTests(TestCase):
         self.assertEqual(article.pdf_file.name, "submissions/example/v1/manuscript.pdf")
         self.assertTrue(article.slug.startswith("semantic-matching-in-editorial-workflows"))
 
+    def test_non_section_editor_cannot_create_draft(self):
+        non_editor = get_user_model().objects.create_user(
+            username="not-an-editor",
+            email="not-an-editor@example.com",
+            password="testpass123",
+        )
+        submission = self._create_submission(assigned_editor=non_editor)
+
+        with self.assertRaisesMessage(
+            PermissionDenied,
+            "Only section editors can create publishing drafts.",
+        ):
+            PublishingService.create_draft_from_submission(
+                editor=non_editor,
+                submission=submission,
+            )
+
+    def test_unassigned_section_editor_cannot_create_draft(self):
+        other_editor = get_user_model().objects.create_user(
+            username="other-section-editor",
+            email="other-section-editor@example.com",
+            password="testpass123",
+        )
+        other_editor.roles.add(self.section_editor_role)
+        submission = self._create_submission()
+
+        with self.assertRaisesMessage(
+            PermissionDenied,
+            "Only the assigned section editor can create a publishing draft",
+        ):
+            PublishingService.create_draft_from_submission(
+                editor=other_editor,
+                submission=submission,
+            )
+
+    def test_section_editor_assigned_to_another_submission_cannot_create_draft(self):
+        other_editor = get_user_model().objects.create_user(
+            username="assigned-elsewhere",
+            email="assigned-elsewhere@example.com",
+            password="testpass123",
+        )
+        other_editor.roles.add(self.section_editor_role)
+        self._create_submission(
+            title="Submission assigned to another section editor",
+            assigned_editor=other_editor,
+        )
+        submission = self._create_submission(title="Original assigned submission")
+
+        with self.assertRaisesMessage(
+            PermissionDenied,
+            "Only the assigned section editor can create a publishing draft",
+        ):
+            PublishingService.create_draft_from_submission(
+                editor=other_editor,
+                submission=submission,
+            )
+
+    def test_latest_pending_version_blocks_even_if_older_version_was_accepted(self):
+        submission = self._create_submission()
+        SubmissionVersion.objects.create(
+            submission=submission,
+            version_number=2,
+            file="submissions/example/v2/manuscript.pdf",
+            decision=SubmissionVersion.Decision.PENDING,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Only the latest accepted version can be moved to publishing.",
+        ):
+            PublishingService.create_draft_from_submission(
+                editor=self.editor,
+                submission=submission,
+            )
+
+        self.assertFalse(PublishedArticle.objects.filter(submission=submission).exists())
+
+    def test_latest_rejected_version_blocks_even_if_older_version_was_accepted(self):
+        submission = self._create_submission()
+        SubmissionVersion.objects.create(
+            submission=submission,
+            version_number=2,
+            file="submissions/example/v2/manuscript.pdf",
+            decision=SubmissionVersion.Decision.REJECTED,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Only the latest accepted version can be moved to publishing.",
+        ):
+            PublishingService.create_draft_from_submission(
+                editor=self.editor,
+                submission=submission,
+            )
+
+        self.assertFalse(PublishedArticle.objects.filter(submission=submission).exists())
+
     def test_cannot_create_duplicate_draft_for_submission(self):
         submission = self._create_submission()
-        PublishingService.create_draft_from_submission(submission)
+        PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
 
         with self.assertRaises(ValidationError):
-            PublishingService.create_draft_from_submission(submission)
+            PublishingService.create_draft_from_submission(
+                editor=self.editor,
+                submission=submission,
+            )
 
     def test_cannot_create_draft_without_accepted_version_file(self):
         submission = self._create_submission(version_file="")
 
         with self.assertRaisesMessage(ValidationError, "manuscript file"):
-            PublishingService.create_draft_from_submission(submission)
+            PublishingService.create_draft_from_submission(
+                editor=self.editor,
+                submission=submission,
+            )
 
     def test_create_draft_supports_long_minio_object_path(self):
         long_object_path = (
@@ -95,13 +234,19 @@ class PublishingServiceTests(TestCase):
         )
         submission = self._create_submission(version_file=long_object_path)
 
-        article = PublishingService.create_draft_from_submission(submission)
+        article = PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
 
         self.assertEqual(article.pdf_file.name, long_object_path)
 
     def test_publish_article_sets_published_status_and_timestamp(self):
         submission = self._create_submission()
-        article = PublishingService.create_draft_from_submission(submission)
+        article = PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
 
         article = PublishingService.publish_article(article)
 
@@ -117,6 +262,10 @@ class PublishingApiTests(TestCase):
             email="editor@example.com",
             password="testpass123",
         )
+        self.section_editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR
+        )
+        self.user.roles.add(self.section_editor_role)
         self.author = get_user_model().objects.create_user(
             username="author",
             email="api-author@example.com",
@@ -130,8 +279,9 @@ class PublishingApiTests(TestCase):
             author=self.author,
             section=self.section,
             status=Submission.Status.ACCEPTED,
+            assigned_editor=self.user,
         )
-        SubmissionVersion.objects.create(
+        self.submission_version = SubmissionVersion.objects.create(
             submission=self.submission,
             version_number=1,
             file="submissions/api/v1/manuscript.pdf",
@@ -148,6 +298,7 @@ class PublishingApiTests(TestCase):
         version_file="submissions/api/v1/manuscript.pdf",
         version_decision=SubmissionVersion.Decision.ACCEPTED,
         create_version=True,
+        assigned_editor=None,
     ):
         submission = Submission.objects.create(
             title=title,
@@ -156,6 +307,7 @@ class PublishingApiTests(TestCase):
             author=self.author,
             section=section or self.section,
             status=status,
+            assigned_editor=assigned_editor or self.user,
         )
         if create_version:
             SubmissionVersion.objects.create(
@@ -224,6 +376,42 @@ class PublishingApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], PublishedArticle.Status.DRAFT)
         self.assertEqual(response.data["submission_id"], str(self.submission.id))
+        self.assertEqual(
+            str(response.data["source_version"]),
+            str(self.submission_version.id),
+        )
+
+    def test_unassigned_user_create_draft_endpoint_returns_403(self):
+        unassigned_editor = get_user_model().objects.create_user(
+            username="unassigned-editor",
+            email="unassigned-editor@example.com",
+            password="testpass123",
+        )
+        unassigned_editor.roles.add(self.section_editor_role)
+        self.client.force_authenticate(unassigned_editor)
+
+        response = self.client.post(
+            f"/api/v1/publishing/submissions/{self.submission.id}/create-draft/",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Only the assigned section editor", str(response.data))
+
+    def test_non_section_editor_create_draft_endpoint_returns_403(self):
+        non_editor = get_user_model().objects.create_user(
+            username="non-section-editor",
+            email="non-section-editor@example.com",
+            password="testpass123",
+        )
+        submission = self._create_submission(assigned_editor=non_editor)
+        self.client.force_authenticate(non_editor)
+
+        response = self.client.post(
+            f"/api/v1/publishing/submissions/{submission.id}/create-draft/",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Only section editors", str(response.data))
 
     def test_duplicate_create_draft_endpoint_returns_clean_400(self):
         self.client.force_authenticate(self.user)
@@ -269,7 +457,7 @@ class PublishingApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("no accepted submission version", str(response.data))
+        self.assertIn("Submission has no versions", str(response.data))
 
     def test_public_list_excludes_draft_and_retracted_articles(self):
         published = self._create_article(
@@ -585,7 +773,10 @@ class PublishingApiTests(TestCase):
 
     def test_publish_endpoint_publishes_draft_article(self):
         self.client.force_authenticate(self.user)
-        article = PublishingService.create_draft_from_submission(self.submission)
+        article = PublishingService.create_draft_from_submission(
+            editor=self.user,
+            submission=self.submission,
+        )
 
         response = self.client.post(f"/api/v1/publishing/articles/{article.id}/publish/")
 
@@ -595,7 +786,10 @@ class PublishingApiTests(TestCase):
 
     def test_patch_cannot_change_article_status_directly(self):
         self.client.force_authenticate(self.user)
-        article = PublishingService.create_draft_from_submission(self.submission)
+        article = PublishingService.create_draft_from_submission(
+            editor=self.user,
+            submission=self.submission,
+        )
 
         response = self.client.patch(
             f"/api/v1/publishing/articles/{article.id}/",

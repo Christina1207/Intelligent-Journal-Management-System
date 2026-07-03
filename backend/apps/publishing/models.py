@@ -15,6 +15,13 @@ class PublishedArticle(models.Model):
         on_delete=models.PROTECT,
         related_name="published_article",
     )
+    source_version = models.ForeignKey(
+        "submissions.SubmissionVersion",
+        on_delete=models.PROTECT,
+        related_name="published_articles",
+        null=True,
+        blank=True,
+    )
     section = models.ForeignKey(
         "journals.Section",
         on_delete=models.PROTECT,

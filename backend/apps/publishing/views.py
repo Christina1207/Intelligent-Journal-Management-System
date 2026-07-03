@@ -1,5 +1,4 @@
 import uuid
-
 from django.db.models import F
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -28,8 +27,7 @@ from .serializers import (
     PublishedArticlePublicListSerializer,
     PublishedArticleWriteSerializer,
 )
-from .services import PublishingService
-from .services import PublicDownloadUnavailable
+from .services import PublicDownloadUnavailable, PublishingService
 
 
 PUBLIC_ARTICLE_ORDERING_FIELDS = {
@@ -105,7 +103,7 @@ class CreateArticleDraftView(APIView):
             Submission.objects.select_related("section"),
             pk=submission_id,
         )
-        article = PublishingService.create_draft_from_submission(submission)
+        article = PublishingService.create_draft_from_submission(editor=request.user, submission=submission)
         return Response(
             PublishedArticleManagementReadSerializer(article).data,
             status=status.HTTP_201_CREATED,

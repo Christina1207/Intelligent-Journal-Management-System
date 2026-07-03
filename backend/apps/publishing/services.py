@@ -1,9 +1,10 @@
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.db import transaction
 from django.http import Http404
 from django.utils import timezone
 from django.utils.text import slugify
 
+from apps.accounts.models import Role
 from apps.core.storage import StorageService
 from apps.submissions.models import Submission, SubmissionVersion
 
@@ -19,44 +20,66 @@ class PublishingService:
 
     @staticmethod
     @transaction.atomic
-    def create_draft_from_submission(submission: Submission) -> PublishedArticle:
+    def create_draft_from_submission(
+        *,
+        editor,
+        submission: Submission,
+    ) -> PublishedArticle:
         """
         Create the public scholarly-record draft for an accepted submission.
         The submission remains the internal workflow and audit record.
         """
         submission = (
             Submission.objects.select_for_update()
-            .select_related("section")
+            .select_related("section", "assigned_editor")
             .get(pk=submission.pk)
         )
 
+        if not getattr(editor, "is_authenticated", False) or not editor.has_role(
+            Role.RoleName.SECTION_EDITOR
+        ):
+            raise PermissionDenied("Only section editors can create publishing drafts.")
+
+        if submission.assigned_editor_id != editor.id:
+            raise PermissionDenied(
+                "Only the assigned section editor can create a publishing draft "
+                "for this submission."
+            )
+
         if submission.status != Submission.Status.ACCEPTED:
-            raise ValidationError("Only accepted submissions can be moved to publishing.")
+            raise ValidationError(
+                "Only accepted submissions can be moved to publishing. "
+                f"Current status: {submission.status}"
+            )
 
         if PublishedArticle.objects.filter(submission=submission).exists():
             raise ValidationError(
                 "This submission already has a published article or publication draft."
             )
 
-        accepted_version = PublishingService._get_latest_accepted_version(submission)
-        if accepted_version is None:
+        latest_version = PublishingService._get_latest_version(submission)
+        if latest_version is None:
+            raise ValidationError("Submission has no versions to publish.")
+
+        if latest_version.decision != SubmissionVersion.Decision.ACCEPTED:
             raise ValidationError(
-                "Accepted submission has no accepted submission version to publish."
+                "Only the latest accepted version can be moved to publishing."
             )
 
-        if not accepted_version.file:
+        if not latest_version.file:
             raise ValidationError(
                 "Accepted submission version has no manuscript file to publish."
             )
 
         article = PublishedArticle.objects.create(
             submission=submission,
+            source_version=latest_version,
             section=submission.section,
             title=submission.title,
             slug=PublishingService._generate_unique_slug(submission.title),
             abstract=submission.abstract,
             keywords=PublishingService._extract_keywords(submission),
-            pdf_file=accepted_version.file or None,
+            pdf_file=latest_version.file,
             status=PublishedArticle.Status.DRAFT,
         )
 
@@ -113,9 +136,9 @@ class PublishingService:
         }
 
     @staticmethod
-    def _get_latest_accepted_version(submission: Submission):
+    def _get_latest_version(submission: Submission):
         return (
-            submission.versions.filter(decision=SubmissionVersion.Decision.ACCEPTED)
+            submission.versions.select_for_update()
             .order_by("-version_number")
             .first()
         )

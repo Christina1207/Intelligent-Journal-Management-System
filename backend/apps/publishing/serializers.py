@@ -49,11 +49,13 @@ class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerialize
 
 class PublishedArticleManagementReadSerializer(PublishedArticlePublicDetailSerializer):
     submission_id = serializers.UUIDField(source="submission.id", read_only=True)
+    source_version = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta(PublishedArticlePublicDetailSerializer.Meta):
         fields = [
             "id",
             "submission_id",
+            "source_version",
             "title",
             "slug",
             "abstract",
