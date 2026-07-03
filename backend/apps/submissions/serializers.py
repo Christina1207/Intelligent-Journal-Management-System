@@ -48,6 +48,7 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
             "file",
             "submitted_at",
             "decision",
+            "decision_letter",
             "decided_at",
             "decided_by",
         ]
@@ -78,29 +79,13 @@ class SubmissionListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-
-class VersionDecisionSerializer(serializers.Serializer):
-    """
-    Validates editor decision input.
-    Only the decision field is accepted — all other version fields
-    are system-managed.
-    """
-    decision = serializers.ChoiceField(
-        choices=[
-            SubmissionVersion.Decision.ACCEPTED,
-            SubmissionVersion.Decision.REJECTED,
-            SubmissionVersion.Decision.MAJOR_REVISION,
-            SubmissionVersion.Decision.MINOR_REVISION,
-        ]
-    )
-
-
 class RevisionUploadSerializer(serializers.Serializer):
     """
     Used for revision upload only. File validation mirrors
     SubmissionCreateSerializer.
     """
     file = serializers.FileField()
+    review_deadline = serializers.DateTimeField()
 
     def validate_file(self, file):
         if file.content_type != "application/pdf":

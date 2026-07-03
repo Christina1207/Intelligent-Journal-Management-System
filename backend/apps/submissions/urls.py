@@ -14,9 +14,4 @@ urlpatterns = [
         views.RevisionUploadView.as_view(),
         name="submission-revision-upload",
     ),
-    path(
-        "<uuid:submission_id>/versions/<uuid:version_id>/decide/",
-        views.VersionDecideView.as_view(),
-        name="submission-version-decide",
-    ),
 ]

@@ -1,7 +1,8 @@
 import logging
 from django.db import transaction
 from django.core.exceptions import ValidationError
-
+from django.utils import timezone
+from apps.workflow.models import ReviewerAssignment
 from apps.core.storage import StorageService
 from config.constants import MAX_REVISION_ROUNDS
 from .models import Submission, SubmissionVersion
@@ -69,17 +70,24 @@ class SubmissionService:
 
     @staticmethod
     @transaction.atomic
-    def create_revision(author, submission: Submission, file) -> SubmissionVersion:
+    def create_revision(author, submission: Submission, file, review_deadline) -> SubmissionVersion:
         """
         Upload a new revision for a submission.
         Business rules:
         - Author must own the submission
         - Submission must be UNDER_REVISION
+        - Latest version decision must be MINOR_REVISION or MAJOR_REVISION.
         - MAX_REVISION_ROUNDS enforced
         - ACCEPTED reviewers from previous version carried forward
         - carried_from FK set on new ReviewerAssignment rows
-        - Submission status transitions to REVISED
+         - New carried-forward assignments are ACCEPTED immediately.
+        - Submission status transitions to UNDER_REVIEW.
         """
+        submission = (
+            Submission.objects
+            .select_for_update()
+            .get(pk=submission.pk)
+        )
         if submission.author_id != author.id:
             raise ValidationError("Only the submission author can upload a revision.")
 
@@ -89,17 +97,53 @@ class SubmissionService:
                 f"Current status: {submission.status}"
             )
 
-        current_version_number = submission.versions.count()
+        previous_version = (
+            submission.versions
+            .select_for_update()
+            .order_by("-version_number")
+            .first()
+        )
 
-        if current_version_number >= MAX_REVISION_ROUNDS:
+        if previous_version is None:
+            raise ValidationError("No previous version found for this submission.")
+        
+        if previous_version.decision not in [
+            SubmissionVersion.Decision.MAJOR_REVISION,
+            SubmissionVersion.Decision.MINOR_REVISION,
+        ]:
+            raise ValidationError(
+                f"Previous version decision must be MAJOR_REVISION or MINOR_REVISION. "
+                f"Current decision: {previous_version.decision}"
+            )
+        current_version_count = submission.versions.count()
+        
+        # TODO: i think this check doesn't belong here , it belongs in the decision
+        if current_version_count >= MAX_REVISION_ROUNDS:
             raise ValidationError(
                 f"Maximum revision rounds ({MAX_REVISION_ROUNDS}) reached. "
                 "No further revisions are allowed."
             )
+        
+        #TODO: i don't think this check belongs here , but i don't know where it belongs
+        if review_deadline <= timezone.now():
+            raise ValidationError("Review deadline must be in the future.")
+        
+        accepted_assignments = list(
+            ReviewerAssignment.objects
+            .select_for_update()
+            .filter(
+                version=previous_version,
+                status=ReviewerAssignment.Status.ACCEPTED,
+            )
+            .select_related("reviewer")
+        )
+        if not accepted_assignments:
+            raise ValidationError(
+                "Cannot create revision because there are no accepted reviewers to carry forward."
+            )
+        
+        new_version_number = previous_version.version_number + 1
 
-        new_version_number = current_version_number + 1
-
-        # Upload new PDF to MinIO
         storage = StorageService()
         object_name = storage.upload(
             file_obj=file,
@@ -114,27 +158,19 @@ class SubmissionService:
             file=object_name,
         )
 
-        # Carry forward ACCEPTED reviewers from the previous version
-        from apps.workflow.models import ReviewerAssignment
-
-        previous_version = submission.versions.get(
-            version_number=current_version_number
-        )
-        accepted_assignments = ReviewerAssignment.objects.filter(
-            version=previous_version,
-            status=ReviewerAssignment.Status.ACCEPTED,
-        ).select_related("reviewer")
-
+        response_deadline = timezone.localdate()
         for assignment in accepted_assignments:
-            ReviewerAssignment.objects.create(
-                version=new_version,
-                reviewer=assignment.reviewer,
-                assigned_by=assignment.assigned_by,
-                carried_from=assignment,
-                status=ReviewerAssignment.Status.ACCEPTED,
-                response_deadline=assignment.response_deadline,
-                review_deadline=assignment.review_deadline,
-            )
+                ReviewerAssignment.objects.create(
+                    version=new_version,
+                    reviewer=assignment.reviewer,
+                    assigned_by=submission.assigned_editor or assignment.assigned_by,
+                    carried_from=assignment,
+                    status=ReviewerAssignment.Status.ACCEPTED,
+                    response_deadline=response_deadline,
+                    review_deadline=review_deadline,
+                )
+        submission.status = Submission.Status.UNDER_REVIEW
+        submission.save(update_fields=["status"])
 
         logger.info(
             "Revision v%d created for submission %s. "
@@ -143,75 +179,4 @@ class SubmissionService:
             submission.id,
             accepted_assignments.count(),
         )
-
-        submission.status = Submission.Status.REVISED
-        submission.save(update_fields=["status"])
-
         return new_version
-
-    @staticmethod
-    @transaction.atomic
-    def decide_version(
-        editor,
-        version: SubmissionVersion,
-        decision: str,
-    ) -> SubmissionVersion:
-        """
-        Section editor sets a decision on a SubmissionVersion.
-        Status transitions:
-        - MAJOR_REVISION / MINOR_REVISION → submission UNDER_REVISION
-        - ACCEPTED → submission ACCEPTED
-        - REJECTED → submission REJECTED
-
-        MAX_REVISION_ROUNDS enforced on revision decisions —
-        editor cannot set MAJOR/MINOR_REVISION if rounds exhausted.
-        """
-        from django.utils import timezone
-        from apps.accounts.models import Role
-
-        if not editor.has_role(Role.RoleName.SECTION_EDITOR):
-            raise ValidationError("Only section editors can set version decisions.")
-
-        if version.decision != SubmissionVersion.Decision.PENDING:
-            raise ValidationError("A decision has already been set for this version.")
-
-        submission = version.submission
-
-        revision_decisions = {
-            SubmissionVersion.Decision.MAJOR_REVISION,
-            SubmissionVersion.Decision.MINOR_REVISION,
-        }
-
-        if decision in revision_decisions:
-            current_version_count = submission.versions.count()
-            if current_version_count >= MAX_REVISION_ROUNDS:
-                raise ValidationError(
-                    f"Maximum revision rounds ({MAX_REVISION_ROUNDS}) reached. "
-                    "Cannot request further revisions."
-                )
-            submission.status = Submission.Status.UNDER_REVISION
-
-        elif decision == SubmissionVersion.Decision.ACCEPTED:
-            submission.status = Submission.Status.ACCEPTED
-            # TODO Sprint 4: trigger DOI assignment and publishing workflow here
-
-        elif decision == SubmissionVersion.Decision.REJECTED:
-            submission.status = Submission.Status.REJECTED
-            # TODO Sprint 4: trigger author notification here
-
-        else:
-            raise ValidationError(f"Invalid decision: {decision}")
-
-        version.decision = decision
-        version.decided_at = timezone.now()
-        version.decided_by = editor
-        version.save(update_fields=["decision", "decided_at", "decided_by"])
-
-        submission.save(update_fields=["status"])
-
-        logger.info(
-            "Version %s of submission %s decided: %s by editor %s.",
-            version.id, submission.id, decision, editor.id,
-        )
-
-        return version

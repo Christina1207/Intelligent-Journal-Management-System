@@ -13,7 +13,6 @@ from .serializers import (
     SubmissionListSerializer,
     SubmissionVersionSerializer,
     RevisionUploadSerializer,
-    VersionDecisionSerializer,
 )
 from .services import SubmissionService
 
@@ -97,48 +96,11 @@ class RevisionUploadView(APIView):
                     author=request.user,
                     submission=submission,
                     file=serializer.validated_data["file"],
+                    review_deadline=serializer.validated_data["review_deadline"],
                 )
                 return Response(
                     SubmissionVersionSerializer(version).data,
                     status=status.HTTP_201_CREATED,
-                )
-            except Exception as e:
-                return Response(
-                    {"detail": str(e)},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class VersionDecideView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, submission_id, version_id):
-        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
-            from django.core.exceptions import PermissionDenied
-            raise PermissionDenied("Only section editors can set decisions.")
-
-        try:
-            version = SubmissionVersion.objects.select_related(
-                "submission"
-            ).get(id=version_id, submission__id=submission_id)
-        except SubmissionVersion.DoesNotExist:
-            return Response(
-                {"detail": "Version not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        serializer = VersionDecisionSerializer(data=request.data)
-        if serializer.is_valid():
-            try:
-                version = SubmissionService.decide_version(
-                    editor=request.user,
-                    version=version,
-                    decision=serializer.validated_data["decision"],
-                )
-                return Response(
-                    SubmissionVersionSerializer(version).data,
-                    status=status.HTTP_200_OK,
                 )
             except Exception as e:
                 return Response(
