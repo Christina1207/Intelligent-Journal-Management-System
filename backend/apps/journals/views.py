@@ -61,6 +61,14 @@ class SectionManagementViewSet(viewsets.ModelViewSet):
         output_serializer = self.get_serializer(section)
         return Response(output_serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request, pk=None):
+        section = self.get_object()
+        section = SectionManagementService.activate(section)
+
+        output_serializer = self.get_serializer(section)
+        return Response(output_serializer.data, status=status.HTTP_200_OK)
+
 # TODO: figure this out, either change to explicit mixins or let there be a hard delete
     def destroy(self, request, *args, **kwargs):
         section = self.get_object()

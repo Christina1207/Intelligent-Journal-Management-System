@@ -21,3 +21,13 @@ class SectionManagementService:
         section.save(update_fields=["is_active"])
 
         return section
+
+    @staticmethod
+    def activate(section: Section):
+        """
+        Reactivate a section so it can be used for new submissions.
+        """
+        section.is_active = True
+        section.save(update_fields=["is_active"])
+
+        return section

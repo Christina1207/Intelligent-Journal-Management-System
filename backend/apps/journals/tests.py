@@ -58,6 +58,9 @@ class SectionApiTests(APITestCase):
     def _deactivate_url(self, section):
         return reverse("section-management-deactivate", args=[section.id])
 
+    def _activate_url(self, section):
+        return reverse("section-management-activate", args=[section.id])
+
     def _response_results(self, response):
         if isinstance(response.data, dict) and "results" in response.data:
             return response.data["results"]
@@ -278,6 +281,30 @@ class SectionApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Section.objects.filter(id=section.id).exists())
+
+    def test_eic_can_activate_section(self):
+        section = Section.objects.create(name="Inactive Section", is_active=False)
+        self.client.force_authenticate(self.eic)
+
+        response = self.client.post(self._activate_url(section))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        section.refresh_from_db()
+        self.assertTrue(section.is_active)
+
+    def test_non_eic_cannot_activate_section(self):
+        section = Section.objects.create(
+            name="Non EIC Activate Section",
+            manager=self.section_manager,
+            is_active=False,
+        )
+        self.client.force_authenticate(self.section_manager)
+
+        response = self.client.post(self._activate_url(section))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        section.refresh_from_db()
+        self.assertFalse(section.is_active)
 
     def test_management_list_does_not_expose_all_sections_to_normal_users(self):
         Section.objects.create(name="Visible Only To Management")
