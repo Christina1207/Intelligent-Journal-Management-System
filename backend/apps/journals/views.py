@@ -53,17 +53,18 @@ class SectionManagementViewSet(viewsets.ModelViewSet):
 
         return Response(output_serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["post"], url_path="deactivate")
+    def deactivate(self, request, pk=None):
+        section = self.get_object()
+        section = SectionManagementService.deactivate(section)
+
+        output_serializer = self.get_serializer(section)
+        return Response(output_serializer.data, status=status.HTTP_200_OK)
+
+# TODO: figure this out, either change to explicit mixins or let there be a hard delete
     def destroy(self, request, *args, **kwargs):
         section = self.get_object()
+        section = SectionManagementService.deactivate(section)
 
-        result = SectionManagementService.delete_or_deactivate(section)
-
-        if result == "deactivated":
-            return Response(
-                {
-                    "detail": "Section has related submissions, so it was deactivated instead of deleted."
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        output_serializer = self.get_serializer(section)
+        return Response(output_serializer.data, status=status.HTTP_200_OK)

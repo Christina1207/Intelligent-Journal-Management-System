@@ -55,6 +55,9 @@ class SectionApiTests(APITestCase):
     def _assign_manager_url(self, section):
         return reverse("section-management-assign-manager", args=[section.id])
 
+    def _deactivate_url(self, section):
+        return reverse("section-management-deactivate", args=[section.id])
+
     def _response_results(self, response):
         if isinstance(response.data, dict) and "results" in response.data:
             return response.data["results"]
@@ -246,30 +249,32 @@ class SectionApiTests(APITestCase):
         )
         self.client.force_authenticate(self.eic)
 
-        response = self.client.delete(self._management_detail_url(section))
+        response = self.client.post(self._deactivate_url(section))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         section.refresh_from_db()
         self.assertFalse(section.is_active)
         self.assertTrue(Section.objects.filter(id=section.id).exists())
 
-    def test_eic_can_delete_section_without_submissions(self):
+    def test_eic_can_deactivate_section_without_submissions(self):
         section = Section.objects.create(name="Empty Section")
         self.client.force_authenticate(self.eic)
 
-        response = self.client.delete(self._management_detail_url(section))
+        response = self.client.post(self._deactivate_url(section))
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Section.objects.filter(id=section.id).exists())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        section.refresh_from_db()
+        self.assertFalse(section.is_active)
+        self.assertTrue(Section.objects.filter(id=section.id).exists())
 
-    def test_non_eic_cannot_delete_section(self):
+    def test_non_eic_cannot_deactivate_section(self):
         section = Section.objects.create(
-            name="Non EIC Delete Section",
+            name="Non EIC Deactivate Section",
             manager=self.section_manager,
         )
         self.client.force_authenticate(self.section_manager)
 
-        response = self.client.delete(self._management_detail_url(section))
+        response = self.client.post(self._deactivate_url(section))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Section.objects.filter(id=section.id).exists())

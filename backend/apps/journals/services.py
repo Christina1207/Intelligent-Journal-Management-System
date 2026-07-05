@@ -1,4 +1,3 @@
-from django.db.models import ProtectedError
 from apps.accounts.models import User
 from apps.journals.models import Section
 
@@ -14,23 +13,11 @@ class SectionManagementService:
         return section
 
     @staticmethod
-    def delete_or_deactivate(section: Section):
+    def deactivate(section: Section):
         """
-        Delete empty sections, but deactivate sections that already have submissions.
-
-        Because Submission.section uses PROTECT, sections with historical submissions
-        must remain in the database.
+        Deactivate a section without deleting historical editorial data.
         """
+        section.is_active = False
+        section.save(update_fields=["is_active"])
 
-        if section.submissions.exists():
-            section.is_active = False
-            section.save(update_fields=["is_active"])
-            return "deactivated"
-
-        try:
-            section.delete()
-            return "deleted"
-        except ProtectedError:
-            section.is_active = False
-            section.save(update_fields=["is_active"])
-            return "deactivated"
+        return section

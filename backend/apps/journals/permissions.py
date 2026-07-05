@@ -21,7 +21,7 @@ class SectionManagementPermission(BasePermission):
     Section management rules:
 
     - Create section: Editor-in-chief only.
-    - Delete section: Editor-in-chief only.
+    - Deactivate section: Editor-in-chief only.
     - Assign section manager: Editor-in-chief only.
     - Update section: Editor-in-chief or this section's assigned manager.
     """
@@ -33,7 +33,7 @@ class SectionManagementPermission(BasePermission):
         is_editor_in_chief = request.user.has_role(Role.RoleName.EDITOR_IN_CHIEF)
         is_section_manager = request.user.has_role(Role.RoleName.SECTION_MANAGER)
 
-        if view.action in ["create", "destroy", "assign_manager"]:
+        if view.action in ["create", "destroy", "deactivate", "assign_manager"]:
             return is_editor_in_chief
 
         if view.action in ["list", "retrieve", "update", "partial_update"]:
