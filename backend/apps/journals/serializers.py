@@ -3,6 +3,7 @@ from rest_framework.exceptions import PermissionDenied
 from .models import Section
 from apps.accounts.models import Role, User
 
+
 class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
@@ -63,14 +64,18 @@ class SectionManagementSerializer(serializers.ModelSerializer):
         return attrs
     
 class AssignSectionManagerSerializer(serializers.Serializer):
-    manager_id = serializers.UUIDField()
+    manager_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.prefetch_related("roles").all(),
+        source="manager",
+        write_only=True,
+        error_messages={
+            "required": "manager_id is required.",
+            "does_not_exist": "No user exists with this id.",
+            "incorrect_type": "manager_id must be a valid UUID.",
+        },
+    )
 
-    def validate_manager_id(self, value):
-        try:
-            manager = User.objects.get(id=value)
-        except User.DoesNotExist:
-            raise serializers.ValidationError("User does not exist.")
-
+    def validate_manager_id(self, manager):
         if not manager.has_role(Role.RoleName.SECTION_MANAGER):
             raise serializers.ValidationError(
                 "Selected user must have the SECTION_MANAGER role."
@@ -81,4 +86,4 @@ class AssignSectionManagerSerializer(serializers.Serializer):
                 "Cannot assign an inactive user as section manager."
             )
 
-        return value
+        return manager

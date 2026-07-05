@@ -7,6 +7,7 @@ from .models import Section
 from .permissions import SectionManagementPermission
 from .serializers import SectionManagementSerializer, AssignSectionManagerSerializer, SectionSerializer
 from .services import SectionManagementService
+from drf_spectacular.utils import extend_schema
 
 
 class SectionListView(generics.ListAPIView):
@@ -19,7 +20,11 @@ class SectionListView(generics.ListAPIView):
         return Section.objects.filter(is_active=True)
 
 class SectionManagementViewSet(viewsets.ModelViewSet):
-    serializer_class = SectionManagementSerializer
+    def get_serializer_class(self):
+        if self.action == "assign_manager":
+            return AssignSectionManagerSerializer
+
+        return SectionManagementSerializer
     permission_classes = [SectionManagementPermission]
 
     def get_queryset(self):
@@ -36,8 +41,11 @@ class SectionManagementViewSet(viewsets.ModelViewSet):
             return queryset.filter(manager=user)
 
         return queryset
-
-    @action(detail=True, methods=["post"], url_path="assign-manager")
+    @extend_schema(
+        request=AssignSectionManagerSerializer,
+        responses=SectionManagementSerializer,
+    )
+    @action(detail=True, methods=["put"], url_path="manager")
     def assign_manager(self, request, pk=None):
         section = self.get_object()
 
@@ -46,10 +54,13 @@ class SectionManagementViewSet(viewsets.ModelViewSet):
 
         section = SectionManagementService.assign_manager(
             section=section,
-            manager_id=serializer.validated_data["manager_id"],
+            manager=serializer.validated_data["manager"],
         )
 
-        output_serializer = self.get_serializer(section)
+        output_serializer = SectionManagementSerializer(
+            section,
+            context={"request": request},
+        )
 
         return Response(output_serializer.data, status=status.HTTP_200_OK)
 
