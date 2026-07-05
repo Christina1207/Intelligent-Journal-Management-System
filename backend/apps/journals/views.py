@@ -1,9 +1,9 @@
-from rest_framework import generics,status,viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from apps.accounts.models import Role
 from .models import Section
-from .serializers import SectionSerializer
 from .permissions import SectionManagementPermission
 from .serializers import SectionManagementSerializer, AssignSectionManagerSerializer, SectionSerializer
 from .services import SectionManagementService
@@ -23,7 +23,19 @@ class SectionManagementViewSet(viewsets.ModelViewSet):
     permission_classes = [SectionManagementPermission]
 
     def get_queryset(self):
-        return Section.objects.select_related("manager").order_by("name")
+        queryset = Section.objects.select_related("manager").order_by("name")
+        user = self.request.user
+
+        if not user or not user.is_authenticated:
+            return queryset.none()
+
+        if user.has_role(Role.RoleName.EDITOR_IN_CHIEF):
+            return queryset
+
+        if self.action == "list" and user.has_role(Role.RoleName.SECTION_MANAGER):
+            return queryset.filter(manager=user)
+
+        return queryset
 
     @action(detail=True, methods=["post"], url_path="assign-manager")
     def assign_manager(self, request, pk=None):

@@ -30,10 +30,16 @@ class SectionManagementPermission(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        if view.action in ["create", "destroy", "assign_manager"]:
-            return request.user.has_role(Role.RoleName.EDITOR_IN_CHIEF)
+        is_editor_in_chief = request.user.has_role(Role.RoleName.EDITOR_IN_CHIEF)
+        is_section_manager = request.user.has_role(Role.RoleName.SECTION_MANAGER)
 
-        return True
+        if view.action in ["create", "destroy", "assign_manager"]:
+            return is_editor_in_chief
+
+        if view.action in ["list", "retrieve", "update", "partial_update"]:
+            return is_editor_in_chief or is_section_manager
+
+        return is_editor_in_chief
 
     def has_object_permission(self, request, view, obj):
         if request.user.has_role(Role.RoleName.EDITOR_IN_CHIEF):
