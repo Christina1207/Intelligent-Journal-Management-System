@@ -1,7 +1,17 @@
-from django.urls import path
-from . import views
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from apps.journals.views import SectionListView, SectionManagementViewSet
+
+
+router = DefaultRouter()
+router.register(
+    r"manage/sections",
+    SectionManagementViewSet,
+    basename="section-management",
+)
 
 urlpatterns = [
-    # TODO: add endpoints for creating/updating/deleting sections and assigning editors to sections
-    path("", views.SectionListView.as_view(), name="section-list"),
+    path("sections/", SectionListView.as_view(), name="section-list"),
+    path("", include(router.urls)),
 ]
