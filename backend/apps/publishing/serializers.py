@@ -1,6 +1,35 @@
 from typing import Optional
 from rest_framework import serializers
-from .models import PublishedArticle
+from .models import PublishedArticle, PublishedArticleAuthor
+
+
+class PublishedArticleAuthorPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PublishedArticleAuthor
+        fields = [
+            "full_name",
+            "orcid",
+            "affiliation",
+            "country",
+            "order",
+            "is_corresponding",
+        ]
+        read_only_fields = fields
+
+
+class PublishedArticleAuthorManagementSerializer(PublishedArticleAuthorPublicSerializer):
+    class Meta(PublishedArticleAuthorPublicSerializer.Meta):
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "orcid",
+            "affiliation",
+            "country",
+            "order",
+            "is_corresponding",
+        ]
+        read_only_fields = fields
 
 
 class PublishedArticlePublicListSerializer(serializers.ModelSerializer):
@@ -24,6 +53,7 @@ class PublishedArticlePublicListSerializer(serializers.ModelSerializer):
 
 
 class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerializer):
+    authors = PublishedArticleAuthorPublicSerializer(many=True, read_only=True)
     pdf_file = serializers.SerializerMethodField()
 
     class Meta(PublishedArticlePublicListSerializer.Meta):
@@ -32,8 +62,16 @@ class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerialize
             "title",
             "slug",
             "abstract",
+            "authors",
+            "language",
             "keywords",
             "doi",
+            "license_name",
+            "license_url",
+            "volume",
+            "issue",
+            "first_page",
+            "last_page",
             "section_id",
             "section_name",
             "pdf_file",
@@ -48,6 +86,7 @@ class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerialize
 
 
 class PublishedArticleManagementReadSerializer(PublishedArticlePublicDetailSerializer):
+    authors = PublishedArticleAuthorManagementSerializer(many=True, read_only=True)
     submission_id = serializers.UUIDField(source="submission.id", read_only=True)
     source_version = serializers.PrimaryKeyRelatedField(read_only=True)
 
@@ -59,8 +98,16 @@ class PublishedArticleManagementReadSerializer(PublishedArticlePublicDetailSeria
             "title",
             "slug",
             "abstract",
+            "authors",
+            "language",
             "keywords",
             "doi",
+            "license_name",
+            "license_url",
+            "volume",
+            "issue",
+            "first_page",
+            "last_page",
             "section_id",
             "section_name",
             "pdf_file",
@@ -68,6 +115,7 @@ class PublishedArticleManagementReadSerializer(PublishedArticlePublicDetailSeria
             "published_at",
             "view_count",
             "download_count",
+            "metadata_updated_at",
             "created_at",
             "updated_at",
         ]
@@ -77,12 +125,32 @@ class PublishedArticleManagementReadSerializer(PublishedArticlePublicDetailSeria
 class PublishedArticleWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = PublishedArticle
-        fields = ["title", "abstract", "keywords", "doi", "pdf_file"]
+        fields = [
+            "title",
+            "abstract",
+            "language",
+            "keywords",
+            "doi",
+            "license_name",
+            "license_url",
+            "volume",
+            "issue",
+            "first_page",
+            "last_page",
+            "pdf_file",
+        ]
         extra_kwargs = {
             "title": {"required": False},
             "abstract": {"required": False, "allow_blank": True},
+            "language": {"required": False, "allow_blank": True},
             "keywords": {"required": False},
             "doi": {"required": False, "allow_blank": True, "allow_null": True},
+            "license_name": {"required": False, "allow_blank": True},
+            "license_url": {"required": False, "allow_blank": True},
+            "volume": {"required": False, "allow_blank": True},
+            "issue": {"required": False, "allow_blank": True},
+            "first_page": {"required": False, "allow_blank": True},
+            "last_page": {"required": False, "allow_blank": True},
             "pdf_file": {"required": False, "allow_null": True},
         }
 

@@ -1,16 +1,33 @@
+from dataclasses import replace
+from datetime import date
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import Http404
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role
-from apps.journals.models import Section
+from apps.journals.models import JournalMetadataSettings, Section
 from apps.submissions.models import Submission, SubmissionTopic, SubmissionVersion
 
-from .models import PublishedArticle
+from .models import PublishedArticle, PublishedArticleAuthor
+from .exporters import (
+    DC_NAMESPACE,
+    OAI_DC_NAMESPACE,
+    render_bibtex,
+    render_dublin_core_xml,
+    render_ris,
+)
+from .metadata import (
+    ArticleAuthorMetadata,
+    ArticleMetadata,
+    ArticleMetadataBuilder,
+)
 from .services import PublishingService
 
 
@@ -20,6 +37,11 @@ class PublishingServiceTests(TestCase):
             username="author",
             email="author@example.com",
             password="testpass123",
+            first_name="Ada",
+            last_name="Lovelace",
+            orcid="0000-0000-0000-0001",
+            affiliation="Analytical Engine Institute",
+            country="United Kingdom",
         )
         self.editor = get_user_model().objects.create_user(
             username="section-editor",
@@ -31,6 +53,13 @@ class PublishingServiceTests(TestCase):
         )
         self.editor.roles.add(self.section_editor_role)
         self.section = Section.objects.create(name="Computer Science")
+        self.journal_settings = JournalMetadataSettings.objects.create(
+            journal_title="Test Journal",
+            publisher_name="Test Publisher",
+            default_language="en",
+            default_license_name="CC BY 4.0",
+            default_license_url="https://creativecommons.org/licenses/by/4.0/",
+        )
 
     def _create_submission(
         self,
@@ -103,9 +132,92 @@ class PublishingServiceTests(TestCase):
         self.assertEqual(article.section, submission.section)
         self.assertEqual(article.title, submission.title)
         self.assertEqual(article.abstract, submission.abstract)
+        self.assertEqual(article.language, submission.language)
         self.assertEqual(article.keywords, ["publishing", "semantic matching"])
+        self.assertEqual(article.license_name, "CC BY 4.0")
+        self.assertEqual(
+            article.license_url,
+            "https://creativecommons.org/licenses/by/4.0/",
+        )
         self.assertEqual(article.pdf_file.name, "submissions/example/v1/manuscript.pdf")
         self.assertTrue(article.slug.startswith("semantic-matching-in-editorial-workflows"))
+
+    def test_create_draft_snapshots_primary_author_metadata(self):
+        submission = self._create_submission()
+
+        article = PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
+
+        author_snapshot = article.authors.get()
+        self.assertEqual(author_snapshot.order, 1)
+        self.assertEqual(author_snapshot.full_name, "Ada Lovelace")
+        self.assertEqual(author_snapshot.email, "author@example.com")
+        self.assertEqual(author_snapshot.orcid, "0000-0000-0000-0001")
+        self.assertEqual(author_snapshot.affiliation, "Analytical Engine Institute")
+        self.assertEqual(author_snapshot.country, "United Kingdom")
+        self.assertTrue(author_snapshot.is_corresponding)
+
+    def test_source_changes_after_draft_creation_do_not_change_snapshot(self):
+        submission = self._create_submission()
+
+        article = PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
+        author_snapshot = article.authors.get()
+
+        submission.title = "Changed Submission Title"
+        submission.abstract = "Changed submission abstract."
+        submission.language = "ar"
+        submission.save(update_fields=["title", "abstract", "language"])
+        self.author.first_name = "Changed"
+        self.author.last_name = "Author"
+        self.author.email = "changed-author@example.com"
+        self.author.orcid = "0000-0000-0000-9999"
+        self.author.affiliation = "Changed Affiliation"
+        self.author.country = "Changed Country"
+        self.author.save(
+            update_fields=[
+                "first_name",
+                "last_name",
+                "email",
+                "orcid",
+                "affiliation",
+                "country",
+            ]
+        )
+
+        article.refresh_from_db()
+        author_snapshot.refresh_from_db()
+
+        self.assertEqual(article.title, "Semantic Matching in Editorial Workflows")
+        self.assertEqual(
+            article.abstract,
+            "A study about intelligent publishing workflow support.",
+        )
+        self.assertEqual(article.language, "en")
+        self.assertEqual(author_snapshot.full_name, "Ada Lovelace")
+        self.assertEqual(author_snapshot.email, "author@example.com")
+        self.assertEqual(author_snapshot.orcid, "0000-0000-0000-0001")
+        self.assertEqual(author_snapshot.affiliation, "Analytical Engine Institute")
+        self.assertEqual(author_snapshot.country, "United Kingdom")
+
+    def test_duplicate_published_author_order_is_rejected_for_same_article(self):
+        submission = self._create_submission()
+        article = PublishingService.create_draft_from_submission(
+            editor=self.editor,
+            submission=submission,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PublishedArticleAuthor.objects.create(
+                    article=article,
+                    order=1,
+                    full_name="Duplicate Author",
+                )
 
     def test_non_section_editor_cannot_create_draft(self):
         non_editor = get_user_model().objects.create_user(
@@ -254,6 +366,285 @@ class PublishingServiceTests(TestCase):
         self.assertIsNotNone(article.published_at)
 
 
+class ArticleMetadataBuilderTests(TestCase):
+    def setUp(self):
+        self.author = get_user_model().objects.create_user(
+            username="metadata-author",
+            email="metadata-author@example.com",
+            password="testpass123",
+            first_name="Live",
+            last_name="Author",
+        )
+        self.section = Section.objects.create(name="Metadata Systems")
+        JournalMetadataSettings.objects.create(
+            journal_title="Intelligent Journal",
+            publisher_name="Open Publishing Lab",
+            print_issn="1234-5678",
+            online_issn="8765-4321",
+            base_url="https://journal.example.org",
+            default_language="en",
+        )
+
+    def _create_article(
+        self,
+        *,
+        slug="metadata-builder-article",
+        status=PublishedArticle.Status.PUBLISHED,
+        title="Arabic & English Metadata <Study>",
+        abstract="A public abstract with reusable metadata.",
+        language="ar",
+        keywords=None,
+        doi="10.1234/ijms.metadata",
+        pdf_file="published/articles/metadata.pdf",
+        published_at=None,
+    ):
+        submission = Submission.objects.create(
+            title=f"Submission for {slug}",
+            abstract="Original submission abstract.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            status=Submission.Status.ACCEPTED,
+        )
+        if published_at is None and status == PublishedArticle.Status.PUBLISHED:
+            published_at = timezone.now()
+
+        return PublishedArticle.objects.create(
+            submission=submission,
+            section=self.section,
+            title=title,
+            slug=slug,
+            abstract=abstract,
+            language=language,
+            keywords=keywords if keywords is not None else ["metadata", "exports"],
+            doi=doi,
+            license_name="CC BY 4.0",
+            license_url="https://creativecommons.org/licenses/by/4.0/",
+            volume="4",
+            issue="2",
+            first_page="10",
+            last_page="20",
+            pdf_file=pdf_file,
+            status=status,
+            published_at=published_at,
+        )
+
+    def test_builds_metadata_from_article_snapshots_and_journal_settings(self):
+        article = self._create_article()
+        PublishedArticleAuthor.objects.create(
+            article=article,
+            full_name="Snapshot Author",
+            email="snapshot@example.com",
+            orcid="0000-0000-0000-0002",
+            affiliation="Snapshot University",
+            country="Syria",
+            order=1,
+            is_corresponding=True,
+        )
+
+        metadata = ArticleMetadataBuilder().build(article)
+
+        self.assertEqual(metadata.title, "Arabic & English Metadata <Study>")
+        self.assertEqual(metadata.abstract, "A public abstract with reusable metadata.")
+        self.assertEqual(metadata.journal_title, "Intelligent Journal")
+        self.assertEqual(metadata.publisher_name, "Open Publishing Lab")
+        self.assertEqual(metadata.print_issn, "1234-5678")
+        self.assertEqual(metadata.online_issn, "8765-4321")
+        self.assertEqual(metadata.section_name, "Metadata Systems")
+        self.assertEqual(metadata.year, str(article.published_at.year))
+        self.assertEqual(metadata.doi, "10.1234/ijms.metadata")
+        self.assertEqual(metadata.language, "ar")
+        self.assertEqual(metadata.keywords, ["metadata", "exports"])
+        self.assertEqual(metadata.volume, "4")
+        self.assertEqual(metadata.issue, "2")
+        self.assertEqual(metadata.first_page, "10")
+        self.assertEqual(metadata.last_page, "20")
+        self.assertEqual(
+            metadata.article_url,
+            "https://journal.example.org/api/v1/public/articles/"
+            "metadata-builder-article/",
+        )
+        self.assertEqual(
+            metadata.pdf_url,
+            "https://journal.example.org/api/v1/public/articles/"
+            "metadata-builder-article/download/",
+        )
+        self.assertEqual(len(metadata.authors), 1)
+        self.assertEqual(metadata.authors[0].full_name, "Snapshot Author")
+        self.assertEqual(metadata.authors[0].email, "snapshot@example.com")
+
+    def test_uses_author_snapshots_not_live_submission_author_data(self):
+        article = self._create_article(slug="snapshot-source-check")
+        PublishedArticleAuthor.objects.create(
+            article=article,
+            full_name="Stored Snapshot",
+            email="stored@example.com",
+            order=1,
+            is_corresponding=True,
+        )
+        self.author.first_name = "Changed"
+        self.author.last_name = "Live User"
+        self.author.email = "changed@example.com"
+        self.author.save(update_fields=["first_name", "last_name", "email"])
+
+        metadata = ArticleMetadataBuilder().build(article)
+
+        self.assertEqual([author.full_name for author in metadata.authors], ["Stored Snapshot"])
+        self.assertEqual(metadata.authors[0].email, "stored@example.com")
+
+    def test_handles_missing_optional_fields_and_settings_without_mutating_database(self):
+        JournalMetadataSettings.objects.all().delete()
+        article = self._create_article(
+            slug="missing-optional-metadata",
+            title="Minimal Published Article",
+            abstract="",
+            language="",
+            keywords=[],
+            doi=None,
+            pdf_file="",
+        )
+
+        metadata = ArticleMetadataBuilder().build(article)
+
+        self.assertEqual(JournalMetadataSettings.objects.count(), 0)
+        self.assertEqual(metadata.journal_title, "Untitled Journal")
+        self.assertIsNone(metadata.abstract)
+        self.assertIsNone(metadata.doi)
+        self.assertIsNone(metadata.article_url)
+        self.assertIsNone(metadata.pdf_url)
+        self.assertEqual(metadata.keywords, [])
+        self.assertEqual(metadata.authors, [])
+
+    def test_rejects_unpublished_article_metadata(self):
+        article = self._create_article(
+            slug="draft-metadata",
+            status=PublishedArticle.Status.DRAFT,
+            published_at=None,
+        )
+
+        with self.assertRaises(Http404):
+            ArticleMetadataBuilder().build(article)
+
+
+class MetadataRendererTests(TestCase):
+    def _metadata(self):
+        return ArticleMetadata(
+            title=r"Example {Title} & 100%_# \ Study",
+            abstract="An abstract with <xml> & BibTeX-sensitive characters.",
+            authors=[
+                ArticleAuthorMetadata(
+                    full_name="Smith, John",
+                    email="john@example.com",
+                    orcid=None,
+                    affiliation=None,
+                    country=None,
+                    order=1,
+                    is_corresponding=True,
+                ),
+                ArticleAuthorMetadata(
+                    full_name="Doe, Jane",
+                    email=None,
+                    orcid=None,
+                    affiliation=None,
+                    country=None,
+                    order=2,
+                    is_corresponding=False,
+                ),
+            ],
+            journal_title="Intelligent Journal",
+            publisher_name="Open Publishing Lab",
+            print_issn="1234-5678",
+            online_issn="8765-4321",
+            section_name="Metadata Systems",
+            publication_date=date(2026, 7, 5),
+            year="2026",
+            doi="10.1234/example",
+            slug="example-article",
+            article_url="https://journal.example.org/api/v1/public/articles/example-article/",
+            pdf_url="https://journal.example.org/api/v1/public/articles/example-article/download/",
+            language="en",
+            keywords=["metadata", "journal exports"],
+            license_name="CC BY 4.0",
+            license_url="https://creativecommons.org/licenses/by/4.0/",
+            volume="4",
+            issue="2",
+            first_page="1",
+            last_page="9",
+        )
+
+    def test_bibtex_renderer_outputs_article_with_escaped_fields_and_stable_key(self):
+        output = render_bibtex(self._metadata())
+
+        self.assertTrue(output.startswith("@article{examplearticle,"))
+        self.assertIn(r"title = {Example \{Title\} \& 100\%\_\# \textbackslash{} Study}", output)
+        self.assertIn("author = {Smith, John and Doe, Jane}", output)
+        self.assertIn("journal = {Intelligent Journal}", output)
+        self.assertIn("year = {2026}", output)
+        self.assertIn("doi = {10.1234/example}", output)
+        self.assertIn(
+            "url = {https://journal.example.org/api/v1/public/articles/example-article/}",
+            output,
+        )
+
+    def test_bibtex_renderer_omits_empty_fields(self):
+        metadata = replace(
+            self._metadata(),
+            doi=None,
+            volume=None,
+            issue=None,
+            first_page=None,
+            last_page=None,
+            keywords=[],
+        )
+
+        output = render_bibtex(metadata)
+
+        self.assertNotIn("doi =", output)
+        self.assertNotIn("volume =", output)
+        self.assertNotIn("number =", output)
+        self.assertNotIn("pages =", output)
+        self.assertNotIn("keywords =", output)
+
+    def test_ris_renderer_outputs_journal_record(self):
+        output = render_ris(self._metadata())
+
+        self.assertTrue(output.startswith("TY  - JOUR\n"))
+        self.assertIn("TI  - Example {Title} & 100%_# \\ Study\n", output)
+        self.assertIn("AU  - Smith, John\n", output)
+        self.assertIn("AU  - Doe, Jane\n", output)
+        self.assertIn("DO  - 10.1234/example\n", output)
+        self.assertIn(
+            "UR  - https://journal.example.org/api/v1/public/articles/example-article/\n",
+            output,
+        )
+        self.assertIn("KW  - metadata\n", output)
+        self.assertIn("KW  - journal exports\n", output)
+        self.assertTrue(output.endswith("ER  -\n"))
+
+    def test_dublin_core_renderer_outputs_valid_namespaced_xml(self):
+        output = render_dublin_core_xml(self._metadata())
+        root = ET.fromstring(output)
+
+        self.assertIn('xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"', output)
+        self.assertIn('xmlns:dc="http://purl.org/dc/elements/1.1/"', output)
+        self.assertIn('xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"', output)
+        self.assertEqual(root.tag, f"{{{OAI_DC_NAMESPACE}}}dc")
+        creators = root.findall(f"{{{DC_NAMESPACE}}}creator")
+        identifiers = root.findall(f"{{{DC_NAMESPACE}}}identifier")
+        title = root.find(f"{{{DC_NAMESPACE}}}title")
+
+        self.assertEqual([creator.text for creator in creators], ["Smith, John", "Doe, Jane"])
+        self.assertIn(
+            "https://doi.org/10.1234/example",
+            [identifier.text for identifier in identifiers],
+        )
+        self.assertIn(
+            "https://journal.example.org/api/v1/public/articles/example-article/",
+            [identifier.text for identifier in identifiers],
+        )
+        self.assertEqual(title.text, r"Example {Title} & 100%_# \ Study")
+
+
 class PublishingApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -329,6 +720,15 @@ class PublishingApiTests(TestCase):
         abstract="Public abstract.",
         published_at=None,
         pdf_file="submissions/api/v1/manuscript.pdf",
+        language="en",
+        keywords=None,
+        doi=None,
+        license_name="",
+        license_url="",
+        volume="",
+        issue="",
+        first_page="",
+        last_page="",
         view_count=0,
         download_count=0,
     ):
@@ -348,12 +748,68 @@ class PublishingApiTests(TestCase):
             title=title or f"Article {slug}",
             slug=slug,
             abstract=abstract,
+            language=language,
+            keywords=keywords if keywords is not None else [],
+            doi=doi,
+            license_name=license_name,
+            license_url=license_url,
+            volume=volume,
+            issue=issue,
+            first_page=first_page,
+            last_page=last_page,
             pdf_file=pdf_file,
             status=status,
             published_at=published_at,
             view_count=view_count,
             download_count=download_count,
         )
+
+    def _create_export_article(
+        self,
+        *,
+        slug="exportable-article",
+        status=PublishedArticle.Status.PUBLISHED,
+    ):
+        JournalMetadataSettings.objects.update_or_create(
+            pk=JournalMetadataSettings.SINGLETON_PK,
+            defaults={
+                "journal_title": "Public Metadata Journal",
+                "publisher_name": "Metadata Publisher",
+                "print_issn": "1234-5678",
+                "online_issn": "8765-4321",
+                "base_url": "https://journal.example.org",
+            },
+        )
+        article = self._create_article(
+            status=status,
+            slug=slug,
+            title="Exportable Metadata Article",
+            abstract="A published article for citation export.",
+            keywords=["citation export", "metadata"],
+            doi="10.5555/exportable",
+            license_name="CC BY 4.0",
+            license_url="https://creativecommons.org/licenses/by/4.0/",
+            volume="7",
+            issue="1",
+            first_page="100",
+            last_page="112",
+            pdf_file="published/articles/exportable.pdf",
+        )
+        PublishedArticleAuthor.objects.create(
+            article=article,
+            full_name="Ada Lovelace",
+            email="ada@example.com",
+            order=1,
+            is_corresponding=True,
+        )
+        PublishedArticleAuthor.objects.create(
+            article=article,
+            full_name="Alan Turing",
+            email="alan@example.com",
+            order=2,
+            is_corresponding=False,
+        )
+        return article
 
     def _response_slugs(self, response):
         data = response.data["results"] if "results" in response.data else response.data
@@ -673,6 +1129,138 @@ class PublishingApiTests(TestCase):
 
         self.assertEqual(draft_response.status_code, 404)
         self.assertEqual(retracted_response.status_code, 404)
+
+    def test_public_export_bibtex_returns_downloadable_metadata_file(self):
+        article = self._create_export_article()
+
+        response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=bibtex"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/x-bibtex; charset=utf-8",
+        )
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="exportable-article.bib"',
+        )
+        content = response.content.decode()
+        self.assertIn("@article{exportablearticle,", content)
+        self.assertIn("title = {Exportable Metadata Article}", content)
+        self.assertIn("author = {Ada Lovelace and Alan Turing}", content)
+        self.assertIn("journal = {Public Metadata Journal}", content)
+        self.assertIn("doi = {10.5555/exportable}", content)
+        self.assertIn(
+            "url = {https://journal.example.org/api/v1/public/articles/"
+            "exportable-article/}",
+            content,
+        )
+
+    def test_public_export_ris_returns_downloadable_metadata_file(self):
+        article = self._create_export_article()
+
+        response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=ris"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/x-research-info-systems; charset=utf-8",
+        )
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="exportable-article.ris"',
+        )
+        content = response.content.decode()
+        self.assertTrue(content.startswith("TY  - JOUR\n"))
+        self.assertIn("AU  - Ada Lovelace\n", content)
+        self.assertIn("AU  - Alan Turing\n", content)
+        self.assertIn("DO  - 10.5555/exportable\n", content)
+        self.assertIn("KW  - citation export\n", content)
+        self.assertTrue(content.endswith("ER  -\n"))
+
+    def test_public_export_dublin_core_returns_downloadable_xml_file(self):
+        article = self._create_export_article()
+
+        response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=dc"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/xml; charset=utf-8")
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="exportable-article.xml"',
+        )
+        root = ET.fromstring(response.content.decode())
+        creators = root.findall(f"{{{DC_NAMESPACE}}}creator")
+        identifiers = root.findall(f"{{{DC_NAMESPACE}}}identifier")
+
+        self.assertEqual(root.tag, f"{{{OAI_DC_NAMESPACE}}}dc")
+        self.assertEqual(
+            [creator.text for creator in creators],
+            ["Ada Lovelace", "Alan Turing"],
+        )
+        self.assertIn(
+            "https://doi.org/10.5555/exportable",
+            [identifier.text for identifier in identifiers],
+        )
+        self.assertIn(
+            "https://journal.example.org/api/v1/public/articles/exportable-article/",
+            [identifier.text for identifier in identifiers],
+        )
+
+    def test_public_export_accepts_supported_format_aliases(self):
+        article = self._create_export_article()
+
+        for format_alias in ["bib", "dublin-core", "dublin_core", "xml"]:
+            with self.subTest(format_alias=format_alias):
+                response = self.client.get(
+                    f"/api/v1/public/articles/{article.slug}/export/"
+                    f"?format={format_alias}"
+                )
+
+                self.assertEqual(response.status_code, 200)
+
+    def test_public_export_unsupported_format_returns_400(self):
+        article = self._create_export_article()
+
+        response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=jats"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsupported export format", str(response.data))
+
+    def test_public_export_missing_format_returns_400(self):
+        article = self._create_export_article()
+
+        response = self.client.get(f"/api/v1/public/articles/{article.slug}/export/")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsupported export format", str(response.data))
+
+    def test_public_export_unknown_slug_returns_404(self):
+        response = self.client.get(
+            "/api/v1/public/articles/unknown-export/export/?format=bibtex"
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_public_export_does_not_expose_draft_article(self):
+        article = self._create_export_article(
+            slug="draft-export",
+            status=PublishedArticle.Status.DRAFT,
+        )
+
+        response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=bibtex"
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     @patch("apps.publishing.services.StorageService")
     def test_public_download_for_published_article_returns_url_and_increments_count(

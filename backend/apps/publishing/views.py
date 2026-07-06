@@ -1,6 +1,7 @@
 import uuid
 from django.db.models import F
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import (
     OpenApiExample,
@@ -12,6 +13,7 @@ from drf_spectacular.utils import (
 )
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
+from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.response import Response
@@ -19,6 +21,14 @@ from rest_framework.views import APIView
 
 from apps.submissions.models import Submission
 
+from .exporters import (
+    FORMAT_ALIASES,
+    normalize_export_format,
+    render_bibtex,
+    render_dublin_core_xml,
+    render_ris,
+)
+from .metadata import ArticleMetadataBuilder
 from .models import PublishedArticle
 from .serializers import (
     PublishedArticleDownloadSerializer,
@@ -66,6 +76,36 @@ PUBLIC_ARTICLE_LIST_PARAMETERS = [
     ),
 ]
 
+ARTICLE_EXPORT_PARAMETER = OpenApiParameter(
+    name="format",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    required=True,
+    enum=list(FORMAT_ALIASES.keys()),
+    description=(
+        "Metadata export format. Supported aliases: bibtex, bib, ris, dc, "
+        "dublin-core, dublin_core, xml."
+    ),
+)
+
+ARTICLE_EXPORT_CONTENT = {
+    "bibtex": {
+        "renderer": render_bibtex,
+        "content_type": "application/x-bibtex; charset=utf-8",
+        "extension": "bib",
+    },
+    "ris": {
+        "renderer": render_ris,
+        "content_type": "application/x-research-info-systems; charset=utf-8",
+        "extension": "ris",
+    },
+    "dc": {
+        "renderer": render_dublin_core_xml,
+        "content_type": "application/xml; charset=utf-8",
+        "extension": "xml",
+    },
+}
+
 
 class IsPublishingStaffPlaceholder(BasePermission):
     """
@@ -77,6 +117,20 @@ class IsPublishingStaffPlaceholder(BasePermission):
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)
+
+
+class IgnoreFormatQueryContentNegotiation(BaseContentNegotiation):
+    """
+    DRF reserves ?format= for renderer selection. The citation export endpoint
+    uses it as domain input, so negotiation must not consume it first.
+    """
+
+    def select_parser(self, request, parsers):
+        return parsers[0] if parsers else None
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        renderer = renderers[0]
+        return renderer, renderer.media_type
 
 
 class CreateArticleDraftView(APIView):
@@ -124,7 +178,10 @@ class ArticleManagementListView(generics.ListAPIView):
     serializer_class = PublishedArticleManagementReadSerializer
 
     def get_queryset(self):
-        return PublishedArticle.objects.select_related("section", "submission")
+        return PublishedArticle.objects.select_related(
+            "section",
+            "submission",
+        ).prefetch_related("authors")
 
 
 @extend_schema_view(
@@ -150,7 +207,10 @@ class ArticleManagementDetailView(generics.RetrieveUpdateAPIView):
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        return PublishedArticle.objects.select_related("section", "submission")
+        return PublishedArticle.objects.select_related(
+            "section",
+            "submission",
+        ).prefetch_related("authors")
 
     def get_serializer_class(self):
         if self.request.method == "PATCH":
@@ -296,7 +356,7 @@ class PublicArticleDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         return PublishedArticle.objects.filter(
             status=PublishedArticle.Status.PUBLISHED,
-        ).select_related("section")
+        ).select_related("section").prefetch_related("authors")
 
     def retrieve(self, request, *args, **kwargs):
         article = self.get_object()
@@ -305,6 +365,65 @@ class PublicArticleDetailView(generics.RetrieveAPIView):
         )
         article.refresh_from_db(fields=["view_count"])
         return Response(self.get_serializer(article).data)
+
+
+class PublicArticleMetadataExportView(APIView):
+    permission_classes = [AllowAny]
+    content_negotiation_class = IgnoreFormatQueryContentNegotiation
+
+    @extend_schema(
+        tags=["Public Articles"],
+        auth=[],
+        parameters=[ARTICLE_EXPORT_PARAMETER],
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.BINARY,
+                description=(
+                    "Published article metadata file. Content type depends on "
+                    "the requested format."
+                ),
+            ),
+            400: OpenApiResponse(description="Missing or unsupported export format."),
+            404: OpenApiResponse(description="Published article was not found."),
+        },
+        description=(
+            "Export citation-manager-compatible metadata for a published article. "
+            "Draft and retracted articles return 404."
+        ),
+    )
+    def get(self, request, slug):
+        export_format = normalize_export_format(request.query_params.get("format"))
+        if export_format is None:
+            allowed_values = ", ".join(FORMAT_ALIASES.keys())
+            raise ValidationError(
+                {
+                    "format": (
+                        "Unsupported export format. "
+                        f"Allowed values: {allowed_values}."
+                    )
+                }
+            )
+
+        article = get_object_or_404(
+            PublishedArticle.objects.filter(
+                status=PublishedArticle.Status.PUBLISHED,
+            )
+            .select_related("section")
+            .prefetch_related("authors"),
+            slug=slug,
+        )
+        metadata = ArticleMetadataBuilder(request=request).build(article)
+        export_config = ARTICLE_EXPORT_CONTENT[export_format]
+        content = export_config["renderer"](metadata)
+
+        response = HttpResponse(
+            content,
+            content_type=export_config["content_type"],
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="{article.slug}.{export_config["extension"]}"'
+        )
+        return response
 
 
 class PublicArticleDownloadView(APIView):

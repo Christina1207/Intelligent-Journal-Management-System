@@ -35,6 +35,11 @@ urlpatterns = [
         name="public-article-download",
     ),
     path(
+        "public/articles/<slug:slug>/export/",
+        views.PublicArticleMetadataExportView.as_view(),
+        name="public-article-export",
+    ),
+    path(
         "public/articles/<slug:slug>/",
         views.PublicArticleDetailView.as_view(),
         name="public-article-detail",

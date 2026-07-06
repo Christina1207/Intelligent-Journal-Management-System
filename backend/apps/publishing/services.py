@@ -6,9 +6,10 @@ from django.utils.text import slugify
 
 from apps.accounts.models import Role
 from apps.core.storage import StorageService
+from apps.journals.models import JournalMetadataSettings
 from apps.submissions.models import Submission, SubmissionVersion
 
-from .models import PublishedArticle
+from .models import PublishedArticle, PublishedArticleAuthor
 
 
 class PublicDownloadUnavailable(Exception):
@@ -31,7 +32,7 @@ class PublishingService:
         """
         submission = (
             Submission.objects.select_for_update()
-            .select_related("section", "assigned_editor")
+            .select_related("section", "author")
             .get(pk=submission.pk)
         )
 
@@ -71,6 +72,8 @@ class PublishingService:
                 "Accepted submission version has no manuscript file to publish."
             )
 
+        journal_settings = JournalMetadataSettings.get_current()
+
         article = PublishedArticle.objects.create(
             submission=submission,
             source_version=latest_version,
@@ -78,9 +81,16 @@ class PublishingService:
             title=submission.title,
             slug=PublishingService._generate_unique_slug(submission.title),
             abstract=submission.abstract,
+            language=submission.language or journal_settings.default_language,
             keywords=PublishingService._extract_keywords(submission),
+            license_name=journal_settings.default_license_name,
+            license_url=journal_settings.default_license_url,
             pdf_file=latest_version.file,
             status=PublishedArticle.Status.DRAFT,
+        )
+        PublishingService._initialize_author_snapshots(
+            article=article,
+            submission=submission,
         )
 
         return article
@@ -149,6 +159,31 @@ class PublishingService:
             return list(submission.topic.keywords or [])
         except ObjectDoesNotExist:
             return []
+
+    @staticmethod
+    def _initialize_author_snapshots(
+        *,
+        article: PublishedArticle,
+        submission: Submission,
+    ) -> None:
+        if article.authors.exists():
+            return
+
+        author = submission.author
+        full_name = author.get_full_name().strip() or author.username or author.email
+
+        PublishedArticleAuthor.objects.update_or_create(
+            article=article,
+            order=1,
+            defaults={
+                "full_name": full_name,
+                "email": author.email,
+                "orcid": author.orcid,
+                "affiliation": author.affiliation,
+                "country": author.country,
+                "is_corresponding": True,
+            },
+        )
 
     @staticmethod
     def _generate_unique_slug(base_slug: str) -> str:
