@@ -1,13 +1,34 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role, User
-from apps.journals.models import Section
+from apps.journals.models import JournalMetadataSettings, Section
 from apps.submissions.models import Submission
 
+# TODO: is this a joke?
+class JournalMetadataSettingsTests(TestCase):
+    def test_get_current_creates_and_returns_singleton_settings(self):
+        settings = JournalMetadataSettings.get_current()
 
+        self.assertEqual(settings.pk, JournalMetadataSettings.SINGLETON_PK)
+        self.assertEqual(settings.journal_title, "Untitled Journal")
+        self.assertEqual(settings.default_language, "en")
+        self.assertEqual(JournalMetadataSettings.get_current(), settings)
+
+    def test_duplicate_settings_row_is_rejected(self):
+        JournalMetadataSettings.objects.create(journal_title="First Journal")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                JournalMetadataSettings.objects.create(journal_title="Second Journal")
+
+        self.assertEqual(JournalMetadataSettings.objects.count(), 1)
+
+# TODO: there are tests that have to do with section manager that need checking out
 class SectionApiTests(APITestCase):
     def setUp(self):
         self.roles = {}

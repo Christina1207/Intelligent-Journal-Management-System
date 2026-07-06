@@ -44,3 +44,54 @@ class Section(models.Model):
 
     class Meta:
         ordering = ["name"]
+
+class JournalMetadataSettings(models.Model):
+    """
+    Deployment-level journal metadata used to initialize publication records.
+    """
+
+    SINGLETON_PK = 1
+
+    id = models.PositiveSmallIntegerField(
+        primary_key=True,
+        default=SINGLETON_PK,
+        editable=False,
+    )
+    journal_title = models.CharField(max_length=255, default="Untitled Journal")
+    publisher_name = models.CharField(max_length=255, blank=True, default="")
+    print_issn = models.CharField(
+        max_length=9,
+        blank=True,
+        default="",
+        validators=[issn_validator],
+    )
+    online_issn = models.CharField(
+        max_length=9,
+        blank=True,
+        default="",
+        validators=[issn_validator],
+    )
+    base_url = models.URLField(max_length=500, blank=True, default="")
+    default_language = models.CharField(max_length=10, default="en")
+    default_license_name = models.CharField(max_length=255, blank=True, default="")
+    default_license_url = models.URLField(max_length=500, blank=True, default="")
+    oai_repository_name = models.CharField(max_length=255, blank=True, default="")
+    oai_admin_email = models.EmailField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def get_current(cls):
+        settings, _ = cls.objects.get_or_create(pk=cls.SINGLETON_PK)
+        return settings
+
+    def save(self, *args, **kwargs):
+        self.pk = self.SINGLETON_PK
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.journal_title
+
+    class Meta:
+        verbose_name = "Journal metadata settings"
+        verbose_name_plural = "Journal metadata settings"
