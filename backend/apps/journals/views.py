@@ -45,7 +45,7 @@ class SectionManagementViewSet(viewsets.ModelViewSet):
         request=AssignSectionManagerSerializer,
         responses=SectionManagementSerializer,
     )
-    @action(detail=True, methods=["put"], url_path="manager")
+    @action(detail=True, methods=["post"], url_path="manager")
     def assign_manager(self, request, pk=None):
         section = self.get_object()
 

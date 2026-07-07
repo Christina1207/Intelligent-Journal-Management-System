@@ -7,6 +7,8 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role, User
 from apps.journals.models import JournalMetadataSettings, Section
+from apps.journals.serializers import AssignSectionManagerSerializer
+from apps.journals.views import SectionManagementViewSet
 from apps.submissions.models import Submission
 
 # TODO: is this a joke?
@@ -176,6 +178,12 @@ class SectionApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_assign_manager_action_uses_dedicated_request_serializer(self):
+        view = SectionManagementViewSet()
+        view.action = "assign_manager"
+
+        self.assertIs(view.get_serializer_class(), AssignSectionManagerSerializer)
 
     def test_non_eic_cannot_assign_section_manager(self):
         section = Section.objects.create(name="Semantic Matching")

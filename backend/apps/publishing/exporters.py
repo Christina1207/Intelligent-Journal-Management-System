@@ -79,7 +79,7 @@ def render_ris(metadata: ArticleMetadata) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_dublin_core_xml(metadata: ArticleMetadata) -> str:
+def build_dublin_core_element(metadata: ArticleMetadata) -> ET.Element:
     ET.register_namespace("oai_dc", OAI_DC_NAMESPACE)
     ET.register_namespace("dc", DC_NAMESPACE)
     ET.register_namespace("xsi", XSI_NAMESPACE)
@@ -110,6 +110,11 @@ def render_dublin_core_xml(metadata: ArticleMetadata) -> str:
     _add_dc(root, "rights", metadata.license_url)
     _add_dc(root, "source", _source(metadata))
 
+    return root
+
+
+def render_dublin_core_xml(metadata: ArticleMetadata) -> str:
+    root = build_dublin_core_element(metadata)
     return ET.tostring(root, encoding="unicode")
 
 

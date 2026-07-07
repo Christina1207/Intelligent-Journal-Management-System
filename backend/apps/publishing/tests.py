@@ -589,6 +589,7 @@ class MetadataRendererTests(TestCase):
     def test_bibtex_renderer_omits_empty_fields(self):
         metadata = replace(
             self._metadata(),
+            abstract=None,
             doi=None,
             volume=None,
             issue=None,
@@ -604,6 +605,8 @@ class MetadataRendererTests(TestCase):
         self.assertNotIn("number =", output)
         self.assertNotIn("pages =", output)
         self.assertNotIn("keywords =", output)
+        self.assertNotIn("abstract =", output)
+        self.assertNotIn("None", output)
 
     def test_ris_renderer_outputs_journal_record(self):
         output = render_ris(self._metadata())
@@ -620,6 +623,29 @@ class MetadataRendererTests(TestCase):
         self.assertIn("KW  - metadata\n", output)
         self.assertIn("KW  - journal exports\n", output)
         self.assertTrue(output.endswith("ER  -\n"))
+
+    def test_ris_renderer_omits_missing_optional_values(self):
+        metadata = replace(
+            self._metadata(),
+            abstract=None,
+            doi=None,
+            volume=None,
+            issue=None,
+            first_page=None,
+            last_page=None,
+            keywords=[],
+        )
+
+        output = render_ris(metadata)
+
+        self.assertNotIn("AB  -", output)
+        self.assertNotIn("DO  -", output)
+        self.assertNotIn("VL  -", output)
+        self.assertNotIn("IS  -", output)
+        self.assertNotIn("SP  -", output)
+        self.assertNotIn("EP  -", output)
+        self.assertNotIn("KW  -", output)
+        self.assertNotIn("None", output)
 
     def test_dublin_core_renderer_outputs_valid_namespaced_xml(self):
         output = render_dublin_core_xml(self._metadata())
@@ -769,6 +795,10 @@ class PublishingApiTests(TestCase):
         *,
         slug="exportable-article",
         status=PublishedArticle.Status.PUBLISHED,
+        title="Exportable Metadata Article",
+        abstract="A published article for citation export.",
+        language="en",
+        doi="10.5555/exportable",
     ):
         JournalMetadataSettings.objects.update_or_create(
             pk=JournalMetadataSettings.SINGLETON_PK,
@@ -783,10 +813,11 @@ class PublishingApiTests(TestCase):
         article = self._create_article(
             status=status,
             slug=slug,
-            title="Exportable Metadata Article",
-            abstract="A published article for citation export.",
+            title=title,
+            abstract=abstract,
+            language=language,
             keywords=["citation export", "metadata"],
-            doi="10.5555/exportable",
+            doi=doi,
             license_name="CC BY 4.0",
             license_url="https://creativecommons.org/licenses/by/4.0/",
             volume="7",
@@ -1213,6 +1244,40 @@ class PublishingApiTests(TestCase):
             [identifier.text for identifier in identifiers],
         )
 
+    def test_public_export_preserves_arabic_metadata_as_utf8(self):
+        title = "تحليل دلالي للمقالات العلمية"
+        abstract = "ملخص عربي لاختبار تصدير البيانات الوصفية."
+        article = self._create_export_article(
+            slug="arabic-export",
+            title=title,
+            abstract=abstract,
+            language="ar",
+        )
+
+        bibtex_response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=bibtex"
+        )
+        ris_response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=ris"
+        )
+        dc_response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/export/?format=dc"
+        )
+
+        self.assertEqual(bibtex_response.status_code, 200)
+        self.assertEqual(ris_response.status_code, 200)
+        self.assertEqual(dc_response.status_code, 200)
+        self.assertIn("charset=utf-8", bibtex_response["Content-Type"])
+        self.assertIn(title, bibtex_response.content.decode("utf-8"))
+        self.assertIn(abstract, bibtex_response.content.decode("utf-8"))
+        self.assertIn(f"TI  - {title}", ris_response.content.decode("utf-8"))
+
+        root = ET.fromstring(dc_response.content.decode("utf-8"))
+        dc_title = root.find(f"{{{DC_NAMESPACE}}}title")
+        dc_description = root.find(f"{{{DC_NAMESPACE}}}description")
+        self.assertEqual(dc_title.text, title)
+        self.assertEqual(dc_description.text, abstract)
+
     def test_public_export_accepts_supported_format_aliases(self):
         article = self._create_export_article()
 
@@ -1250,17 +1315,26 @@ class PublishingApiTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_public_export_does_not_expose_draft_article(self):
-        article = self._create_export_article(
+    def test_public_export_does_not_expose_unpublished_articles(self):
+        draft = self._create_export_article(
             slug="draft-export",
             status=PublishedArticle.Status.DRAFT,
         )
-
-        response = self.client.get(
-            f"/api/v1/public/articles/{article.slug}/export/?format=bibtex"
+        retracted = self._create_export_article(
+            slug="retracted-export",
+            status=PublishedArticle.Status.RETRACTED,
+            doi="10.5555/retracted-export",
         )
 
-        self.assertEqual(response.status_code, 404)
+        draft_response = self.client.get(
+            f"/api/v1/public/articles/{draft.slug}/export/?format=bibtex"
+        )
+        retracted_response = self.client.get(
+            f"/api/v1/public/articles/{retracted.slug}/export/?format=bibtex"
+        )
+
+        self.assertEqual(draft_response.status_code, 404)
+        self.assertEqual(retracted_response.status_code, 404)
 
     @patch("apps.publishing.services.StorageService")
     def test_public_download_for_published_article_returns_url_and_increments_count(
