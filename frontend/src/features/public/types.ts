@@ -13,6 +13,13 @@ export type PublicArticle = {
   views: number;
   downloads: number;
   license: string;
+
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  receivedAt?: string;
+  acceptedAt?: string;
+  affiliations?: string[];
 };
 
 export type PublicSection = {
