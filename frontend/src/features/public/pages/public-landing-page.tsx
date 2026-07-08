@@ -1,4 +1,5 @@
 import { BrowseSectionsSection } from "../components/browse-sections-section";
+import { CurrentIssuePreviewSection } from "../components/current-issue-preview-section";
 import { HeroSearchSection } from "../components/hero-search-section";
 import { JournalInfoSection } from "../components/journal-info-section";
 import { LatestArticlesSection } from "../components/latest-articles-section";
@@ -9,8 +10,14 @@ import {
   latestArticles,
   publicSections,
 } from "../data/public-home.mock";
+import {
+  getArticlesByIssueSlug,
+  getCurrentIssue,
+} from "../utils/public-issues";
 
 export function PublicLandingPage() {
+  const currentIssue = getCurrentIssue();
+  const currentIssueArticles = getArticlesByIssueSlug(currentIssue.slug);
   return (
     <>
       <PublicHeader />
@@ -19,6 +26,10 @@ export function PublicLandingPage() {
         <HeroSearchSection journal={journalInfo} />
         <LatestArticlesSection articles={latestArticles} />
         <BrowseSectionsSection sections={publicSections} />
+        <CurrentIssuePreviewSection
+          issue={currentIssue}
+          articles={currentIssueArticles}
+        />
         <JournalInfoSection journal={journalInfo} />
       </main>
 

@@ -16,6 +16,7 @@ export type PublicArticle = {
 
   volume?: string;
   issue?: string;
+  issueSlug?: string;
   pages?: string;
   receivedAt?: string;
   acceptedAt?: string;
@@ -29,6 +30,18 @@ export type PublicSection = {
   description: string;
   articleCount: number;
   topics: string[];
+};
+
+export type PublicIssue = {
+  id: string;
+  slug: string;
+  title: string;
+  volume: string;
+  issue: string;
+  year: string;
+  publishedAt: string;
+  description: string;
+  isCurrent: boolean;
 };
 
 export type JournalInfo = {
