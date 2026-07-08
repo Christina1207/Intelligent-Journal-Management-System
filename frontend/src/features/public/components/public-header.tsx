@@ -5,6 +5,7 @@ const navigationItems = [
   { label: "Sections", href: "/sections" },
   { label: "Archives", href: "/archives" },
   { label: "About", href: "/about" },
+  { label: "Editorial Board", href: "/editorial-board" },
   { label: "Author Guidelines", href: "/author-guidelines" },
 ];
 
