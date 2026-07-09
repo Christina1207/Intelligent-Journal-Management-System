@@ -5,35 +5,48 @@ import { JournalInfoSection } from "../components/journal-info-section";
 import { LatestArticlesSection } from "../components/latest-articles-section";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import {
-  journalInfo,
-  latestArticles,
-  publicSections,
-} from "../data/public-home.mock";
-import {
-  getArticlesByIssueSlug,
-  getCurrentIssue,
-} from "../utils/public-issues";
+import type {
+  JournalInfo,
+  PublicArticle,
+  PublicIssue,
+  PublicSection,
+} from "../types";
 
-export function PublicLandingPage() {
-  const currentIssue = getCurrentIssue();
-  const currentIssueArticles = getArticlesByIssueSlug(currentIssue.slug);
+type PublicLandingPageProps = {
+  journal: JournalInfo;
+  latestArticles: PublicArticle[];
+  sections: PublicSection[];
+  currentIssue: PublicIssue | null;
+  currentIssueArticles: PublicArticle[];
+};
+
+export function PublicLandingPage({
+  journal,
+  latestArticles,
+  sections,
+  currentIssue,
+  currentIssueArticles,
+}: PublicLandingPageProps) {
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content">
-        <HeroSearchSection journal={journalInfo} />
+        <HeroSearchSection journal={journal} />
         <LatestArticlesSection articles={latestArticles} />
-        <BrowseSectionsSection sections={publicSections} />
-        <CurrentIssuePreviewSection
-          issue={currentIssue}
-          articles={currentIssueArticles}
-        />
-        <JournalInfoSection journal={journalInfo} />
+        <BrowseSectionsSection sections={sections} />
+
+        {currentIssue ? (
+          <CurrentIssuePreviewSection
+            issue={currentIssue}
+            articles={currentIssueArticles}
+          />
+        ) : null}
+
+        <JournalInfoSection journal={journal} />
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

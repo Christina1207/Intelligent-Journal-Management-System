@@ -4,11 +4,12 @@ export type PublicArticle = {
   slug: string;
   authors: string[];
   section: string;
+  sectionSlug?: string;
   publishedAt: string;
   abstract: string;
   keywords: string[];
   doi?: string;
-  language: "English" | "Arabic" | "French";
+  language: "English" | "Arabic" | "French" | string;
   pdfUrl: string;
   views: number;
   downloads: number;
@@ -54,6 +55,14 @@ export type JournalInfo = {
   peerReviewPolicy: string;
   publicationFrequency: string;
   license: string;
+};
+
+export type PublicPageContent = {
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  updatedAt?: string;
 };
 
 export type EditorialBoardMember = {
