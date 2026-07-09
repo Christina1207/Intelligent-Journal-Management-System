@@ -2,12 +2,12 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.db import transaction
 from django.http import Http404
 from django.utils import timezone
-from django.utils.text import slugify
 
 from apps.accounts.models import Role
 from apps.core.storage import StorageService
 from apps.journals.models import JournalMetadataSettings
 from apps.submissions.models import Submission, SubmissionVersion
+from backend.apps.common.slugging import build_unique_slug
 
 from .models import PublishedArticle, PublishedArticleAuthor
 
@@ -187,14 +187,9 @@ class PublishingService:
 
     @staticmethod
     def _generate_unique_slug(base_slug: str) -> str:
-        base = slugify(base_slug) or "article"
-        max_length = PublishedArticle._meta.get_field("slug").max_length
-        slug = base[:max_length]
-        suffix = 2
-
-        while PublishedArticle.objects.filter(slug=slug).exists():
-            suffix_text = f"-{suffix}"
-            slug = f"{base[: max_length - len(suffix_text)]}{suffix_text}"
-            suffix += 1
-
-        return slug
+        return build_unique_slug(
+            PublishedArticle.objects.all(),
+            base_slug,
+            fallback="article",
+            max_length=PublishedArticle._meta.get_field("slug").max_length,
+        )
