@@ -16,13 +16,9 @@ class Section(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
 
-    # Temporarily nullable for safe migration/backfill.
-    # We will make this non-null after generating slugs for existing sections.
     slug = models.SlugField(
         max_length=280,
         unique=True,
-        null=True,
-        blank=True,
         help_text="Stable public URL slug for this section.",
     )
 
