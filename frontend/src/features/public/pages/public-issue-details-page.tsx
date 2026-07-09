@@ -3,24 +3,24 @@ import { IssueCard } from "../components/issue-card";
 import { IssueDetailHeader } from "../components/issue-detail-header";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import { journalInfo } from "../data/public-home.mock";
-import type { PublicArticle, PublicIssue } from "../types";
-import { getPreviousIssues } from "../utils/public-issues";
+import type { JournalInfo, PublicArticle, PublicIssue } from "../types";
 
 type PublicIssueDetailsPageProps = {
+  journal: JournalInfo;
   issue: PublicIssue;
   articles: PublicArticle[];
+  previousIssues: PublicIssue[];
 };
 
 export function PublicIssueDetailsPage({
+  journal,
   issue,
   articles,
+  previousIssues,
 }: PublicIssueDetailsPageProps) {
-  const previousIssues = getPreviousIssues(issue);
-
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <IssueDetailHeader issue={issue} articles={articles} />
@@ -54,7 +54,7 @@ export function PublicIssueDetailsPage({
         ) : null}
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

@@ -81,7 +81,6 @@ export type ContactMethod = {
   description: string;
   href?: string;
 };
-
 export type InfoSection = {
   id: string;
   title: string;

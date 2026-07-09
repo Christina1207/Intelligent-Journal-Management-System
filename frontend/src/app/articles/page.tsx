@@ -1,4 +1,9 @@
 import { PublicArticlesPage } from "@/features/public/pages/public-articles-page";
+import {
+  getPublicArticles,
+  getPublicJournal,
+  getPublicSections,
+} from "@/features/public/api/public-api";
 import type {
   ArticleSearchParams,
   ArticleSortOption,
@@ -26,11 +31,7 @@ const validSortOptions: ArticleSortOption[] = [
 ];
 
 function readSingleParam(value?: string | string[]) {
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-
-  return value;
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function normalizeSearchParams(
@@ -50,14 +51,38 @@ function normalizeSearchParams(
   };
 }
 
+function getYearOptionsFromCurrentYear() {
+  const currentYear = new Date().getFullYear();
+
+  return Array.from({ length: 10 }, (_, index) => String(currentYear - index));
+}
+
 export default async function ArticlesPage({
   searchParams,
 }: ArticlesPageProps) {
   const resolvedSearchParams = await searchParams;
+  const normalizedParams = normalizeSearchParams(resolvedSearchParams);
+
+  const [journal, sections, articleResponse] = await Promise.all([
+    getPublicJournal(),
+    getPublicSections(),
+    getPublicArticles(normalizedParams),
+  ]);
+
+  const pageSize = articleResponse.results.length || 1;
+  const currentPage = Number(normalizedParams.page ?? "1");
+  const totalPages = Math.max(Math.ceil(articleResponse.count / pageSize), 1);
 
   return (
     <PublicArticlesPage
-      searchParams={normalizeSearchParams(resolvedSearchParams)}
+      journal={journal}
+      articles={articleResponse.results}
+      totalResults={articleResponse.count}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      sections={sections}
+      years={getYearOptionsFromCurrentYear()}
+      searchParams={normalizedParams}
     />
   );
 }

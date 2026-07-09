@@ -3,24 +3,24 @@ import { PublicHeader } from "../components/public-header";
 import { PublicSectionCard } from "../components/public-section-card";
 import { SectionArticlesSection } from "../components/section-articles-section";
 import { SectionDetailHeader } from "../components/section-detail-header";
-import { journalInfo } from "../data/public-home.mock";
-import type { PublicArticle, PublicSection } from "../types";
-import { getRelatedSections } from "../utils/public-sections";
+import type { JournalInfo, PublicArticle, PublicSection } from "../types";
 
 type PublicSectionDetailsPageProps = {
+  journal: JournalInfo;
   section: PublicSection;
   articles: PublicArticle[];
+  relatedSections: PublicSection[];
 };
 
 export function PublicSectionDetailsPage({
+  journal,
   section,
   articles,
+  relatedSections,
 }: PublicSectionDetailsPageProps) {
-  const relatedSections = getRelatedSections(section);
-
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <SectionDetailHeader section={section} articles={articles} />
@@ -57,7 +57,7 @@ export function PublicSectionDetailsPage({
         ) : null}
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

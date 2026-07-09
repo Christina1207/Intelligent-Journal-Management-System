@@ -4,40 +4,46 @@ import { ArticleResultsHeader } from "../components/article-results-header";
 import { ArticleSearchFilters } from "../components/article-search-filters";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import {
-  allPublicArticles,
-  journalInfo,
-  publicSections,
-} from "../data/public-home.mock";
-import {
-  getArticleYears,
-  searchPublicArticles,
-  type ArticleSearchParams,
-} from "../utils/article-search";
+import type { JournalInfo, PublicArticle, PublicSection } from "../types";
+import type { ArticleSearchParams } from "../utils/article-search";
+import Link from "next/link";
 
 type PublicArticlesPageProps = {
+  journal: JournalInfo;
+  articles: PublicArticle[];
+  totalResults: number;
+  currentPage: number;
+  totalPages: number;
+  sections: PublicSection[];
+  years: string[];
   searchParams: ArticleSearchParams;
 };
 
-export function PublicArticlesPage({ searchParams }: PublicArticlesPageProps) {
-  const years = getArticleYears(allPublicArticles);
-  const result = searchPublicArticles(allPublicArticles, searchParams);
-
+export function PublicArticlesPage({
+  journal,
+  articles,
+  totalResults,
+  currentPage,
+  totalPages,
+  sections,
+  years,
+  searchParams,
+}: PublicArticlesPageProps) {
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <section className="border-b bg-white">
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
             <ArticleResultsHeader
-              totalResults={result.totalResults}
+              totalResults={totalResults}
               params={searchParams}
             />
 
             <div className="mt-8">
               <ArticleSearchFilters
-                sections={publicSections}
+                sections={sections}
                 years={years}
                 params={searchParams}
               />
@@ -51,17 +57,17 @@ export function PublicArticlesPage({ searchParams }: PublicArticlesPageProps) {
               Article results
             </h2>
 
-            {result.articles.length > 0 ? (
+            {articles.length > 0 ? (
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
-                  {result.articles.map((article) => (
+                  {articles.map((article) => (
                     <ArticleCard key={article.id} article={article} />
                   ))}
                 </div>
 
                 <ArticlePagination
-                  currentPage={result.currentPage}
-                  totalPages={result.totalPages}
+                  currentPage={currentPage}
+                  totalPages={totalPages}
                   params={searchParams}
                 />
               </>
@@ -75,19 +81,19 @@ export function PublicArticlesPage({ searchParams }: PublicArticlesPageProps) {
                   Try changing your search terms or removing one of the filters.
                 </p>
 
-                <a
+                <Link
                   href="/articles"
                   className="mt-5 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
                   Clear all filters
-                </a>
+                </Link>
               </div>
             )}
           </div>
         </section>
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

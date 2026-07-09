@@ -2,24 +2,48 @@ import { ArchiveOverviewHeader } from "../components/archive-overview-header";
 import { IssueCard } from "../components/issue-card";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import {
-  allPublicArticles,
-  journalInfo,
-  publicIssues,
-} from "../data/public-home.mock";
-import { getIssuesGroupedByYear } from "../utils/public-issues";
+import type { JournalInfo, PublicIssue } from "../types";
 
-export function PublicArchivesPage() {
-  const groupedIssues = getIssuesGroupedByYear();
+type PublicArchivesPageProps = {
+  journal: JournalInfo;
+  issues: PublicIssue[];
+  articleCount: number;
+};
+
+function groupIssuesByYear(issues: PublicIssue[]) {
+  const grouped = new Map<string, PublicIssue[]>();
+
+  issues.forEach((issue) => {
+    grouped.set(issue.year, [...(grouped.get(issue.year) ?? []), issue]);
+  });
+
+  return Array.from(grouped.entries())
+    .sort(([firstYear], [secondYear]) => Number(secondYear) - Number(firstYear))
+    .map(([year, yearIssues]) => ({
+      year,
+      issues: yearIssues.sort(
+        (first, second) =>
+          new Date(second.publishedAt).getTime() -
+          new Date(first.publishedAt).getTime(),
+      ),
+    }));
+}
+
+export function PublicArchivesPage({
+  journal,
+  issues,
+  articleCount,
+}: PublicArchivesPageProps) {
+  const groupedIssues = groupIssuesByYear(issues);
 
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <ArchiveOverviewHeader
-          issueCount={publicIssues.length}
-          articleCount={allPublicArticles.length}
+          issueCount={issues.length}
+          articleCount={articleCount}
           yearCount={groupedIssues.length}
         />
 
@@ -58,7 +82,7 @@ export function PublicArchivesPage() {
         </section>
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

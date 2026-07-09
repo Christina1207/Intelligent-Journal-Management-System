@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { PublicIssueDetailsPage } from "@/features/public/pages/public-issue-details-page";
-import { publicIssues } from "@/features/public/data/public-home.mock";
 import {
-  findPublicIssueBySlug,
-  getArticlesByIssueSlug,
-} from "@/features/public/utils/public-issues";
+  getPublicIssue,
+  getPublicIssueArticles,
+  getPublicIssues,
+  getPublicJournal,
+} from "@/features/public/api/public-api";
 
 type IssueDetailsRouteParams = {
   slug: string;
@@ -14,15 +15,9 @@ type IssueDetailsPageProps = {
   params: Promise<IssueDetailsRouteParams>;
 };
 
-export function generateStaticParams() {
-  return publicIssues.map((issue) => ({
-    slug: issue.slug,
-  }));
-}
-
 export async function generateMetadata({ params }: IssueDetailsPageProps) {
   const resolvedParams = await params;
-  const issue = findPublicIssueBySlug(resolvedParams.slug);
+  const issue = await getPublicIssue(resolvedParams.slug);
 
   if (!issue) {
     return {
@@ -40,13 +35,28 @@ export default async function IssueDetailsPage({
   params,
 }: IssueDetailsPageProps) {
   const resolvedParams = await params;
-  const issue = findPublicIssueBySlug(resolvedParams.slug);
+
+  const [journal, issue, issues] = await Promise.all([
+    getPublicJournal(),
+    getPublicIssue(resolvedParams.slug),
+    getPublicIssues(),
+  ]);
 
   if (!issue) {
     notFound();
   }
 
-  const articles = getArticlesByIssueSlug(issue.slug);
+  const articles = await getPublicIssueArticles(issue.slug);
+  const previousIssues = issues
+    .filter((candidate) => candidate.slug !== issue.slug)
+    .slice(0, 3);
 
-  return <PublicIssueDetailsPage issue={issue} articles={articles} />;
+  return (
+    <PublicIssueDetailsPage
+      journal={journal}
+      issue={issue}
+      articles={articles}
+      previousIssues={previousIssues}
+    />
+  );
 }
