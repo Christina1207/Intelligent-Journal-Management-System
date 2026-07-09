@@ -1,8 +1,11 @@
 import uuid
-from django.db.models import F
-from django.db.models import Q
-from django.http import HttpResponse
+from django.db.models import Count, F, Q
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_slug
+from django.http import HttpResponse,Http404
 from django.shortcuts import get_object_or_404
+from rest_framework.pagination import PageNumberPagination
+from apps.journals.models import Issue, JournalMetadataSettings, Section
 from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiParameter,
@@ -31,6 +34,9 @@ from .exporters import (
 from .metadata import ArticleMetadataBuilder
 from .models import PublishedArticle
 from .serializers import (
+    PublicIssueSerializer,
+    PublicJournalSerializer,
+    PublicSectionSerializer,
     PublishedArticleDownloadSerializer,
     PublishedArticleManagementReadSerializer,
     PublishedArticlePublicDetailSerializer,
@@ -39,6 +45,10 @@ from .serializers import (
 )
 from .services import PublicDownloadUnavailable, PublishingService
 
+class PublicReaderPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 50
 
 PUBLIC_ARTICLE_ORDERING_FIELDS = {
     "published_at": "published_at",
@@ -49,22 +59,47 @@ PUBLIC_ARTICLE_ORDERING_FIELDS = {
     "-view_count": "-view_count",
     "download_count": "download_count",
     "-download_count": "-download_count",
+    "views": "view_count",
+    "-views": "-view_count",
+    "downloads": "download_count",
+    "-downloads": "-download_count",
 }
 
 PUBLIC_ARTICLE_LIST_PARAMETERS = [
     OpenApiParameter(
         name="section",
-        type=OpenApiTypes.UUID,
+        type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
         required=False,
-        description="Filter published articles by section id.",
+        description="Filter published articles by section slug or section UUID.",
+    ),
+    OpenApiParameter(
+        name="issue",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="Filter published articles by issue slug.",
+    ),
+    OpenApiParameter(
+        name="year",
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="Filter published articles by publication year.",
+    ),
+    OpenApiParameter(
+        name="language",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="Filter published articles by language code.",
     ),
     OpenApiParameter(
         name="search",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
         required=False,
-        description="Search published article titles and abstracts.",
+        description="Search published article titles, abstracts, DOI, and author names.",
     ),
     OpenApiParameter(
         name="ordering",
@@ -74,8 +109,14 @@ PUBLIC_ARTICLE_LIST_PARAMETERS = [
         enum=list(PUBLIC_ARTICLE_ORDERING_FIELDS.keys()),
         description="Order published articles by a supported public field.",
     ),
+    OpenApiParameter(
+        name="page_size",
+        type=OpenApiTypes.INT,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="Number of results per page. Maximum: 50.",
+    ),
 ]
-
 ARTICLE_EXPORT_PARAMETER = OpenApiParameter(
     name="format",
     type=OpenApiTypes.STR,
@@ -250,7 +291,159 @@ class PublishArticleView(APIView):
         article = PublishingService.publish_article(article)
         return Response(PublishedArticleManagementReadSerializer(article).data)
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Journal"],
+        auth=[],
+        responses={200: PublicJournalSerializer},
+        description="Retrieve public journal metadata for the reader portal.",
+    )
+)
+class PublicJournalView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicJournalSerializer
 
+    def get_object(self):
+        return JournalMetadataSettings.get_current()
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Sections"],
+        auth=[],
+        responses={200: PublicSectionSerializer(many=True)},
+        description="List active journal sections visible to public readers.",
+    )
+)
+class PublicSectionListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicSectionSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            Section.objects.filter(is_active=True)
+            .annotate(
+                article_count=Count(
+                    "published_articles",
+                    filter=Q(
+                        published_articles__status=PublishedArticle.Status.PUBLISHED,
+                    ),
+                )
+            )
+            .order_by("name")
+        )
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Sections"],
+        auth=[],
+        responses={
+            200: PublicSectionSerializer,
+            404: OpenApiResponse(description="Section was not found."),
+        },
+        description="Retrieve one public section by slug.",
+    )
+)
+class PublicSectionDetailView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicSectionSerializer
+    lookup_field = "slug"
+    lookup_url_kwarg = "slug"
+
+    def get_queryset(self):
+        return (
+            Section.objects.filter(is_active=True)
+            .annotate(
+                article_count=Count(
+                    "published_articles",
+                    filter=Q(
+                        published_articles__status=PublishedArticle.Status.PUBLISHED,
+                    ),
+                )
+            )
+            .order_by("name")
+        )
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Issues"],
+        auth=[],
+        responses={200: PublicIssueSerializer(many=True)},
+        description="List published journal issues for the public archive.",
+    )
+)
+class PublicIssueListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicIssueSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return Issue.objects.filter(status=Issue.Status.PUBLISHED)
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Issues"],
+        auth=[],
+        responses={
+            200: PublicIssueSerializer,
+            404: OpenApiResponse(description="No current issue is available."),
+        },
+        description="Retrieve the current public issue.",
+    )
+)
+class PublicCurrentIssueView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicIssueSerializer
+
+    def get_object(self):
+        current_issue = Issue.objects.filter(
+            status=Issue.Status.PUBLISHED,
+            is_current=True,
+        ).first()
+
+        if current_issue:
+            return current_issue
+
+        latest_issue = (
+            Issue.objects.filter(status=Issue.Status.PUBLISHED)
+            .order_by(
+                F("published_at").desc(nulls_last=True),
+                "-year",
+                "volume",
+                "number",
+            )
+            .first()
+        )
+
+        if latest_issue:
+            return latest_issue
+
+        raise Http404("No current issue is available.")
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Issues"],
+        auth=[],
+        responses={
+            200: PublicIssueSerializer,
+            404: OpenApiResponse(description="Issue was not found."),
+        },
+        description="Retrieve one published issue by slug.",
+    )
+)
+class PublicIssueDetailView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicIssueSerializer
+    lookup_field = "slug"
+    lookup_url_kwarg = "slug"
+
+    def get_queryset(self):
+        return Issue.objects.filter(status=Issue.Status.PUBLISHED)
 @extend_schema_view(
     get=extend_schema(
         tags=["Public Articles"],
@@ -266,27 +459,66 @@ class PublishArticleView(APIView):
 class PublicArticleListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublishedArticlePublicListSerializer
+    pagination_class = PublicReaderPagination
 
     def get_queryset(self):
-        queryset = PublishedArticle.objects.filter(
-            status=PublishedArticle.Status.PUBLISHED,
-        ).select_related("section")
+        queryset = (
+            PublishedArticle.objects.filter(
+                status=PublishedArticle.Status.PUBLISHED,
+            )
+            .select_related(
+                "section",
+                "publication_issue",
+                "submission",
+                "source_version",
+            )
+            .prefetch_related("authors")
+        )
 
-        section_id = self.request.query_params.get("section")
-        if section_id:
+        section_value = self.request.query_params.get("section", "").strip()
+        if section_value:
             try:
-                uuid.UUID(section_id)
+                uuid.UUID(section_value)
+                queryset = queryset.filter(section_id=section_value)
             except (TypeError, ValueError):
-                raise ValidationError({"section": "Invalid section id."})
-            queryset = queryset.filter(section_id=section_id)
+                try:
+                    validate_slug(section_value)
+                except DjangoValidationError:
+                    raise ValidationError(
+                        {"section": "Invalid section filter. Use a section UUID or slug."}
+                    )
+
+                queryset = queryset.filter(section__slug=section_value)
+        issue_slug = self.request.query_params.get("issue", "").strip()
+        if issue_slug:
+            queryset = queryset.filter(publication_issue__slug=issue_slug)
+
+        year = self.request.query_params.get("year", "").strip()
+        if year:
+            try:
+                year_value = int(year)
+            except ValueError:
+                raise ValidationError({"year": "Year must be a valid integer."})
+
+            queryset = queryset.filter(
+                Q(published_at__year=year_value)
+                | Q(publication_issue__year=year_value)
+            )
+
+        language = self.request.query_params.get("language", "").strip()
+        if language:
+            queryset = queryset.filter(language__iexact=language)
 
         search = self.request.query_params.get("search", "").strip()
         if search:
             queryset = queryset.filter(
-                Q(title__icontains=search) | Q(abstract__icontains=search)
-            )
+                Q(title__icontains=search)
+                | Q(abstract__icontains=search)
+                | Q(doi__icontains=search)
+                | Q(authors__full_name__icontains=search)
+            ).distinct()
 
-        ordering = self.request.query_params.get("ordering")
+        ordering = self.request.query_params.get("ordering", "").strip()
         if ordering:
             try:
                 order_by = PUBLIC_ARTICLE_ORDERING_FIELDS[ordering]
@@ -299,10 +531,10 @@ class PublicArticleListView(generics.ListAPIView):
                         )
                     }
                 )
+
             queryset = queryset.order_by(order_by)
 
         return queryset
-
 
 @extend_schema_view(
     get=extend_schema(
@@ -332,8 +564,6 @@ class PublicArticleListView(generics.ListAPIView):
 class PublicSectionArticleListView(PublicArticleListView):
     def get_queryset(self):
         return super().get_queryset().filter(section_id=self.kwargs["section_id"])
-
-
 @extend_schema_view(
     get=extend_schema(
         tags=["Public Articles"],
@@ -354,9 +584,18 @@ class PublicArticleDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = "slug"
 
     def get_queryset(self):
-        return PublishedArticle.objects.filter(
-            status=PublishedArticle.Status.PUBLISHED,
-        ).select_related("section").prefetch_related("authors")
+        return (
+            PublishedArticle.objects.filter(
+                status=PublishedArticle.Status.PUBLISHED,
+            )
+            .select_related(
+                "section",
+                "publication_issue",
+                "submission",
+                "source_version",
+            )
+            .prefetch_related("authors")
+        )
 
     def retrieve(self, request, *args, **kwargs):
         article = self.get_object()
@@ -408,7 +647,7 @@ class PublicArticleMetadataExportView(APIView):
             PublishedArticle.objects.filter(
                 status=PublishedArticle.Status.PUBLISHED,
             )
-            .select_related("section")
+            .select_related("section","publication_issue")
             .prefetch_related("authors"),
             slug=slug,
         )

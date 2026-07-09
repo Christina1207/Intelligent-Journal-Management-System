@@ -7,7 +7,7 @@ from apps.accounts.models import Role
 from apps.core.storage import StorageService
 from apps.journals.models import JournalMetadataSettings
 from apps.submissions.models import Submission, SubmissionVersion
-from backend.apps.common.slugging import build_unique_slug
+from apps.common.slugging import build_unique_slug
 
 from .models import PublishedArticle, PublishedArticleAuthor
 

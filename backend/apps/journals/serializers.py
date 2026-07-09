@@ -7,8 +7,8 @@ from apps.accounts.models import Role, User
 class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
-        fields = ["id", "name", "description", "issn", "is_active", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "name", "slug", "description", "issn", "is_active", "created_at"]
+        read_only_fields = ["id", "slug", "created_at"]
 
 class SectionManagementSerializer(serializers.ModelSerializer):
     manager = serializers.SerializerMethodField()
@@ -18,6 +18,7 @@ class SectionManagementSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "slug",
             "description",
             "issn",
             "manager",
@@ -27,6 +28,7 @@ class SectionManagementSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "slug",
             "manager",
             "created_at",
             "last_clustered_at",

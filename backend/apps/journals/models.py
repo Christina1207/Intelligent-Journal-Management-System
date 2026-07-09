@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q
+from apps.common.slugging import build_unique_slug
 
 
 issn_validator = RegexValidator(
@@ -52,6 +53,18 @@ class Section(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = build_unique_slug(
+                type(self).objects.all(),
+                self.name,
+                fallback="section",
+                max_length=self._meta.get_field("slug").max_length,
+                exclude_pk=self.pk,
+            )
+
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["name"]

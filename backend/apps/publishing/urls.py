@@ -10,11 +10,6 @@ urlpatterns = [
         name="publishing-create-draft",
     ),
     path(
-        "publishing/articles/",
-        views.ArticleManagementListView.as_view(),
-        name="publishing-article-list",
-    ),
-    path(
         "publishing/articles/<uuid:article_id>/",
         views.ArticleManagementDetailView.as_view(),
         name="publishing-article-detail",
@@ -23,6 +18,41 @@ urlpatterns = [
         "publishing/articles/<uuid:article_id>/publish/",
         views.PublishArticleView.as_view(),
         name="publishing-article-publish",
+    ),
+    path(
+        "public/journal/",
+        views.PublicJournalView.as_view(),
+        name="public-journal",
+    ),
+    path(
+        "public/sections/",
+        views.PublicSectionListView.as_view(),
+        name="public-section-list",
+    ),
+    path(
+        "public/sections/<uuid:section_id>/articles/",
+        views.PublicSectionArticleListView.as_view(),
+        name="public-section-article-list",
+    ),
+    path(
+        "public/sections/<slug:slug>/",
+        views.PublicSectionDetailView.as_view(),
+        name="public-section-detail",
+    ),
+    path(
+        "public/issues/",
+        views.PublicIssueListView.as_view(),
+        name="public-issue-list",
+    ),
+    path(
+        "public/issues/current/",
+        views.PublicCurrentIssueView.as_view(),
+        name="public-current-issue",
+    ),
+    path(
+        "public/issues/<slug:slug>/",
+        views.PublicIssueDetailView.as_view(),
+        name="public-issue-detail",
     ),
     path(
         "public/articles/",
@@ -43,10 +73,5 @@ urlpatterns = [
         "public/articles/<slug:slug>/",
         views.PublicArticleDetailView.as_view(),
         name="public-article-detail",
-    ),
-    path(
-        "public/sections/<uuid:section_id>/articles/",
-        views.PublicSectionArticleListView.as_view(),
-        name="public-section-article-list",
     ),
 ]

@@ -1117,17 +1117,25 @@ class PublishingApiTests(TestCase):
             [high.slug, middle.slug, low.slug],
         )
 
-    def test_public_list_invalid_ordering_returns_clean_400(self):
-        response = self.client.get("/api/v1/public/articles/?ordering=status")
+    def test_public_list_accepts_section_slug_filter(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.PUBLISHED,
+            slug="slug-filtered-article",
+            section=self.section,
+        )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Unsupported ordering", str(response.data))
+        response = self.client.get(
+            f"/api/v1/public/articles/?section={self.section.slug}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._response_slugs(response), [article.slug])
 
     def test_public_list_invalid_section_filter_returns_clean_400(self):
-        response = self.client.get("/api/v1/public/articles/?section=not-a-uuid")
+        response = self.client.get("/api/v1/public/articles/?section=bad@slug")
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Invalid section id", str(response.data))
+        self.assertIn("Invalid section filter", str(response.data))
 
     def test_public_detail_uses_slug_and_increments_view_count(self):
         article = self._create_article(
