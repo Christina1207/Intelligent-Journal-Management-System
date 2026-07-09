@@ -27,6 +27,14 @@ class PublishedArticle(models.Model):
         on_delete=models.PROTECT,
         related_name="published_articles",
     )
+    publication_issue = models.ForeignKey(
+        "journals.Issue",
+        on_delete=models.PROTECT,
+        related_name="articles",
+        null=True,
+        blank=True,
+        help_text="Structured journal issue this article belongs to.",
+    )
     title = models.CharField(max_length=500)
     slug = models.SlugField(max_length=550, unique=True)
     abstract = models.TextField(blank=True)
