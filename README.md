@@ -134,6 +134,8 @@ The system supports multiple review rounds.
 
 When authors submit revised manuscripts, previous versions are preserved instead of overwritten. This allows editors and reviewers to track the evolution of a submission across the review process.
 
+Authors upload revised manuscripts with the revised PDF and an optional response to reviewers. Review deadlines for the new round are set by backend editorial policy.
+
 ### 5. Publishing Decision Management
 
 Editors can manage decisions such as:

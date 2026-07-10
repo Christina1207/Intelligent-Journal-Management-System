@@ -1,10 +1,12 @@
 import logging
+from datetime import timedelta
+
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.workflow.models import ReviewerAssignment
 from apps.core.storage import StorageService
-from config.constants import MAX_REVISION_ROUNDS
+from config.constants import MAX_REVISION_ROUNDS, REVISION_REVIEW_DEADLINE_DAYS
 from .models import Submission, SubmissionVersion
 
 logger = logging.getLogger(__name__)
@@ -70,7 +72,12 @@ class SubmissionService:
 
     @staticmethod
     @transaction.atomic
-    def create_revision(author, submission: Submission, file, review_deadline) -> SubmissionVersion:
+    def create_revision(
+        author,
+        submission: Submission,
+        file,
+        response_to_reviewers: str = "",
+    ) -> SubmissionVersion:
         """
         Upload a new revision for a submission.
         Business rules:
@@ -80,7 +87,8 @@ class SubmissionService:
         - MAX_REVISION_ROUNDS enforced
         - ACCEPTED reviewers from previous version carried forward
         - carried_from FK set on new ReviewerAssignment rows
-         - New carried-forward assignments are ACCEPTED immediately.
+        - New carried-forward assignments are ACCEPTED immediately.
+        - Review deadline is determined by backend policy.
         - Submission status transitions to UNDER_REVIEW.
         """
         submission = (
@@ -123,11 +131,7 @@ class SubmissionService:
                 f"Maximum revision rounds ({MAX_REVISION_ROUNDS}) reached. "
                 "No further revisions are allowed."
             )
-        
-        #TODO: i don't think this check belongs here , but i don't know where it belongs
-        if review_deadline <= timezone.now():
-            raise ValidationError("Review deadline must be in the future.")
-        
+
         accepted_assignments = list(
             ReviewerAssignment.objects
             .select_for_update()
@@ -156,19 +160,23 @@ class SubmissionService:
             submission=submission,
             version_number=new_version_number,
             file=object_name,
+            response_to_reviewers=response_to_reviewers or "",
         )
 
-        response_deadline = timezone.localdate()
+        response_deadline = timezone.now()
+        review_deadline = response_deadline + timedelta(
+            days=REVISION_REVIEW_DEADLINE_DAYS,
+        )
         for assignment in accepted_assignments:
-                ReviewerAssignment.objects.create(
-                    version=new_version,
-                    reviewer=assignment.reviewer,
-                    assigned_by=submission.assigned_editor or assignment.assigned_by,
-                    carried_from=assignment,
-                    status=ReviewerAssignment.Status.ACCEPTED,
-                    response_deadline=response_deadline,
-                    review_deadline=review_deadline,
-                )
+            ReviewerAssignment.objects.create(
+                version=new_version,
+                reviewer=assignment.reviewer,
+                assigned_by=submission.assigned_editor or assignment.assigned_by,
+                carried_from=assignment,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=response_deadline,
+                review_deadline=review_deadline,
+            )
         submission.status = Submission.Status.UNDER_REVIEW
         submission.save(update_fields=["status"])
 
@@ -177,6 +185,6 @@ class SubmissionService:
             "%d reviewers carried forward.",
             new_version_number,
             submission.id,
-            accepted_assignments.count(),
+            len(accepted_assignments),
         )
         return new_version

@@ -99,6 +99,10 @@ class RevisionUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
+    @extend_schema(
+        request={"multipart/form-data": RevisionUploadSerializer},
+        responses={201: SubmissionVersionSerializer},
+    )
     def post(self, request, submission_id):
         if not request.user.has_role(Role.RoleName.AUTHOR):
             from django.core.exceptions import PermissionDenied
@@ -119,7 +123,10 @@ class RevisionUploadView(APIView):
                     author=request.user,
                     submission=submission,
                     file=serializer.validated_data["file"],
-                    review_deadline=serializer.validated_data["review_deadline"],
+                    response_to_reviewers=serializer.validated_data.get(
+                        "response_to_reviewers",
+                        "",
+                    ),
                 )
                 return Response(
                     SubmissionVersionSerializer(version).data,

@@ -50,6 +50,7 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
             "submitted_at",
             "decision",
             "decision_letter",
+            "response_to_reviewers",
             "decided_at",
             "decided_by",
         ]
@@ -141,7 +142,23 @@ class RevisionUploadSerializer(serializers.Serializer):
     SubmissionCreateSerializer.
     """
     file = serializers.FileField()
-    review_deadline = serializers.DateTimeField()
+    response_to_reviewers = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+
+    def validate(self, attrs):
+        if "review_deadline" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "review_deadline": (
+                        "This field is managed by the editorial workflow "
+                        "and must not be submitted by authors."
+                    )
+                }
+            )
+        return attrs
 
     def validate_file(self, file):
         if file.content_type != "application/pdf":

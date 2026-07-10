@@ -1,11 +1,18 @@
+from datetime import timedelta
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role
 from apps.journals.models import Section
 from apps.submissions.models import Submission, SubmissionVersion
+from apps.workflow.models import ReviewerAssignment
+from config.constants import REVISION_REVIEW_DEADLINE_DAYS
 
 
 class SubmissionDetailApiTests(APITestCase):
@@ -267,3 +274,181 @@ class SubmissionDetailApiTests(APITestCase):
 
         for field in forbidden_version_fields:
             self.assertNotIn(field, response.data["latest_version"])
+
+
+class RevisionUploadApiTests(APITestCase):
+    def setUp(self):
+        self.roles = {}
+        for role_name, _ in Role.RoleName.choices:
+            role, _ = Role.objects.get_or_create(name=role_name)
+            self.roles[role_name] = role
+
+        self.author = self._create_user("revision-author", Role.RoleName.AUTHOR)
+        self.section_editor = self._create_user(
+            "revision-editor",
+            Role.RoleName.SECTION_EDITOR,
+        )
+        self.reviewer = self._create_user(
+            "revision-reviewer",
+            Role.RoleName.REVIEWER,
+        )
+        self.section = Section.objects.create(name="Artificial Intelligence")
+        self.submission = Submission.objects.create(
+            title="Revision workflow paper",
+            abstract="A detailed research abstract.",
+            language="en",
+            cover_letter="Private author cover letter.",
+            status=Submission.Status.UNDER_REVISION,
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.section_editor,
+        )
+        self.previous_version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/private/v1/manuscript.pdf",
+            decision=SubmissionVersion.Decision.MINOR_REVISION,
+            decision_letter="Please revise and respond to reviewer comments.",
+        )
+        self.previous_assignment = ReviewerAssignment.objects.create(
+            version=self.previous_version,
+            reviewer=self.reviewer,
+            assigned_by=self.section_editor,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=timezone.now() - timedelta(days=10),
+            review_deadline=timezone.now() - timedelta(days=3),
+        )
+        self.url = reverse("submission-revision-upload", args=[self.submission.id])
+
+    def _create_user(self, username, role_names):
+        if isinstance(role_names, str):
+            role_names = [role_names]
+
+        user = get_user_model().objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+            first_name=username.replace("-", " ").title(),
+            last_name="User",
+        )
+        for role_name in role_names:
+            user.roles.add(self.roles[role_name])
+
+        return user
+
+    def _pdf_upload(self, name="revision.pdf"):
+        return SimpleUploadedFile(
+            name,
+            b"%PDF-1.4\nrevised manuscript\n%%EOF",
+            content_type="application/pdf",
+        )
+
+    def _text_upload(self):
+        return SimpleUploadedFile(
+            "revision.txt",
+            b"not a pdf",
+            content_type="text/plain",
+        )
+
+    def _mock_storage_upload(self, storage_class):
+        object_name = f"submissions/{self.submission.id}/v2/revision.pdf"
+        storage_class.return_value.upload.return_value = object_name
+        return object_name
+
+    @patch("apps.submissions.services.StorageService")
+    def test_author_can_upload_revision_with_response_to_reviewers(
+        self,
+        storage_class,
+    ):
+        object_name = self._mock_storage_upload(storage_class)
+        response_text = "We revised the methods and expanded the discussion."
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {
+                "file": self._pdf_upload(),
+                "response_to_reviewers": response_text,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["response_to_reviewers"], response_text)
+
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, Submission.Status.UNDER_REVIEW)
+
+        new_version = self.submission.versions.get(version_number=2)
+        self.assertEqual(new_version.file, object_name)
+        self.assertEqual(new_version.response_to_reviewers, response_text)
+
+        carried_assignment = ReviewerAssignment.objects.get(
+            version=new_version,
+            reviewer=self.reviewer,
+        )
+        self.assertEqual(carried_assignment.status, ReviewerAssignment.Status.ACCEPTED)
+        self.assertEqual(carried_assignment.carried_from, self.previous_assignment)
+        self.assertEqual(carried_assignment.assigned_by, self.section_editor)
+        self.assertEqual(
+            carried_assignment.review_deadline - carried_assignment.response_deadline,
+            timedelta(days=REVISION_REVIEW_DEADLINE_DAYS),
+        )
+        self.assertGreater(carried_assignment.review_deadline, timezone.now())
+        storage_class.return_value.upload.assert_called_once()
+
+    @patch("apps.submissions.services.StorageService")
+    def test_author_can_upload_revision_without_response_to_reviewers(
+        self,
+        storage_class,
+    ):
+        self._mock_storage_upload(storage_class)
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {"file": self._pdf_upload()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["response_to_reviewers"], "")
+
+        new_version = self.submission.versions.get(version_number=2)
+        self.assertEqual(new_version.response_to_reviewers, "")
+
+    @patch("apps.submissions.services.StorageService")
+    def test_revision_upload_rejects_author_supplied_review_deadline(
+        self,
+        storage_class,
+    ):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {
+                "file": self._pdf_upload(),
+                "review_deadline": timezone.now().isoformat(),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("review_deadline", response.data)
+        self.assertFalse(self.submission.versions.filter(version_number=2).exists())
+        storage_class.return_value.upload.assert_not_called()
+
+    @patch("apps.submissions.services.StorageService")
+    def test_revision_upload_rejects_non_pdf_file(self, storage_class):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {"file": self._text_upload()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data)
+        self.assertFalse(self.submission.versions.filter(version_number=2).exists())
+        storage_class.return_value.upload.assert_not_called()
