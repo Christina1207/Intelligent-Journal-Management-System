@@ -8,6 +8,7 @@ from apps.core.storage import StorageService
 from apps.journals.models import JournalMetadataSettings
 from apps.submissions.models import Submission, SubmissionVersion
 from apps.common.slugging import build_unique_slug
+from apps.journals.models import Issue
 
 from .models import PublishedArticle, PublishedArticleAuthor
 
@@ -111,7 +112,18 @@ class PublishingService:
 
         article.status = PublishedArticle.Status.PUBLISHED
         article.published_at = timezone.now()
-        article.save(update_fields=["status", "published_at", "updated_at"])
+        current_issue = Issue.objects.filter(
+            is_current=True,
+            status=Issue.Status.DRAFT,  # or whatever you define as "open"
+            ).first()
+        if current_issue is None:
+            raise ValidationError("No current open issue is configured.")
+
+        if article.publication_issue_id is None:
+            article.publication_issue = current_issue
+            article.volume = current_issue.volume
+            article.issue = current_issue.number
+        article.save(update_fields=["status", "published_at","publication_issue","volume","issue","updated_at"])
 
         return article
 

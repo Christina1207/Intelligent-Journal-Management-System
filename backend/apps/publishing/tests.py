@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role
-from apps.journals.models import JournalMetadataSettings, Section
+from apps.journals.models import Issue, JournalMetadataSettings, Section
 from apps.submissions.models import Submission, SubmissionTopic, SubmissionVersion
 
 from .models import PublishedArticle, PublishedArticleAuthor
@@ -29,6 +29,22 @@ from .metadata import (
     ArticleMetadataBuilder,
 )
 from .services import PublishingService
+
+
+def create_current_open_issue(
+    *,
+    title="Current Issue",
+    volume="1",
+    number="1",
+):
+    return Issue.objects.create(
+        title=title,
+        volume=volume,
+        number=number,
+        year=timezone.now().year,
+        status=Issue.Status.DRAFT,
+        is_current=True,
+    )
 
 
 class PublishingServiceTests(TestCase):
@@ -359,11 +375,16 @@ class PublishingServiceTests(TestCase):
             editor=self.editor,
             submission=submission,
         )
+        issue = create_current_open_issue()
 
         article = PublishingService.publish_article(article)
 
+        article.refresh_from_db()
         self.assertEqual(article.status, PublishedArticle.Status.PUBLISHED)
         self.assertIsNotNone(article.published_at)
+        self.assertEqual(article.publication_issue, issue)
+        self.assertEqual(article.volume, issue.volume)
+        self.assertEqual(article.issue, issue.number)
 
 
 class ArticleMetadataBuilderTests(TestCase):
@@ -1447,12 +1468,17 @@ class PublishingApiTests(TestCase):
             editor=self.user,
             submission=self.submission,
         )
+        issue = create_current_open_issue()
 
         response = self.client.post(f"/api/v1/publishing/articles/{article.id}/publish/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], PublishedArticle.Status.PUBLISHED)
         self.assertIsNotNone(response.data["published_at"])
+        article.refresh_from_db()
+        self.assertEqual(article.publication_issue, issue)
+        self.assertEqual(article.volume, issue.volume)
+        self.assertEqual(article.issue, issue.number)
 
     def test_patch_cannot_change_article_status_directly(self):
         self.client.force_authenticate(self.user)
