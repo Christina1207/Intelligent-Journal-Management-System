@@ -18,7 +18,7 @@ class ReviewerProfileAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ["username", "email", "first_name", "last_name", "status", "is_staff"]
+    list_display = ["username", "email", "first_name", "last_name", "status", "is_staff","orcid"]
     list_filter = ["status", "is_staff", "roles"]
     search_fields = ["username", "email", "first_name", "last_name", "orcid"]
     ordering = ["username"]
