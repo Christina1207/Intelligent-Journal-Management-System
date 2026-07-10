@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Submission, SubmissionTopic, SubmissionVersion
+from apps.journals.models import Section
 from apps.journals.serializers import SectionSerializer
 
 
@@ -61,6 +62,27 @@ class SubmissionTopicSerializer(serializers.ModelSerializer):
         fields = ["label", "keywords"]
         read_only_fields = fields
 
+
+class SubmissionDetailSectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Section
+        fields = ["id", "name", "slug"]
+        read_only_fields = fields
+
+
+class SubmissionLatestVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubmissionVersion
+        fields = [
+            "id",
+            "version_number",
+            "decision",
+            "decision_letter",
+            "submitted_at",
+        ]
+        read_only_fields = fields
+
+
 class SubmissionListSerializer(serializers.ModelSerializer):
     section = SectionSerializer(read_only=True)
     topic = SubmissionTopicSerializer(read_only=True)
@@ -78,6 +100,40 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "submitted_at",
         ]
         read_only_fields = fields
+
+
+class SubmissionDetailSerializer(serializers.ModelSerializer):
+    section = SubmissionDetailSectionSerializer(read_only=True)
+    topic = SubmissionTopicSerializer(read_only=True)
+    latest_version = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "title",
+            "abstract",
+            "language",
+            "status",
+            "section",
+            "topic",
+            "submitted_at",
+            "latest_version",
+        ]
+        read_only_fields = fields
+
+    def get_latest_version(self, obj):
+        versions = getattr(obj, "prefetched_versions", None)
+        if versions is not None:
+            latest_version = versions[0] if versions else None
+        else:
+            latest_version = obj.versions.order_by("-version_number").first()
+
+        if latest_version is None:
+            return None
+
+        return SubmissionLatestVersionSerializer(latest_version).data
+
 
 class RevisionUploadSerializer(serializers.Serializer):
     """

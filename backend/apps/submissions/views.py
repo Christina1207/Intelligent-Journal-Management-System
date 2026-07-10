@@ -1,4 +1,5 @@
 import logging
+from django.db.models import Prefetch
 from rest_framework import status, generics
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -8,8 +9,10 @@ from drf_spectacular.utils import extend_schema
 
 from apps.accounts.models import Role
 from .models import Submission, SubmissionVersion
+from .permissions import filter_submissions_for_user
 from .serializers import (
     SubmissionCreateSerializer,
+    SubmissionDetailSerializer,
     SubmissionListSerializer,
     SubmissionVersionSerializer,
     RevisionUploadSerializer,
@@ -56,6 +59,26 @@ class MySubmissionsView(generics.ListAPIView):
         return Submission.objects.filter(
             author=self.request.user
         ).select_related("section")
+
+
+class SubmissionDetailView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SubmissionDetailSerializer
+    lookup_url_kwarg = "submission_id"
+
+    def get_queryset(self):
+        queryset = (
+            Submission.objects.select_related("section", "topic")
+            .prefetch_related(
+                Prefetch(
+                    "versions",
+                    queryset=SubmissionVersion.objects.order_by("-version_number"),
+                    to_attr="prefetched_versions",
+                )
+            )
+        )
+
+        return filter_submissions_for_user(queryset, self.request.user)
 
 
 class SubmissionVersionListView(generics.ListAPIView):
