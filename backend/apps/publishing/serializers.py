@@ -368,6 +368,18 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Keywords must be provided as a list.")
 
         return value
+    
+    def update(self, instance, validated_data):
+        publication_issue_was_provided = "publication_issue" in validated_data
+
+        article = super().update(instance, validated_data)
+
+        if publication_issue_was_provided and article.publication_issue_id:
+            article.volume = article.publication_issue.volume
+            article.issue = article.publication_issue.number
+            article.save(update_fields=["volume", "issue", "updated_at"])
+
+        return article
 
 
 class PublishedArticleDownloadSerializer(serializers.Serializer):

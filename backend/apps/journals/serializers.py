@@ -8,7 +8,7 @@ class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
         fields = ["id", "name", "slug", "description", "issn", "is_active", "created_at"]
-        read_only_fields = ["id", "slug", "created_at"]
+        read_only_fields = ["id","slug", "created_at"]
 
 class SectionManagementSerializer(serializers.ModelSerializer):
     manager = serializers.SerializerMethodField()

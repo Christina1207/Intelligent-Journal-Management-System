@@ -114,6 +114,24 @@ class Issue(models.Model):
         label_parts.append(str(self.year))
 
         return f"{self.title} ({', '.join(label_parts)})"
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            slug_source = self.title or f"vol-{self.volume}-issue-{self.number}-{self.year}"
+            self.slug = build_unique_slug(
+                type(self).objects.all(),
+                slug_source,
+                fallback="issue",
+                max_length=self._meta.get_field("slug").max_length,
+                exclude_pk=self.pk,
+            )
+
+        if self.is_current:
+            type(self).objects.exclude(pk=self.pk).filter(is_current=True).update(
+                is_current=False,
+            )
+
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = [
