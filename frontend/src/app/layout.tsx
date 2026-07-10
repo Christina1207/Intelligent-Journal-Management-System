@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { QueryProvider } from "@/providers/query-provider";
+import { ClientProviders } from "@/providers/client-providers";
 
 import "./globals.css";
 
@@ -20,7 +20,8 @@ export const metadata: Metadata = {
     default: "IJMS",
     template: "%s | IJMS",
   },
-  description: "Frontend foundation for the Intelligent Journal Management System.",
+  description:
+    "Frontend foundation for the Intelligent Journal Management System.",
 };
 
 export default function RootLayout({
@@ -34,7 +35,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <QueryProvider>{children}</QueryProvider>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );

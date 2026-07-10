@@ -58,7 +58,7 @@ export function PublicHeader({ journal }: PublicHeaderProps) {
           </Link>
 
           <Link
-            href="/register"
+            href="/register?next=/author/submissions/new"
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
           >
             Submit Manuscript

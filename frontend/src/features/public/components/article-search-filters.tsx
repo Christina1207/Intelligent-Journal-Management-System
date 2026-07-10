@@ -131,12 +131,12 @@ export function ArticleSearchFilters({
           Apply filters
         </button>
 
-        <a
+        <link
           href="/articles"
           className="rounded-lg border px-5 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           Clear filters
-        </a>
+        </link>
       </div>
     </form>
   );
