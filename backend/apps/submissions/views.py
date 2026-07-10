@@ -11,13 +11,14 @@ from apps.accounts.models import Role
 from .models import Submission, SubmissionVersion
 from .permissions import filter_submissions_for_user
 from .serializers import (
+    AuthorDashboardSerializer,
     SubmissionCreateSerializer,
     SubmissionDetailSerializer,
     SubmissionListSerializer,
     SubmissionVersionSerializer,
     RevisionUploadSerializer,
 )
-from .services import SubmissionService
+from .services import AuthorDashboardService, SubmissionService
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,21 @@ class MySubmissionsView(generics.ListAPIView):
         return Submission.objects.filter(
             author=self.request.user
         ).select_related("section")
+
+
+class AuthorDashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: AuthorDashboardSerializer},
+    )
+    def get(self, request):
+        if not request.user.has_role(Role.RoleName.AUTHOR):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied("Only authors can view the author dashboard.")
+
+        dashboard = AuthorDashboardService.get_dashboard(request.user)
+        return Response(AuthorDashboardSerializer(dashboard).data)
 
 
 class SubmissionDetailView(generics.RetrieveAPIView):

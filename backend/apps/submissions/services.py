@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Count, Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.workflow.models import ReviewerAssignment
@@ -10,6 +11,62 @@ from config.constants import MAX_REVISION_ROUNDS, REVISION_REVIEW_DEADLINE_DAYS
 from .models import Submission, SubmissionVersion
 
 logger = logging.getLogger(__name__)
+
+
+class AuthorDashboardService:
+    ACTIVE_STATUSES = (
+        Submission.Status.SUBMITTED,
+        Submission.Status.ASSIGNED,
+        Submission.Status.UNDER_REVIEW,
+        Submission.Status.REVIEWED,
+        Submission.Status.REVISED,
+    )
+    ACTION_REQUIRED_STATUSES = (
+        Submission.Status.UNDER_REVISION,
+    )
+    RECENT_SUBMISSIONS_LIMIT = 5
+
+    @classmethod
+    def get_dashboard(cls, author):
+        submissions = Submission.objects.filter(author=author)
+
+        summary = submissions.aggregate(
+            total=Count("id"),
+            active=Count(
+                "id",
+                filter=Q(status__in=cls.ACTIVE_STATUSES),
+            ),
+            needs_revision=Count(
+                "id",
+                filter=Q(status=Submission.Status.UNDER_REVISION),
+            ),
+            accepted=Count(
+                "id",
+                filter=Q(status=Submission.Status.ACCEPTED),
+            ),
+            rejected=Count(
+                "id",
+                filter=Q(status=Submission.Status.REJECTED),
+            ),
+        )
+
+        action_required = (
+            submissions
+            .filter(status__in=cls.ACTION_REQUIRED_STATUSES)
+            .select_related("section")
+            .order_by("-submitted_at")
+        )
+        recent_submissions = (
+            submissions
+            .select_related("section")
+            .order_by("-submitted_at")[:cls.RECENT_SUBMISSIONS_LIMIT]
+        )
+
+        return {
+            "summary": summary,
+            "action_required": action_required,
+            "recent_submissions": recent_submissions,
+        }
 
 
 class SubmissionService:

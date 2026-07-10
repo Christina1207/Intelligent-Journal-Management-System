@@ -276,6 +276,209 @@ class SubmissionDetailApiTests(APITestCase):
             self.assertNotIn(field, response.data["latest_version"])
 
 
+class AuthorDashboardApiTests(APITestCase):
+    def setUp(self):
+        self.roles = {}
+        for role_name, _ in Role.RoleName.choices:
+            role, _ = Role.objects.get_or_create(name=role_name)
+            self.roles[role_name] = role
+
+        self.author = self._create_user("dashboard-author", Role.RoleName.AUTHOR)
+        self.other_author = self._create_user(
+            "dashboard-other-author",
+            Role.RoleName.AUTHOR,
+        )
+        self.reviewer = self._create_user(
+            "dashboard-reviewer",
+            Role.RoleName.REVIEWER,
+        )
+
+        self.section = Section.objects.create(name="Computer Science")
+        self.other_section = Section.objects.create(name="Physics")
+        self.url = reverse("submission-author-dashboard")
+
+    def _create_user(self, username, role_names):
+        if isinstance(role_names, str):
+            role_names = [role_names]
+
+        user = get_user_model().objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+            first_name=username.replace("-", " ").title(),
+            last_name="User",
+        )
+        for role_name in role_names:
+            user.roles.add(self.roles[role_name])
+
+        return user
+
+    def _create_submission(
+        self,
+        *,
+        title,
+        author,
+        section,
+        submission_status,
+        submitted_at,
+    ):
+        submission = Submission.objects.create(
+            title=title,
+            abstract="A detailed research abstract.",
+            language="en",
+            cover_letter="Private author cover letter.",
+            status=submission_status,
+            author=author,
+            section=section,
+        )
+        Submission.objects.filter(pk=submission.pk).update(
+            submitted_at=submitted_at,
+        )
+        submission.refresh_from_db()
+        return submission
+
+    def _seed_dashboard_submissions(self):
+        base_time = timezone.now() - timedelta(days=10)
+        submissions = []
+        statuses = [
+            ("Submitted paper", Submission.Status.SUBMITTED),
+            ("Assigned paper", Submission.Status.ASSIGNED),
+            ("Under review paper", Submission.Status.UNDER_REVIEW),
+            ("Reviewed paper", Submission.Status.REVIEWED),
+            ("Revised paper", Submission.Status.REVISED),
+            ("Revision paper", Submission.Status.UNDER_REVISION),
+            ("Accepted paper", Submission.Status.ACCEPTED),
+            ("Rejected paper", Submission.Status.REJECTED),
+            ("Suspended paper", Submission.Status.SUSPENDED),
+        ]
+
+        for index, (title, submission_status) in enumerate(statuses):
+            submissions.append(
+                self._create_submission(
+                    title=title,
+                    author=self.author,
+                    section=self.section,
+                    submission_status=submission_status,
+                    submitted_at=base_time + timedelta(days=index),
+                )
+            )
+
+        self._create_submission(
+            title="Other author revision",
+            author=self.other_author,
+            section=self.other_section,
+            submission_status=Submission.Status.UNDER_REVISION,
+            submitted_at=base_time + timedelta(days=20),
+        )
+
+        return submissions
+
+    def test_author_dashboard_requires_authentication(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_non_author_cannot_access_author_dashboard(self):
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_author_dashboard_returns_summary_and_submission_lists(self):
+        self._seed_dashboard_submissions()
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["summary"],
+            {
+                "total": 9,
+                "active": 5,
+                "needs_revision": 1,
+                "accepted": 1,
+                "rejected": 1,
+            },
+        )
+
+        self.assertEqual(len(response.data["action_required"]), 1)
+        action_item = response.data["action_required"][0]
+        self.assertEqual(action_item["title"], "Revision paper")
+        self.assertEqual(action_item["status"], Submission.Status.UNDER_REVISION)
+        self.assertEqual(action_item["section"], "Computer Science")
+        self.assertEqual(action_item["action"], "UPLOAD_REVISION")
+
+        recent_titles = [
+            submission["title"]
+            for submission in response.data["recent_submissions"]
+        ]
+        self.assertEqual(
+            recent_titles,
+            [
+                "Suspended paper",
+                "Rejected paper",
+                "Accepted paper",
+                "Revision paper",
+                "Revised paper",
+            ],
+        )
+
+    def test_author_dashboard_response_does_not_expose_private_fields(self):
+        self._seed_dashboard_submissions()
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            set(response.data.keys()),
+            {"summary", "action_required", "recent_submissions"},
+        )
+        self.assertEqual(
+            set(response.data["summary"].keys()),
+            {"total", "active", "needs_revision", "accepted", "rejected"},
+        )
+
+        forbidden_fields = {
+            "abstract",
+            "language",
+            "cover_letter",
+            "author",
+            "assigned_editor",
+            "abstract_embedding",
+            "topic",
+            "versions",
+            "reviewer",
+            "reviewers",
+        }
+
+        for collection_name in ["action_required", "recent_submissions"]:
+            for submission in response.data[collection_name]:
+                for field in forbidden_fields:
+                    self.assertNotIn(field, submission)
+
+    def test_author_without_submissions_receives_empty_dashboard(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["summary"],
+            {
+                "total": 0,
+                "active": 0,
+                "needs_revision": 0,
+                "accepted": 0,
+                "rejected": 0,
+            },
+        )
+        self.assertEqual(response.data["action_required"], [])
+        self.assertEqual(response.data["recent_submissions"], [])
+
+
 class RevisionUploadApiTests(APITestCase):
     def setUp(self):
         self.roles = {}

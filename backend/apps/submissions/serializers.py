@@ -103,6 +103,48 @@ class SubmissionListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class AuthorDashboardSummarySerializer(serializers.Serializer):
+    total = serializers.IntegerField(read_only=True)
+    active = serializers.IntegerField(read_only=True)
+    needs_revision = serializers.IntegerField(read_only=True)
+    accepted = serializers.IntegerField(read_only=True)
+    rejected = serializers.IntegerField(read_only=True)
+
+
+class AuthorDashboardSubmissionSerializer(serializers.ModelSerializer):
+    section = serializers.CharField(source="section.name", read_only=True)
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "title",
+            "status",
+            "section",
+            "submitted_at",
+        ]
+        read_only_fields = fields
+
+
+class AuthorDashboardActionSerializer(AuthorDashboardSubmissionSerializer):
+    action = serializers.SerializerMethodField()
+
+    class Meta(AuthorDashboardSubmissionSerializer.Meta):
+        fields = AuthorDashboardSubmissionSerializer.Meta.fields + [
+            "action",
+        ]
+        read_only_fields = fields
+
+    def get_action(self, obj):
+        return "UPLOAD_REVISION"
+
+
+class AuthorDashboardSerializer(serializers.Serializer):
+    summary = AuthorDashboardSummarySerializer(read_only=True)
+    action_required = AuthorDashboardActionSerializer(many=True, read_only=True)
+    recent_submissions = AuthorDashboardSubmissionSerializer(many=True, read_only=True)
+
+
 class SubmissionDetailSerializer(serializers.ModelSerializer):
     section = SubmissionDetailSectionSerializer(read_only=True)
     topic = SubmissionTopicSerializer(read_only=True)
