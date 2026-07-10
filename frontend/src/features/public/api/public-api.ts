@@ -211,13 +211,21 @@ export async function getPublicIssues() {
 }
 
 export async function getCurrentPublicIssue() {
-  const dto = await publicFetch<PublicIssueApiDto>(
-    "/public/issues/current/",
-    {},
-    { revalidate: 300 },
-  );
+  try {
+    const dto = await publicFetch<PublicIssueApiDto>(
+      "/public/issues/current/",
+      {},
+      { revalidate: 300 },
+    );
 
-  return mapIssue(dto);
+    return mapIssue(dto);
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 export async function getPublicIssue(slug: string) {
