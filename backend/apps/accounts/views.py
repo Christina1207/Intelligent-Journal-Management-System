@@ -6,7 +6,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Role
 from .tasks import generate_reviewer_expertise_embedding
-from .serializers import RegisterSerializer, UserProfileSerializer, ReviewerProfileSerializer
+from .serializers import (
+    CurrentUserProfileUpdateSerializer,
+    RegisterSerializer,
+    ReviewerProfileSerializer,
+    UserProfileSerializer,
+)
 
 
 def get_tokens_for_user(user):
@@ -34,11 +39,22 @@ def register_view(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["GET"])
+@api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def me_view(request):
-    serializer = UserProfileSerializer(request.user)
-    return Response(serializer.data)
+    if request.method == "GET":
+        serializer = UserProfileSerializer(request.user)
+        return Response(serializer.data)
+
+    serializer = CurrentUserProfileUpdateSerializer(
+        request.user,
+        data=request.data,
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    user = serializer.save()
+
+    return Response(UserProfileSerializer(user).data)
 
 
 @api_view(["PATCH"])

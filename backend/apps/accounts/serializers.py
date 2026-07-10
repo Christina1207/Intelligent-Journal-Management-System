@@ -1,6 +1,17 @@
-from rest_framework import serializers
+import re
+
 from django.contrib.auth.password_validation import validate_password
+from rest_framework import serializers
+
 from .models import ReviewerProfile, User, Role
+
+CURRENT_USER_PROFILE_UPDATE_FIELDS = (
+    "first_name",
+    "last_name",
+    "orcid",
+    "affiliation",
+    "country",
+)
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -97,4 +108,45 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "roles",
             "reviewer_profile",
         ]
-        read_only_fields = ["id", "status", "roles"]
+        read_only_fields = [
+            "id",
+            "username",
+            "email",
+            "status",
+            "roles",
+            "reviewer_profile",
+        ]
+
+
+class CurrentUserProfileUpdateSerializer(serializers.ModelSerializer):
+    allowed_fields = set(CURRENT_USER_PROFILE_UPDATE_FIELDS)
+
+    class Meta:
+        model = User
+        fields = CURRENT_USER_PROFILE_UPDATE_FIELDS
+
+    def to_internal_value(self, data):
+        if not hasattr(data, "keys"):
+            raise serializers.ValidationError("Expected an object of profile fields.")
+
+        unsupported_fields = set(data.keys()) - self.allowed_fields
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field cannot be updated here."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+
+        return super().to_internal_value(data)
+
+    def validate_orcid(self, value):
+        normalized_value = value.upper()
+        if normalized_value and not re.fullmatch(
+            r"\d{4}-\d{4}-\d{4}-\d{3}[\dX]",
+            normalized_value,
+        ):
+            raise serializers.ValidationError(
+                "ORCID must use the format 0000-0000-0000-0000."
+            )
+        return normalized_value

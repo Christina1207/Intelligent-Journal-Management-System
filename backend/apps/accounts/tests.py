@@ -1,0 +1,114 @@
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.accounts.models import Role, User
+
+
+class CurrentUserProfileApiTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("auth-me")
+        self.user = get_user_model().objects.create_user(
+            username="christina",
+            email="christina@example.com",
+            password="testpass123",
+            first_name="Old",
+            last_name="Name",
+            orcid="",
+            affiliation="Old University",
+            country="Lebanon",
+        )
+
+    def authenticate(self):
+        self.client.force_authenticate(self.user)
+
+    def test_current_user_patch_requires_authentication(self):
+        response = self.client.patch(
+            self.url,
+            {"first_name": "Christina"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_current_user_can_update_allowed_profile_fields(self):
+        self.authenticate()
+        payload = {
+            "first_name": "Christina",
+            "last_name": "Khiami",
+            "orcid": "0000-0000-0000-0000",
+            "affiliation": "University Name",
+            "country": "Syria",
+        }
+
+        response = self.client.patch(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, payload["first_name"])
+        self.assertEqual(self.user.last_name, payload["last_name"])
+        self.assertEqual(self.user.orcid, payload["orcid"])
+        self.assertEqual(self.user.affiliation, payload["affiliation"])
+        self.assertEqual(self.user.country, payload["country"])
+        self.assertEqual(response.data["first_name"], payload["first_name"])
+        self.assertEqual(response.data["email"], "christina@example.com")
+        self.assertIn("roles", response.data)
+
+    def test_current_user_patch_supports_partial_updates(self):
+        self.authenticate()
+
+        response = self.client.patch(
+            self.url,
+            {"affiliation": "Updated University"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Old")
+        self.assertEqual(self.user.last_name, "Name")
+        self.assertEqual(self.user.affiliation, "Updated University")
+
+    def test_current_user_patch_rejects_invalid_orcid(self):
+        self.authenticate()
+
+        response = self.client.patch(
+            self.url,
+            {"orcid": "not-an-orcid"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.orcid, "")
+
+    def test_current_user_patch_rejects_sensitive_fields(self):
+        reviewer_role, _ = Role.objects.get_or_create(name=Role.RoleName.REVIEWER)
+        original_password_hash = self.user.password
+        disallowed_payloads = {
+            "roles": [reviewer_role.id],
+            "status": User.Status.INACTIVE,
+            "is_staff": True,
+            "is_superuser": True,
+            "password": "newpass123",
+            "email": "changed@example.com",
+            "username": "changed-username",
+        }
+
+        for field, value in disallowed_payloads.items():
+            with self.subTest(field=field):
+                self.authenticate()
+
+                response = self.client.patch(self.url, {field: value}, format="json")
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn(field, response.data)
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.username, "christina")
+                self.assertEqual(self.user.email, "christina@example.com")
+                self.assertEqual(self.user.status, User.Status.ACTIVE)
+                self.assertFalse(self.user.is_staff)
+                self.assertFalse(self.user.is_superuser)
+                self.assertEqual(self.user.password, original_password_hash)
+                self.assertFalse(self.user.roles.filter(id=reviewer_role.id).exists())
