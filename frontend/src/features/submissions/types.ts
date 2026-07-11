@@ -95,3 +95,13 @@ export type SubmissionVersion = {
   decided_at: string | null;
   decided_by: string | null;
 };
+export type CreateSubmissionPayload = {
+  title: string;
+  abstract: string;
+  language: string;
+  cover_letter?: string;
+  section: string;
+  file: File;
+};
+
+export type CreateSubmissionResponse = AuthorSubmissionListItem;
