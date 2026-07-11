@@ -105,3 +105,10 @@ export type CreateSubmissionPayload = {
 };
 
 export type CreateSubmissionResponse = AuthorSubmissionListItem;
+
+export type UploadRevisedManuscriptPayload = {
+  file: File;
+  response_to_reviewers?: string;
+};
+
+export type UploadRevisedManuscriptResponse = SubmissionVersion;

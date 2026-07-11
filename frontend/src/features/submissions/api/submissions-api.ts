@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api/client";
+import type { PaginatedApiResponse } from "@/types/api";
 import type {
   AuthorDashboardResponse,
   AuthorSubmissionsResponse,
@@ -6,6 +7,8 @@ import type {
   CreateSubmissionResponse,
   SubmissionDetail,
   SubmissionVersion,
+  UploadRevisedManuscriptPayload,
+  UploadRevisedManuscriptResponse,
 } from "@/features/submissions/types";
 
 export function getAuthorDashboard() {
@@ -25,7 +28,7 @@ export function getSubmissionDetail(submissionId: string) {
 }
 
 export function getSubmissionVersions(submissionId: string) {
-  return apiClient.get<SubmissionVersion[]>(
+  return apiClient.get<PaginatedApiResponse<SubmissionVersion>>(
     `/submissions/${submissionId}/versions/`,
   );
 }
@@ -44,4 +47,25 @@ export function createSubmission(payload: CreateSubmissionPayload) {
   }
 
   return apiClient.post<CreateSubmissionResponse>("/submissions/", formData);
+}
+
+export function uploadRevisedManuscript(
+  submissionId: string,
+  payload: UploadRevisedManuscriptPayload,
+) {
+  const formData = new FormData();
+
+  formData.append("file", payload.file);
+
+  if (payload.response_to_reviewers?.trim()) {
+    formData.append(
+      "response_to_reviewers",
+      payload.response_to_reviewers.trim(),
+    );
+  }
+
+  return apiClient.post<UploadRevisedManuscriptResponse>(
+    `/submissions/${submissionId}/versions/upload/`,
+    formData,
+  );
 }
