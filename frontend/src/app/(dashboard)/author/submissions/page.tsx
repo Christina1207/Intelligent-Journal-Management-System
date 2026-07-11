@@ -1,5 +1,9 @@
-import { AuthorSubmissionsPage } from "@/features/submissions/pages/author-submissions-page"
+import { AuthorSubmissionsPage } from "@/features/submissions/components/author-submissions-page";
 
-export default function Page() {
-  return <AuthorSubmissionsPage />
+export const metadata = {
+  title: "My Submissions",
+};
+
+export default function MySubmissionsRoute() {
+  return <AuthorSubmissionsPage />;
 }

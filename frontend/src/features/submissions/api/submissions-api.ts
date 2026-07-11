@@ -12,8 +12,10 @@ export function getAuthorDashboard() {
   );
 }
 
-export function getMySubmissions() {
-  return apiClient.get<AuthorSubmissionsResponse>("/submissions/my/");
+export function getMySubmissions(page: number) {
+  return apiClient.get<AuthorSubmissionsResponse>(
+    `/submissions/my/?page=${page}`,
+  );
 }
 
 export function getSubmissionDetail(submissionId: string) {
