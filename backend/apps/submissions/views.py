@@ -1,5 +1,6 @@
 import logging
 from django.db.models import Prefetch
+from django.shortcuts import get_object_or_404
 from rest_framework import status, generics
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -103,12 +104,22 @@ class SubmissionVersionListView(generics.ListAPIView):
 
     def get_queryset(self):
         submission_id = self.kwargs["submission_id"]
-        # Authors see only their own submission versions
-        # Editors and reviewers access controlled at assignment level
-        # TODO Sprint 4: tighten access control with permission engine
-        return SubmissionVersion.objects.filter(
-            submission__id=submission_id
-        ).select_related("decided_by")
+
+        accessible_submissions = filter_submissions_for_user(
+            Submission.objects.all(),
+            self.request.user,
+        )
+
+        submission = get_object_or_404(
+            accessible_submissions,
+            id=submission_id,
+        )
+
+        return (
+            SubmissionVersion.objects.filter(submission=submission)
+            .select_related("decided_by")
+            .order_by("-version_number")
+        )
 
 
 class RevisionUploadView(APIView):

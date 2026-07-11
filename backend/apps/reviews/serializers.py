@@ -52,8 +52,8 @@ class ReviewerAssignmentCreateSerializer(serializers.Serializer):
     submission is taken from the URL — not from request body.
     """
     reviewer_id       = serializers.UUIDField()
-    response_deadline = serializers.DateField()
-    review_deadline   = serializers.DateField()
+    response_deadline = serializers.DateTimeField()
+    review_deadline = serializers.DateTimeField()
 
     def validate(self, attrs):
         if attrs['response_deadline'] >= attrs['review_deadline']:

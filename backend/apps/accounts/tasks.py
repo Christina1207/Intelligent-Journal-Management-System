@@ -95,10 +95,10 @@ def expire_pending_reviewer_assignments(self):
     from django.utils import timezone
     from apps.workflow.models import ReviewerAssignment
 
-    today = timezone.now().date()
+    now = timezone.now()
     stale_assignments = ReviewerAssignment.objects.filter(
         status=ReviewerAssignment.Status.PENDING,
-        response_deadline__lt=today,
+        response_deadline__lt=now,
     )
 
     count = 0

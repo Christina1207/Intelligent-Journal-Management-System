@@ -1,4 +1,4 @@
-from time import timezone
+from django.utils import timezone
 import uuid
 from django.db import models
 from django.conf import settings
@@ -103,10 +103,10 @@ class ReviewerAssignment(models.Model):
     def is_overdue(self):
         return (
             self.status == self.Status.ACCEPTED
-            and self.review_deadline < timezone.localdate()
+            and self.review_deadline < timezone.now()
             and not hasattr(self, "review")
         )
-
+    
     class Meta:
         constraints = [
             models.UniqueConstraint(

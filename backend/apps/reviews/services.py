@@ -129,14 +129,13 @@ class ReviewService:
                 status=ReviewerAssignment.Status.ACCEPTED,
             ).count()
 
-        if accepted_count >= REQUIRED_REVIEWS_COUNT:
-            ReviewerAssignment.objects.filter(
-                version=assignment.version,
-                status=ReviewerAssignment.Status.PENDING,
-            ).exclude(pk=assignment.pk).update(
-                status=ReviewerAssignment.Status.EXPIRED
-            )
-
+            if accepted_count >= REQUIRED_REVIEWS_COUNT:
+                ReviewerAssignment.objects.filter(
+                    version=assignment.version,
+                    status=ReviewerAssignment.Status.PENDING,
+                ).exclude(pk=assignment.pk).update(
+                    status=ReviewerAssignment.Status.EXPIRED,
+                )
 
         return assignment
 
