@@ -11,6 +11,8 @@ from apps.submissions.serializers import SubmissionListSerializer
 from .models import SubmissionAssignment
 from .serializers import AssignEditorSerializer, SubmissionAssignmentSerializer
 from .services import AssignmentService
+from .permissions import IsSectionManager
+from .selectors import submissions_managed_by
 
 
 class IsSectionEditor(BasePermission):
@@ -25,58 +27,44 @@ class IsSectionEditor(BasePermission):
 
 
 class ManagerQueueView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSectionManager]
     serializer_class = SubmissionListSerializer
 
     def get_queryset(self):
-        #TODO:this returns empty for all roles  except section manager , maybe it should show a message instead of empty list for other roles
-        # but check if this leaks any information about the submissions to unauthorized users
-        #TODO: section manager should only see submissions for their sections, not all submitted submissions
-        if not self.request.user.has_role(Role.RoleName.SECTION_MANAGER):
-            return Submission.objects.none()
-        
-        return Submission.objects.filter(
-            status=Submission.Status.SUBMITTED
-        ).select_related("section", "author")
-
+        return (
+            submissions_managed_by(self.request.user)
+            .filter(status=Submission.Status.SUBMITTED)
+            .select_related("section", "author")
+            .order_by("-submitted_at")
+        )
 
 class AssignEditorView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSectionManager]
 
-    def post(self, request):
-        if not request.user.has_role(Role.RoleName.SECTION_MANAGER):
-            return Response(
-                {"detail": "Only section managers can assign editors."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
+    def post(self, request, submission_id):
         serializer = AssignEditorSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
 
         submission = get_object_or_404(
-            Submission,
-            id=serializer.validated_data["submission_id"],
-        )
-        editor = get_object_or_404(
-            User,
-            id=serializer.validated_data["editor_id"],
+            submissions_managed_by(request.user).select_related(
+                "section",
+                "author",
+                "assigned_editor",
+            ),
+            id=submission_id,
         )
 
-        try:
-            assignment = AssignmentService.assign_editor(
-                submission=submission,
-                editor=editor,
-                assigned_by=request.user,
-            )
-        except ValueError as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        assignment = AssignmentService.assign_editor(
+            submission=submission,
+            editor=serializer.validated_data["editor"],
+            assigned_by=request.user,
+        )
 
         return Response(
-            SubmissionAssignmentSerializer(assignment).data,
+            SubmissionAssignmentSerializer(
+                assignment,
+                context={"request": request},
+            ).data,
             status=status.HTTP_201_CREATED,
         )
 
