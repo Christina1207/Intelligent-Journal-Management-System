@@ -1,9 +1,27 @@
 from django.contrib import admin
-from .models import Issue, JournalMetadataSettings, Section
+from .models import (
+    Issue,
+    JournalMetadataSettings,
+    Section,
+    SectionEditorMembership,
+)
 
+class SectionEditorMembershipInline(admin.TabularInline):
+    model = SectionEditorMembership
+    extra = 0
+    autocomplete_fields = ["editor", "created_by"]
+    fields = [
+        "editor",
+        "is_active",
+        "created_by",
+        "created_at",
+        "updated_at",
+    ]
+    readonly_fields = ["created_at", "updated_at"]
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
+    inlines = [SectionEditorMembershipInline]
     list_display = ["name","slug", "issn", "manager", "is_active", "created_at", "last_clustered_at"]
     list_filter = ["is_active","manager"]
     search_fields = ["name", "slug", "issn", "manager__email", "manager__first_name", "manager__last_name"]
@@ -92,3 +110,23 @@ class JournalMetadataSettingsAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return False
+    
+@admin.register(SectionEditorMembership)
+class SectionEditorMembershipAdmin(admin.ModelAdmin):
+    list_display = [
+        "section",
+        "editor",
+        "is_active",
+        "created_by",
+        "created_at",
+    ]
+    list_filter = ["is_active", "section"]
+    search_fields = [
+        "section__name",
+        "editor__username",
+        "editor__email",
+        "editor__first_name",
+        "editor__last_name",
+    ]
+    autocomplete_fields = ["section", "editor", "created_by"]
+    readonly_fields = ["id", "created_at", "updated_at"]

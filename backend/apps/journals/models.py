@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from apps.common.slugging import build_unique_slug
@@ -69,6 +70,91 @@ class Section(models.Model):
     class Meta:
         ordering = ["name"]
 
+
+class SectionEditorMembership(models.Model):
+    """
+    Associates a Section Editor with the section in which they are
+    eligible to receive manuscript assignments.
+
+    The global SECTION_EDITOR role grants the capability, while this
+    membership defines its section-level scope.
+    """
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    section = models.ForeignKey(
+        Section,
+        on_delete=models.PROTECT,
+        related_name="editor_memberships",
+    )
+    editor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="section_editor_memberships",
+    )
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="section_editor_memberships_created",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        super().clean()
+
+        if not self.editor_id:
+            return
+
+        from apps.accounts.models import Role, User
+
+        if not self.editor.has_role(Role.RoleName.SECTION_EDITOR):
+            raise ValidationError(
+                {
+                    "editor": (
+                        "The selected user must have the "
+                        "SECTION_EDITOR role."
+                    )
+                }
+            )
+
+        if self.editor.status != User.Status.ACTIVE:
+            raise ValidationError(
+                {
+                    "editor": (
+                        "An inactive user cannot be added as a "
+                        "Section Editor."
+                    )
+                }
+            )
+
+    def __str__(self):
+        return f"{self.editor} — {self.section}"
+
+    class Meta:
+        ordering = ["section__name", "editor__username"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["section", "editor"],
+                name="unique_section_editor_membership",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["section", "is_active"],
+                name="idx_section_editor_active",
+            ),
+            models.Index(
+                fields=["editor", "is_active"],
+                name="idx_editor_section_active",
+            ),
+        ]
 
 class Issue(models.Model):
     class Status(models.TextChoices):
