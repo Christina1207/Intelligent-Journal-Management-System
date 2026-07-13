@@ -24,7 +24,7 @@ class AssignmentService:
         """
         submission = (
             Submission.objects.select_for_update()
-            .select_related("section", "author", "assigned_editor")
+            .select_related("section", "author")
             .get(pk=submission.pk)
         )
 

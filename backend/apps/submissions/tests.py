@@ -274,6 +274,30 @@ class SubmissionDetailApiTests(APITestCase):
 
         for field in forbidden_version_fields:
             self.assertNotIn(field, response.data["latest_version"])
+    def test_author_cannot_list_another_authors_versions(self):
+        self.client.force_authenticate(self.other_author)
+
+        response = self.client.get(
+            reverse(
+                "submission-version-list",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+    def test_manager_cannot_list_versions_outside_managed_section(self):
+        self.client.force_authenticate(self.section_manager)
+
+        response = self.client.get(
+            reverse(
+                "submission-version-list",
+                args=[self.other_submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class AuthorDashboardApiTests(APITestCase):
