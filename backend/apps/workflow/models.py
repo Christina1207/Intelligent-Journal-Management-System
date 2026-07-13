@@ -3,7 +3,7 @@ import uuid
 from django.db import models
 from django.conf import settings
 from apps.accounts.models import Role
-
+from .constants import TRIAGE_CHECKLIST_VERSION
 
 class SubmissionAssignment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -124,3 +124,87 @@ class ReviewerAssignment(models.Model):
 
     def __str__(self):
         return f"ReviewerAssignment({self.reviewer_id} → {self.version_id} [{self.status}])"
+    
+class TriageAssessment(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        COMPLETED = "COMPLETED", "Completed"
+
+    class Outcome(models.TextChoices):
+        PROCEED = "PROCEED", "Proceed to editor assignment"
+        DESK_REJECTED = "DESK_REJECTED", "Desk rejected"
+
+    class RejectionReason(models.TextChoices):
+        OUT_OF_SCOPE = "OUT_OF_SCOPE", "Outside journal or section scope"
+        INCOMPLETE = "INCOMPLETE", "Incomplete submission"
+        QUALITY = "QUALITY", "Insufficient submission quality"
+        GUIDELINES = "GUIDELINES", "Submission guidelines not followed"
+        ETHICS = "ETHICS", "Ethics or research-integrity concern"
+        OTHER = "OTHER", "Other"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    submission_version = models.OneToOneField(
+        "submissions.SubmissionVersion",
+        on_delete=models.PROTECT,
+        related_name="triage_assessment",
+    )
+    checklist_version = models.PositiveSmallIntegerField(
+        default=TRIAGE_CHECKLIST_VERSION,
+    )
+    checks = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    outcome = models.CharField(
+        max_length=30,
+        choices=Outcome.choices,
+        blank=True,
+        default="",
+    )
+    internal_notes = models.TextField(blank=True, default="")
+    rejection_reason = models.CharField(
+        max_length=30,
+        choices=RejectionReason.choices,
+        blank=True,
+        default="",
+    )
+    author_message = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="triage_assessments_created",
+    )
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="triage_assessments_completed",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return (
+            f"TriageAssessment("
+            f"{self.submission_version_id} [{self.status}])"
+        )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="idx_triage_status_created",
+            ),
+        ]
