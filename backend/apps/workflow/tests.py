@@ -10,7 +10,8 @@ from apps.accounts.models import Role
 from apps.journals.models import Section, SectionEditorMembership
 from apps.reviews.services import ReviewService
 from apps.submissions.models import Submission, SubmissionVersion
-from apps.workflow.models import ReviewerAssignment, SubmissionAssignment
+from apps.workflow.models import ReviewerAssignment, SubmissionAssignment, TriageAssessment
+from apps.workflow.constants import get_triage_checklist
 
 
 class ManagerAssignmentApiTests(APITestCase):
@@ -62,6 +63,7 @@ class ManagerAssignmentApiTests(APITestCase):
             title="Managed manuscript",
             section=self.section,
         )
+        self.complete_triage(self.submission)
         self.other_submission = self.create_submission(
             title="Other manuscript",
             section=self.other_section,
@@ -90,6 +92,29 @@ class ManagerAssignmentApiTests(APITestCase):
             file=f"submissions/{submission.id}/v1/manuscript.pdf",
         )
         return submission
+    def complete_triage(self, submission):
+        version = submission.versions.order_by(
+            "-version_number"
+        ).first()
+
+        checks = {
+            definition["code"]: {
+                "result": "PASS",
+                "note": "",
+            }
+            for definition in get_triage_checklist()
+            if definition["required"]
+        }
+
+        return TriageAssessment.objects.create(
+            submission_version=version,
+            checks=checks,
+            status=TriageAssessment.Status.COMPLETED,
+            outcome=TriageAssessment.Outcome.PROCEED,
+            created_by=self.manager,
+            completed_by=self.manager,
+            completed_at=timezone.now(),
+        )
 
     def test_manager_queue_requires_section_manager_role(self):
         self.client.force_authenticate(self.author)
@@ -166,6 +191,28 @@ class ManagerAssignmentApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_cannot_assign_editor_before_triage_completion(self):
+        submission = self.create_submission(
+            title="Untriaged manuscript",
+            section=self.section,
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[submission.id],
+            ),
+            {"editor_id": str(self.eligible_editor.id)},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("triage", response.data)
 
 class ReviewerAssignmentRegressionTests(APITestCase):
     def setUp(self):

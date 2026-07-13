@@ -14,4 +14,5 @@ class SubmissionAdmin(admin.ModelAdmin):
 class SubmissionVersionAdmin(admin.ModelAdmin):
     list_display  = ['id', 'submission', 'version_number', 'decision', 'decided_by', 'decided_at', 'submitted_at']
     list_filter   = ['decision']
+    search_fields = ['submission__title', 'submission__author__username']
     raw_id_fields = ['submission', 'decided_by']
