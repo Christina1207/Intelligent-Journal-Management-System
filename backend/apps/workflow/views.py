@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 
 from apps.accounts.models import Role, User
 from apps.submissions.models import Submission
@@ -40,7 +41,17 @@ class ManagerQueueView(generics.ListAPIView):
 
 class AssignEditorView(APIView):
     permission_classes = [IsAuthenticated, IsSectionManager]
-
+    @extend_schema(
+        request=AssignEditorSerializer,
+        responses={
+            201: SubmissionAssignmentSerializer,
+        },
+        summary="Assign a Section Editor",
+        description=(
+            "Assign an eligible Section Editor to a submitted manuscript "
+            "belonging to a section managed by the authenticated user."
+        ),
+    )
     def post(self, request, submission_id):
         serializer = AssignEditorSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
