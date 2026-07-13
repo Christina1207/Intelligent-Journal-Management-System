@@ -12,4 +12,19 @@ urlpatterns = [
         views.AssignEditorView.as_view(),
         name="manager-assign-editor",
     ),
+    path(
+    "submissions/<uuid:submission_id>/triage/",
+    views.TriageAssessmentView.as_view(),
+    name="manager-submission-triage",
+    ),
+    path(
+        "submissions/<uuid:submission_id>/triage/complete/",
+        views.CompleteTriageView.as_view(),
+        name="manager-submission-triage-complete",
+    ),
+    path(
+        "submissions/<uuid:submission_id>/desk-reject/",
+        views.DeskRejectSubmissionView.as_view(),
+        name="manager-submission-desk-reject",
+    ),
 ]

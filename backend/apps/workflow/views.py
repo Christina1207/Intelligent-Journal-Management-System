@@ -2,6 +2,7 @@ from rest_framework import status, generics
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
@@ -9,11 +10,18 @@ from drf_spectacular.utils import extend_schema
 from apps.accounts.models import Role, User
 from apps.submissions.models import Submission
 from apps.submissions.serializers import SubmissionListSerializer
-from .models import SubmissionAssignment
-from .serializers import AssignEditorSerializer, SubmissionAssignmentSerializer
-from .services import AssignmentService
+from .models import SubmissionAssignment, TriageAssessment
+from .serializers import (
+    AssignEditorSerializer,
+    DeskRejectSerializer,
+    SubmissionAssignmentSerializer,
+    TriageAssessmentDetailSerializer,
+    TriageUpdateSerializer,
+)
+from .services import AssignmentService, TriageService
 from .permissions import IsSectionManager
 from .selectors import submissions_managed_by
+
 
 
 class IsSectionEditor(BasePermission):
@@ -96,3 +104,135 @@ class EditorQueueView(generics.ListAPIView):
             id__in=assigned_submission_ids,
             status=Submission.Status.ASSIGNED,
         ).select_related("section", "author")
+    
+def get_managed_submission_or_404(request, submission_id):
+    return get_object_or_404(
+        submissions_managed_by(request.user).select_related(
+            "section",
+            "author",
+            "assigned_editor",
+        ),
+        id=submission_id,
+    )
+
+class TriageAssessmentView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        responses={200: TriageAssessmentDetailSerializer},
+        summary="Get initial triage assessment",
+    )
+    def get(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+        version = (
+            submission.versions.order_by("-version_number").first()
+        )
+
+        if version is None:
+            raise ValidationError(
+                {"submission": "The submission has no manuscript version."}
+            )
+
+        assessment = (
+            TriageAssessment.objects.select_related(
+                "submission_version",
+                "completed_by",
+            )
+            .filter(submission_version=version)
+            .first()
+        )
+
+        if assessment is None:
+            assessment = TriageAssessment(
+                submission_version=version,
+                created_by=request.user,
+            )
+
+        return Response(
+            TriageAssessmentDetailSerializer(assessment).data
+        )
+
+    @extend_schema(
+        request=TriageUpdateSerializer,
+        responses={200: TriageAssessmentDetailSerializer},
+        summary="Save initial triage draft",
+    )
+    def patch(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        serializer = TriageUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        assessment = TriageService.update_draft(
+            submission=submission,
+            manager=request.user,
+            internal_notes=serializer.validated_data.get(
+                "internal_notes"
+            ),
+            checks=serializer.validated_data.get("checks", []),
+        )
+
+        return Response(
+            TriageAssessmentDetailSerializer(assessment).data
+        )
+
+
+class CompleteTriageView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        request=None,
+        responses={200: TriageAssessmentDetailSerializer},
+        summary="Complete triage for editor assignment",
+    )
+    def post(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        assessment = TriageService.complete_for_assignment(
+            submission=submission,
+            manager=request.user,
+        )
+
+        return Response(
+            TriageAssessmentDetailSerializer(assessment).data
+        )
+
+
+class DeskRejectSubmissionView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        request=DeskRejectSerializer,
+        responses={200: TriageAssessmentDetailSerializer},
+        summary="Desk reject a submitted manuscript",
+    )
+    def post(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        serializer = DeskRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        assessment = TriageService.desk_reject(
+            submission=submission,
+            manager=request.user,
+            reason_code=serializer.validated_data["reason_code"],
+            author_message=serializer.validated_data[
+                "author_message"
+            ],
+        )
+
+        return Response(
+            TriageAssessmentDetailSerializer(assessment).data
+        )
