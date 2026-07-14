@@ -214,6 +214,90 @@ class ManagerAssignmentApiTests(APITestCase):
         )
         self.assertIn("triage", response.data)
 
+    def test_eligible_editors_are_limited_to_submission_section(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse(
+                "manager-eligible-editors",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_ids = {
+            editor["id"]
+            for editor in response.data
+        }
+
+        self.assertIn(
+            str(self.eligible_editor.id),
+            returned_ids,
+        )
+        self.assertNotIn(
+            str(self.other_section_editor.id),
+            returned_ids,
+        )
+
+
+    def test_eligible_editor_response_includes_workload(self):
+        self.client.force_authenticate(self.manager)
+
+        assignment_response = self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[self.submission.id],
+            ),
+            {
+                "editor_id": str(self.eligible_editor.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            assignment_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        response = self.client.get(
+            reverse(
+                "manager-eligible-editors",
+                args=[self.submission.id],
+            )
+        )
+
+        editor_data = next(
+            editor
+            for editor in response.data
+            if editor["id"] == str(self.eligible_editor.id)
+        )
+
+        self.assertEqual(
+            editor_data["active_assignment_count"],
+            1,
+        )
+        self.assertTrue(editor_data["is_current_editor"])
+
+
+    def test_manager_cannot_list_editors_for_unmanaged_submission(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse(
+                "manager-eligible-editors",
+                args=[self.other_submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
 class ReviewerAssignmentRegressionTests(APITestCase):
     def setUp(self):
         reviewer_role, _ = Role.objects.get_or_create(

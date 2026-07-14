@@ -32,4 +32,9 @@ urlpatterns = [
     views.ReassignEditorView.as_view(),
     name="manager-reassign-editor",
     ),
+    path(
+        "submissions/<uuid:submission_id>/eligible-editors/",
+        views.EligibleSectionEditorListView.as_view(),
+        name="manager-eligible-editors",
+    ),
 ]

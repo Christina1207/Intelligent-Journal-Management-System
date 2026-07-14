@@ -6,6 +6,41 @@ from apps.accounts.models import User
 from .constants import TRIAGE_RESULT_CHOICES
 from .models import SubmissionAssignment,TriageAssessment
 
+class EligibleSectionEditorSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    active_assignment_count = serializers.IntegerField(
+        read_only=True,
+    )
+    is_current_editor = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "affiliation",
+            "active_assignment_count",
+            "is_current_editor",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.CharField())
+    def get_full_name(self, editor):
+        full_name = (
+            f"{editor.first_name} {editor.last_name}"
+        ).strip()
+
+        return full_name or editor.username
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_current_editor(self, editor):
+        submission = self.context.get("submission")
+
+        return bool(
+            submission
+            and submission.assigned_editor_id == editor.id
+        )
 
 class AssignEditorSerializer(serializers.Serializer):
     editor_id = serializers.PrimaryKeyRelatedField(

@@ -18,10 +18,11 @@ from .serializers import (
     SubmissionAssignmentSerializer,
     TriageAssessmentDetailSerializer,
     TriageUpdateSerializer,
+    EligibleSectionEditorSerializer,
 )
 from .services import AssignmentService, TriageService
 from .permissions import IsSectionManager
-from .selectors import submissions_managed_by
+from .selectors import submissions_managed_by,eligible_section_editors_for
 
 
 
@@ -113,6 +114,38 @@ def get_managed_submission_or_404(request, submission_id):
         ),
         id=submission_id,
     )
+
+class EligibleSectionEditorListView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        responses={
+            200: EligibleSectionEditorSerializer(many=True),
+        },
+        summary="List eligible Section Editors",
+        description=(
+            "List active Section Editors eligible for this manuscript's "
+            "section, ordered by active assignment workload."
+        ),
+    )
+    def get(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        editors = eligible_section_editors_for(submission)
+
+        serializer = EligibleSectionEditorSerializer(
+            editors,
+            many=True,
+            context={
+                "request": request,
+                "submission": submission,
+            },
+        )
+
+        return Response(serializer.data)
 
 class ReassignEditorView(APIView):
     permission_classes = [IsAuthenticated, IsSectionManager]
