@@ -6,6 +6,13 @@ from apps.accounts.models import Role
 from .constants import TRIAGE_CHECKLIST_VERSION
 
 class SubmissionAssignment(models.Model):
+    class AssignmentReason(models.TextChoices):
+        INITIAL = "INITIAL", "Initial assignment"
+        WORKLOAD = "WORKLOAD", "Workload"
+        CONFLICT = "CONFLICT", "Conflict of interest"
+        INACTIVITY = "INACTIVITY", "Editor inactivity"
+        UNAVAILABLE = "UNAVAILABLE", "Editor unavailable"
+        ADMINISTRATIVE = "ADMINISTRATIVE", "Administrative correction"
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     submission = models.ForeignKey(
@@ -27,6 +34,11 @@ class SubmissionAssignment(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="assignments_received",
+    )
+    assignment_reason = models.CharField(
+        max_length=30,
+        choices=AssignmentReason.choices,
+        default=AssignmentReason.INITIAL,
     )
 
     role = models.CharField(

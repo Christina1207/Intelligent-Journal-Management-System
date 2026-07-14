@@ -14,6 +14,7 @@ from .models import SubmissionAssignment, TriageAssessment
 from .serializers import (
     AssignEditorSerializer,
     DeskRejectSerializer,
+    ReassignEditorSerializer,
     SubmissionAssignmentSerializer,
     TriageAssessmentDetailSerializer,
     TriageUpdateSerializer,
@@ -93,17 +94,15 @@ class EditorQueueView(generics.ListAPIView):
     serializer_class = SubmissionListSerializer
 
     def get_queryset(self):
-        # Get submissions where the latest assignment points to this editor
-        assigned_submission_ids = SubmissionAssignment.objects.filter(
-            assigned_to=self.request.user,
-            role=Role.RoleName.SECTION_EDITOR,
-        ).values_list("submission_id", flat=True)
-
         #TODO: shouldn't this also include UNDER_REVIEW submissions? or should those only be visible in the editor's review queue?
-        return Submission.objects.filter(
-            id__in=assigned_submission_ids,
+        return (
+            Submission.objects.filter(
+            assigned_editor=self.request.user,
             status=Submission.Status.ASSIGNED,
-        ).select_related("section", "author")
+            )
+            .select_related("section", "author")
+            .order_by("-submitted_at")
+        )
     
 def get_managed_submission_or_404(request, submission_id):
     return get_object_or_404(
@@ -114,6 +113,42 @@ def get_managed_submission_or_404(request, submission_id):
         ),
         id=submission_id,
     )
+
+class ReassignEditorView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        request=ReassignEditorSerializer,
+        responses={201: SubmissionAssignmentSerializer},
+        summary="Reassign a Section Editor",
+        description=(
+            "Replace the current Section Editor while preserving "
+            "the previous assignment as history."
+        ),
+    )
+    def post(self, request, submission_id):
+        serializer = ReassignEditorSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        assignment = AssignmentService.reassign_editor(
+            submission=submission,
+            editor=serializer.validated_data["editor"],
+            assigned_by=request.user,
+            reason=serializer.validated_data["reason"],
+        )
+
+        return Response(
+            SubmissionAssignmentSerializer(
+                assignment,
+                context={"request": request},
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 class TriageAssessmentView(APIView):
     permission_classes = [IsAuthenticated, IsSectionManager]

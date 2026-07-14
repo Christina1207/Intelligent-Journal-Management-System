@@ -143,6 +143,9 @@ class AssignmentService:
             assigned_to=editor,
             assigned_by=assigned_by,
             role=Role.RoleName.SECTION_EDITOR,
+            assignment_reason=(
+                SubmissionAssignment.AssignmentReason.INITIAL
+            ),
         )
 
         submission.assigned_editor = editor
@@ -151,6 +154,142 @@ class AssignmentService:
 
         return assignment
 
+    @staticmethod
+    @transaction.atomic
+    def reassign_editor(
+        *,
+        submission: Submission,
+        editor: User,
+        assigned_by: User,
+        reason: str,
+    ) -> SubmissionAssignment:
+        submission = (
+            Submission.objects.select_for_update()
+            .select_related(
+                "section",
+                "author",
+                "assigned_editor",
+            )
+            .get(pk=submission.pk)
+        )
+
+        if not assigned_by.has_role(Role.RoleName.SECTION_MANAGER):
+            raise PermissionDenied(
+                "Only a Section Manager can reassign a Section Editor."
+            )
+
+        if submission.section.manager_id != assigned_by.id:
+            raise PermissionDenied(
+                "You do not manage the section containing this submission."
+            )
+
+        if submission.assigned_editor_id is None:
+            raise ValidationError(
+                {
+                    "submission": (
+                        "This submission does not currently have a "
+                        "Section Editor. Use the initial assignment endpoint."
+                    )
+                }
+            )
+
+        if submission.status in {
+            Submission.Status.ACCEPTED,
+            Submission.Status.REJECTED,
+        }:
+            raise ValidationError(
+                {
+                    "submission": (
+                        "A finalized submission cannot be reassigned."
+                    )
+                }
+            )
+
+        if editor.id == submission.assigned_editor_id:
+            raise ValidationError(
+                {
+                    "editor_id": (
+                        "The selected editor is already assigned to "
+                        "this submission."
+                    )
+                }
+            )
+
+        if not editor.has_role(Role.RoleName.SECTION_EDITOR):
+            raise ValidationError(
+                {
+                    "editor_id": (
+                        "The selected user does not have the "
+                        "SECTION_EDITOR role."
+                    )
+                }
+            )
+
+        if editor.status != User.Status.ACTIVE:
+            raise ValidationError(
+                {
+                    "editor_id": (
+                        "An inactive Section Editor cannot receive "
+                        "new assignments."
+                    )
+                }
+            )
+
+        if editor.id == submission.author_id:
+            raise ValidationError(
+                {
+                    "editor_id": (
+                        "The manuscript author cannot be assigned as "
+                        "its Section Editor."
+                    )
+                }
+            )
+
+        is_eligible_for_section = (
+            SectionEditorMembership.objects.filter(
+                section=submission.section,
+                editor=editor,
+                is_active=True,
+            ).exists()
+        )
+
+        if not is_eligible_for_section:
+            raise ValidationError(
+                {
+                    "editor_id": (
+                        "The selected Section Editor is not an active "
+                        "member of this submission's section."
+                    )
+                }
+            )
+
+        valid_reasons = {
+            value
+            for value, _ in (
+                SubmissionAssignment.AssignmentReason.choices
+            )
+            if value != SubmissionAssignment.AssignmentReason.INITIAL
+        }
+
+        if reason not in valid_reasons:
+            raise ValidationError(
+                {"reason": "Select a valid reassignment reason."}
+            )
+
+        assignment = SubmissionAssignment.objects.create(
+            submission=submission,
+            assigned_to=editor,
+            assigned_by=assigned_by,
+            role=Role.RoleName.SECTION_EDITOR,
+            assignment_reason=reason,
+        )
+
+        # Keep the manuscript in its current workflow state.
+        submission.assigned_editor = editor
+        submission.save(update_fields=["assigned_editor"])
+
+        return assignment
+    
 class TriageService:
     @staticmethod
     def _lock_submission(*, submission, manager):

@@ -19,6 +19,18 @@ class AssignEditorSerializer(serializers.Serializer):
         },
     )
 
+REASSIGNMENT_REASON_CHOICES = [
+    choice
+    for choice in SubmissionAssignment.AssignmentReason.choices
+    if choice[0] != SubmissionAssignment.AssignmentReason.INITIAL
+]
+
+
+class ReassignEditorSerializer(AssignEditorSerializer):
+    reason = serializers.ChoiceField(
+        choices=REASSIGNMENT_REASON_CHOICES,
+    )
+
 class SubmissionAssignmentSerializer(serializers.ModelSerializer):
     submission = SubmissionListSerializer(read_only=True)
     assigned_to = UserProfileSerializer(read_only=True)
@@ -32,6 +44,7 @@ class SubmissionAssignmentSerializer(serializers.ModelSerializer):
             "assigned_to",
             "assigned_by",
             "role",
+            "assignment_reason",
             "created_at",
         ]
         read_only_fields = fields

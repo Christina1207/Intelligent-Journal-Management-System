@@ -8,8 +8,8 @@ from .models import (
 
 @admin.register(SubmissionAssignment)
 class SubmissionAssignmentAdmin(admin.ModelAdmin):
-    list_display = ["submission", "assigned_to", "assigned_by", "role", "created_at"]
-    list_filter = ["role"]
+    list_display = ["submission", "assigned_to", "assigned_by", "role","assignment_reason" , "created_at"]
+    list_filter = ["role", "assignment_reason"]
     search_fields = [
         "submission__title",
         "assigned_to__username",

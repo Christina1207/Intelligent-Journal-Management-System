@@ -27,4 +27,9 @@ urlpatterns = [
         views.DeskRejectSubmissionView.as_view(),
         name="manager-submission-desk-reject",
     ),
+    path(
+    "submissions/<uuid:submission_id>/reassign-editor/",
+    views.ReassignEditorView.as_view(),
+    name="manager-reassign-editor",
+    ),
 ]
