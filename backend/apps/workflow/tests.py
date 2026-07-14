@@ -13,6 +13,7 @@ from apps.submissions.models import Submission, SubmissionVersion
 from apps.workflow.models import ReviewerAssignment, SubmissionAssignment, TriageAssessment
 from apps.workflow.constants import get_triage_checklist
 
+from unittest.mock import patch
 
 class ManagerAssignmentApiTests(APITestCase):
     def setUp(self):
@@ -448,6 +449,163 @@ class ManagerAssignmentApiTests(APITestCase):
             status.HTTP_200_OK,
         )
         self.assertEqual(response.data["results"], [])
+    def test_manager_can_get_managed_submission_detail(self):
+        self.submission.cover_letter = (
+            "Please consider this manuscript for publication."
+        )
+        self.submission.save(update_fields=["cover_letter"])
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse(
+                "manager-submission-detail",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data["id"],
+            str(self.submission.id),
+        )
+        self.assertEqual(
+            response.data["title"],
+            self.submission.title,
+        )
+        self.assertEqual(
+            response.data["cover_letter"],
+            self.submission.cover_letter,
+        )
+        self.assertEqual(
+            response.data["section"]["id"],
+            str(self.section.id),
+        )
+
+        latest_version = response.data["latest_version"]
+
+        self.assertIsNotNone(latest_version)
+        self.assertEqual(latest_version["version_number"], 1)
+        self.assertTrue(
+            latest_version["manuscript_available"]
+        )
+        self.assertNotIn("file", latest_version)
+        self.assertNotIn("author", response.data)
+
+
+    def test_non_manager_cannot_get_manager_submission_detail(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(
+            reverse(
+                "manager-submission-detail",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+    def test_manager_cannot_get_unmanaged_submission_detail(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse(
+                "manager-submission-detail",
+                args=[self.other_submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+
+    @patch("apps.workflow.views.StorageService")
+    def test_manager_can_get_temporary_manuscript_url(
+        self,
+        storage_service_class,
+    ):
+        manuscript_url = (
+            "http://localhost:9000/manuscripts/"
+            "temporary-signed-url"
+        )
+
+        storage_service = storage_service_class.return_value
+        storage_service.get_public_url.return_value = (
+            manuscript_url
+        )
+
+        latest_version = (
+            self.submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse(
+                "manager-submission-manuscript",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data["submission_id"],
+            str(self.submission.id),
+        )
+        self.assertEqual(
+            response.data["version_id"],
+            str(latest_version.id),
+        )
+        self.assertEqual(response.data["version_number"], 1)
+        self.assertEqual(
+            response.data["expires_in_seconds"],
+            600,
+        )
+        self.assertEqual(
+            response.data["manuscript_url"],
+            manuscript_url,
+        )
+        self.assertNotIn("file", response.data)
+
+        storage_service.get_public_url.assert_called_once_with(
+            object_name=latest_version.file,
+            expires_in_seconds=600,
+        )
+
+
+    @patch("apps.workflow.views.StorageService")
+    def test_manager_cannot_download_unmanaged_manuscript(
+        self,
+        storage_service_class,
+    ):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse(
+                "manager-submission-manuscript",
+                args=[self.other_submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        storage_service_class.assert_not_called()
 class ReviewerAssignmentRegressionTests(APITestCase):
     def setUp(self):
         reviewer_role, _ = Role.objects.get_or_create(

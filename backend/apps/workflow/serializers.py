@@ -6,7 +6,7 @@ from apps.accounts.serializers import UserProfileSerializer
 from apps.accounts.models import User
 from .constants import TRIAGE_RESULT_CHOICES
 from .models import SubmissionAssignment,TriageAssessment
-from apps.submissions.models import Submission
+from apps.submissions.models import Submission, SubmissionVersion
 
 class EligibleSectionEditorSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -155,6 +155,73 @@ class PlagiarismPlaceholderSerializer(serializers.Serializer):
     status = serializers.CharField()
     report = serializers.JSONField(allow_null=True)
 
+class ManagerSubmissionVersionSerializer(
+    serializers.ModelSerializer
+):
+    manuscript_available = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubmissionVersion
+        fields = [
+            "id",
+            "version_number",
+            "submitted_at",
+            "manuscript_available",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_manuscript_available(self, version):
+        return bool(version.file)
+
+
+class ManagerSubmissionDetailSerializer(
+    serializers.ModelSerializer
+):
+    section = SubmissionDetailSectionSerializer(read_only=True)
+    latest_version = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "title",
+            "abstract",
+            "language",
+            "status",
+            "section",
+            "cover_letter",
+            "submitted_at",
+            "latest_version",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(
+        ManagerSubmissionVersionSerializer(allow_null=True)
+    )
+    def get_latest_version(self, submission):
+        latest_version = (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+        if latest_version is None:
+            return None
+
+        return ManagerSubmissionVersionSerializer(
+            latest_version
+        ).data
+
+
+class ManagerManuscriptDownloadSerializer(
+    serializers.Serializer
+):
+    submission_id = serializers.UUIDField(read_only=True)
+    version_id = serializers.UUIDField(read_only=True)
+    version_number = serializers.IntegerField(read_only=True)
+    expires_in_seconds = serializers.IntegerField(read_only=True)
+    manuscript_url = serializers.URLField(read_only=True)
 
 class TriageAssessmentDetailSerializer(serializers.Serializer):
     assessment_id = serializers.SerializerMethodField()

@@ -10,6 +10,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from apps.accounts.models import Role, User
 from apps.submissions.models import Submission
 from apps.submissions.serializers import SubmissionListSerializer
+from apps.core.storage import StorageService
 from .models import SubmissionAssignment, TriageAssessment
 from .serializers import (
     AssignEditorSerializer,
@@ -20,6 +21,8 @@ from .serializers import (
     TriageUpdateSerializer,
     EligibleSectionEditorSerializer,
     ManagerMonitoringSubmissionSerializer,
+    ManagerManuscriptDownloadSerializer,
+    ManagerSubmissionDetailSerializer,
 )
 from .services import AssignmentService, TriageService
 from .permissions import IsSectionManager
@@ -120,6 +123,98 @@ def get_managed_submission_or_404(request, submission_id):
         ),
         id=submission_id,
     )
+
+class ManagerSubmissionDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        responses={
+            200: ManagerSubmissionDetailSerializer,
+        },
+        summary="Get a managed manuscript for initial triage",
+        description=(
+            "Return the manuscript metadata required by a Section "
+            "Manager during initial triage. The private storage object "
+            "path is never exposed."
+        ),
+    )
+    def get(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        return Response(
+            ManagerSubmissionDetailSerializer(submission).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagerManuscriptDownloadView(APIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+
+    @extend_schema(
+        responses={
+            200: ManagerManuscriptDownloadSerializer,
+        },
+        summary="Get a temporary manuscript download URL",
+        description=(
+            "Generate a short-lived presigned URL for the latest "
+            "manuscript version. The MinIO object path is not returned."
+        ),
+    )
+    def get(self, request, submission_id):
+        submission = get_managed_submission_or_404(
+            request,
+            submission_id,
+        )
+
+        latest_version = (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+        if latest_version is None:
+            raise ValidationError(
+                {
+                    "manuscript": (
+                        "The submission has no manuscript version."
+                    )
+                }
+            )
+
+        if not latest_version.file:
+            raise ValidationError(
+                {
+                    "manuscript": (
+                        "No manuscript file is attached to the "
+                        "latest submission version."
+                    )
+                }
+            )
+
+        expires_in_seconds = 600
+
+        manuscript_url = StorageService().get_public_url(
+            object_name=latest_version.file,
+            expires_in_seconds=expires_in_seconds,
+        )
+
+        response_data = {
+            "submission_id": str(submission.id),
+            "version_id": str(latest_version.id),
+            "version_number": latest_version.version_number,
+            "expires_in_seconds": expires_in_seconds,
+            "manuscript_url": manuscript_url,
+        }
+
+        return Response(
+            ManagerManuscriptDownloadSerializer(
+                response_data
+            ).data,
+            status=status.HTTP_200_OK,
+        )
 
 class EligibleSectionEditorListView(APIView):
     permission_classes = [IsAuthenticated, IsSectionManager]

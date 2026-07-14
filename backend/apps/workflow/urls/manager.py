@@ -42,4 +42,14 @@ urlpatterns = [
     views.ManagerMonitoringQueueView.as_view(),
     name="manager-monitoring",
     ),
+    path(
+    "submissions/<uuid:submission_id>/",
+    views.ManagerSubmissionDetailView.as_view(),
+    name="manager-submission-detail",
+    ),
+    path(
+        "submissions/<uuid:submission_id>/manuscript/",
+        views.ManagerManuscriptDownloadView.as_view(),
+        name="manager-submission-manuscript",
+    ),
 ]
