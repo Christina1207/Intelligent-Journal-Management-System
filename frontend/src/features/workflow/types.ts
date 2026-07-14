@@ -203,3 +203,30 @@ export type ManagerAssignmentResponse = {
   assignment_reason: "INITIAL" | ManagerReassignmentReason;
   created_at: string;
 };
+
+export type ManagerSubmissionLatestVersion = {
+  id: string;
+  version_number: number;
+  submitted_at: string;
+  manuscript_available: boolean;
+};
+
+export type ManagerSubmissionDetail = {
+  id: string;
+  title: string;
+  abstract: string;
+  language: string;
+  status: SubmissionStatus;
+  section: SubmissionSectionSummary;
+  cover_letter: string;
+  submitted_at: string;
+  latest_version: ManagerSubmissionLatestVersion | null;
+};
+
+export type ManagerManuscriptDownload = {
+  submission_id: string;
+  version_id: string;
+  version_number: number;
+  expires_in_seconds: number;
+  manuscript_url: string;
+};

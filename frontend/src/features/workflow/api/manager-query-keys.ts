@@ -15,11 +15,13 @@ export const managerQueryKeys = {
     [
       ...MANAGER_QUERY_ROOT,
       "monitoring",
-      {
-        page,
-        status: status ?? null,
-      },
+      { page, status: status ?? null },
     ] as const,
+
+  submissionsRoot: [...MANAGER_QUERY_ROOT, "submissions"] as const,
+
+  submission: (submissionId: string) =>
+    [...MANAGER_QUERY_ROOT, "submissions", submissionId] as const,
 
   triageRoot: [...MANAGER_QUERY_ROOT, "triage"] as const,
 
