@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from apps.accounts.models import Role, User
 from apps.submissions.models import Submission
@@ -19,10 +19,16 @@ from .serializers import (
     TriageAssessmentDetailSerializer,
     TriageUpdateSerializer,
     EligibleSectionEditorSerializer,
+    ManagerMonitoringSubmissionSerializer,
 )
 from .services import AssignmentService, TriageService
 from .permissions import IsSectionManager
-from .selectors import submissions_managed_by,eligible_section_editors_for
+from .selectors import (
+    MANAGER_MONITORED_STATUSES,
+    eligible_section_editors_for,
+    monitored_submissions_for_manager,
+    submissions_managed_by,
+)
 
 
 
@@ -304,3 +310,54 @@ class DeskRejectSubmissionView(APIView):
         return Response(
             TriageAssessmentDetailSerializer(assessment).data
         )
+
+class ManagerMonitoringQueueView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsSectionManager]
+    serializer_class = ManagerMonitoringSubmissionSerializer
+
+    def get_queryset(self):
+        queryset = monitored_submissions_for_manager(
+            self.request.user
+        )
+
+        requested_status = self.request.query_params.get("status")
+
+        if requested_status:
+            if requested_status not in MANAGER_MONITORED_STATUSES:
+                raise ValidationError(
+                    {
+                        "status": (
+                            "Select a valid monitored manuscript status."
+                        )
+                    }
+                )
+
+            queryset = queryset.filter(status=requested_status)
+
+        return queryset
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="status",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=list(MANAGER_MONITORED_STATUSES),
+                description=(
+                    "Optionally filter manuscripts by workflow status."
+                ),
+            )
+        ],
+        responses={
+            200: ManagerMonitoringSubmissionSerializer(many=True),
+        },
+        summary="Monitor active manuscripts",
+        description=(
+            "List active manuscripts in sections managed by the "
+            "authenticated Section Manager, including reviewer progress "
+            "and attention flags."
+        ),
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)

@@ -1,7 +1,7 @@
-from django.db.models import Count,Q
+from django.db.models import Count,Q, Prefetch
 from apps.accounts.models import Role, User
-from apps.submissions.models import Submission
-
+from apps.submissions.models import Submission, SubmissionVersion
+from .models import ReviewerAssignment
 
 def submissions_managed_by(user):
     """
@@ -63,4 +63,53 @@ def eligible_section_editors_for(submission):
             "username",
         )
         .distinct()
+    )
+
+MANAGER_MONITORED_STATUSES = (
+    Submission.Status.ASSIGNED,
+    Submission.Status.UNDER_REVIEW,
+    Submission.Status.SUSPENDED,
+    Submission.Status.REVIEWED,
+    Submission.Status.UNDER_REVISION,
+    Submission.Status.REVISED,
+)
+
+
+def monitored_submissions_for_manager(user):
+    """
+    Return active manuscripts belonging to sections managed by the user.
+
+    Versions and reviewer assignments are prefetched because the monitoring
+    serializer calculates progress for the latest manuscript version.
+    """
+    return (
+        submissions_managed_by(user)
+        .filter(status__in=MANAGER_MONITORED_STATUSES)
+        .select_related(
+            "section",
+            "author",
+            "assigned_editor",
+        )
+        .prefetch_related(
+            Prefetch(
+                "versions",
+                queryset=(
+                    SubmissionVersion.objects
+                    .order_by("-version_number")
+                    .prefetch_related(
+                        Prefetch(
+                            "reviewer_assignments",
+                            queryset=(
+                                ReviewerAssignment.objects
+                                .select_related("reviewer", "review")
+                                .order_by("assigned_at")
+                            ),
+                            to_attr="monitoring_assignments",
+                        )
+                    )
+                ),
+                to_attr="monitoring_versions",
+            )
+        )
+        .order_by("-submitted_at")
     )

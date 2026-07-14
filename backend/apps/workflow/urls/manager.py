@@ -37,4 +37,9 @@ urlpatterns = [
         views.EligibleSectionEditorListView.as_view(),
         name="manager-eligible-editors",
     ),
+    path(
+    "monitoring/",
+    views.ManagerMonitoringQueueView.as_view(),
+    name="manager-monitoring",
+    ),
 ]

@@ -298,6 +298,156 @@ class ManagerAssignmentApiTests(APITestCase):
             status.HTTP_404_NOT_FOUND,
         )
 
+    def test_monitoring_queue_contains_assigned_submission(self):
+        self.client.force_authenticate(self.manager)
+
+        assignment_response = self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[self.submission.id],
+            ),
+            {
+                "editor_id": str(self.eligible_editor.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            assignment_response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        response = self.client.get(reverse("manager-monitoring"))
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_ids = {
+            item["id"]
+            for item in response.data["results"]
+        }
+
+        self.assertIn(
+            str(self.submission.id),
+            returned_ids,
+        )
+        self.assertNotIn(
+            str(self.other_submission.id),
+            returned_ids,
+        )
+
+
+    def test_assigned_submission_requests_reviewer_invitations(self):
+        self.client.force_authenticate(self.manager)
+
+        self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[self.submission.id],
+            ),
+            {
+                "editor_id": str(self.eligible_editor.id),
+            },
+            format="json",
+        )
+
+        response = self.client.get(reverse("manager-monitoring"))
+
+        item = next(
+            result
+            for result in response.data["results"]
+            if result["id"] == str(self.submission.id)
+        )
+
+        self.assertIn(
+            "REVIEWER_INVITATIONS_NOT_STARTED",
+            item["attention_flags"],
+        )
+        self.assertEqual(
+            item["review_progress"]["invitations_total"],
+            0,
+        )
+
+
+    def test_monitoring_queue_reports_overdue_review(self):
+        reviewer = self.create_user(
+            "monitoring-reviewer",
+            Role.RoleName.REVIEWER,
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[self.submission.id],
+            ),
+            {
+                "editor_id": str(self.eligible_editor.id),
+            },
+            format="json",
+        )
+
+        version = self.submission.versions.order_by(
+            "-version_number"
+        ).first()
+
+        ReviewerAssignment.objects.create(
+            version=version,
+            reviewer=reviewer,
+            assigned_by=self.eligible_editor,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=timezone.now() - timedelta(days=5),
+            review_deadline=timezone.now() - timedelta(days=1),
+        )
+
+        self.submission.status = Submission.Status.UNDER_REVIEW
+        self.submission.save(update_fields=["status"])
+
+        response = self.client.get(reverse("manager-monitoring"))
+
+        item = next(
+            result
+            for result in response.data["results"]
+            if result["id"] == str(self.submission.id)
+        )
+
+        self.assertEqual(
+            item["review_progress"]["overdue_reviews"],
+            1,
+        )
+        self.assertIn(
+            "OVERDUE_REVIEWS",
+            item["attention_flags"],
+        )
+
+
+    def test_monitoring_queue_can_filter_by_status(self):
+        self.client.force_authenticate(self.manager)
+
+        self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[self.submission.id],
+            ),
+            {
+                "editor_id": str(self.eligible_editor.id),
+            },
+            format="json",
+        )
+
+        response = self.client.get(
+            reverse("manager-monitoring"),
+            {"status": Submission.Status.UNDER_REVIEW},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(response.data["results"], [])
 class ReviewerAssignmentRegressionTests(APITestCase):
     def setUp(self):
         reviewer_role, _ = Role.objects.get_or_create(

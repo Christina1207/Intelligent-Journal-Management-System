@@ -1,10 +1,12 @@
 from rest_framework import serializers
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
-from apps.submissions.serializers import SubmissionListSerializer
+from apps.submissions.serializers import SubmissionListSerializer, SubmissionDetailSectionSerializer
 from apps.accounts.serializers import UserProfileSerializer
 from apps.accounts.models import User
 from .constants import TRIAGE_RESULT_CHOICES
 from .models import SubmissionAssignment,TriageAssessment
+from apps.submissions.models import Submission
 
 class EligibleSectionEditorSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -262,3 +264,201 @@ class TriageAssessmentDetailSerializer(serializers.Serializer):
             "status": "NOT_AVAILABLE",
             "report": None,
         }
+    
+class ManagerMonitoringEditorSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "affiliation",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.CharField())
+    def get_full_name(self, editor):
+        full_name = (
+            f"{editor.first_name} {editor.last_name}"
+        ).strip()
+
+        return full_name or editor.username
+
+
+class ManagerReviewProgressSerializer(serializers.Serializer):
+    invitations_total = serializers.IntegerField()
+    invitations_pending = serializers.IntegerField()
+    invitations_accepted = serializers.IntegerField()
+    invitations_declined = serializers.IntegerField()
+    invitations_expired = serializers.IntegerField()
+    reviews_submitted = serializers.IntegerField()
+    overdue_invitations = serializers.IntegerField()
+    overdue_reviews = serializers.IntegerField()
+
+
+class ManagerMonitoringSubmissionSerializer(
+    serializers.ModelSerializer
+):
+    section = SubmissionDetailSectionSerializer(read_only=True)
+    assigned_editor = ManagerMonitoringEditorSerializer(
+        read_only=True,
+    )
+    latest_version_number = serializers.SerializerMethodField()
+    revision_round_count = serializers.SerializerMethodField()
+    review_progress = serializers.SerializerMethodField()
+    attention_flags = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "title",
+            "status",
+            "section",
+            "assigned_editor",
+            "submitted_at",
+            "latest_version_number",
+            "revision_round_count",
+            "review_progress",
+            "attention_flags",
+        ]
+        read_only_fields = fields
+
+    def _latest_version(self, submission):
+        versions = getattr(
+            submission,
+            "monitoring_versions",
+            None,
+        )
+
+        if versions is not None:
+            return versions[0] if versions else None
+
+        return (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+    def _build_review_progress(self, submission):
+        version = self._latest_version(submission)
+
+        if version is None:
+            assignments = []
+        else:
+            assignments = getattr(
+                version,
+                "monitoring_assignments",
+                None,
+            )
+
+            if assignments is None:
+                assignments = list(
+                    version.reviewer_assignments
+                    .select_related("review")
+                    .all()
+                )
+
+        now = timezone.now()
+
+        def has_review(assignment):
+            return hasattr(assignment, "review")
+
+        return {
+            "invitations_total": len(assignments),
+            "invitations_pending": sum(
+                assignment.status
+                == assignment.Status.PENDING
+                for assignment in assignments
+            ),
+            "invitations_accepted": sum(
+                assignment.status
+                == assignment.Status.ACCEPTED
+                for assignment in assignments
+            ),
+            "invitations_declined": sum(
+                assignment.status
+                == assignment.Status.DECLINED
+                for assignment in assignments
+            ),
+            "invitations_expired": sum(
+                assignment.status
+                == assignment.Status.EXPIRED
+                for assignment in assignments
+            ),
+            "reviews_submitted": sum(
+                has_review(assignment)
+                for assignment in assignments
+            ),
+            "overdue_invitations": sum(
+                assignment.status
+                == assignment.Status.PENDING
+                and assignment.response_deadline < now
+                for assignment in assignments
+            ),
+            "overdue_reviews": sum(
+                assignment.status
+                == assignment.Status.ACCEPTED
+                and not has_review(assignment)
+                and assignment.review_deadline < now
+                for assignment in assignments
+            ),
+        }
+
+    @extend_schema_field(
+        serializers.IntegerField(allow_null=True)
+    )
+    def get_latest_version_number(self, submission):
+        version = self._latest_version(submission)
+
+        return version.version_number if version else None
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_revision_round_count(self, submission):
+        version = self._latest_version(submission)
+
+        if version is None:
+            return 0
+
+        return max(version.version_number - 1, 0)
+
+    @extend_schema_field(ManagerReviewProgressSerializer)
+    def get_review_progress(self, submission):
+        return self._build_review_progress(submission)
+
+    @extend_schema_field(
+        serializers.ListField(
+            child=serializers.CharField(),
+        )
+    )
+    def get_attention_flags(self, submission):
+        progress = self._build_review_progress(submission)
+        flags = []
+
+        if (
+            submission.status == submission.Status.ASSIGNED
+            and progress["invitations_total"] == 0
+        ):
+            flags.append("REVIEWER_INVITATIONS_NOT_STARTED")
+
+        if progress["overdue_invitations"] > 0:
+            flags.append("OVERDUE_REVIEWER_INVITATIONS")
+
+        if progress["overdue_reviews"] > 0:
+            flags.append("OVERDUE_REVIEWS")
+
+        if submission.status == submission.Status.REVIEWED:
+            flags.append("EDITOR_DECISION_PENDING")
+
+        if submission.status == submission.Status.UNDER_REVISION:
+            flags.append("AUTHOR_REVISION_PENDING")
+
+        if submission.status == submission.Status.REVISED:
+            flags.append("REVISION_REVIEW_PENDING")
+
+        if submission.status == submission.Status.SUSPENDED:
+            flags.append("CASE_SUSPENDED")
+
+        return flags
