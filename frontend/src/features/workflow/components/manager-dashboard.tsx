@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-
+import { AttentionFlagBadge } from "@/features/workflow/components/attention-flag-badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
@@ -20,23 +20,12 @@ import {
 } from "@/features/workflow/api/manager-api";
 import { managerQueryKeys } from "@/features/workflow/api/manager-query-keys";
 import type {
-  ManagerAttentionFlag,
   ManagerMonitoringSubmission,
   ManagerQueueSubmission,
 } from "@/features/workflow/types";
 
 const DASHBOARD_PAGE = 1;
 const DASHBOARD_ITEM_LIMIT = 4;
-
-const attentionFlagLabels: Record<ManagerAttentionFlag, string> = {
-  REVIEWER_INVITATIONS_NOT_STARTED: "Reviewer invitations not started",
-  OVERDUE_REVIEWER_INVITATIONS: "Overdue reviewer invitations",
-  OVERDUE_REVIEWS: "Overdue reviews",
-  EDITOR_DECISION_PENDING: "Editor decision pending",
-  AUTHOR_REVISION_PENDING: "Author revision pending",
-  REVISION_REVIEW_PENDING: "Revision review pending",
-  CASE_SUSPENDED: "Case suspended",
-};
 
 function getDisplayName(user: {
   first_name?: string;
@@ -53,10 +42,6 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(value));
-}
-
-function isOverdueFlag(flag: ManagerAttentionFlag) {
-  return flag === "OVERDUE_REVIEWER_INVITATIONS" || flag === "OVERDUE_REVIEWS";
 }
 
 export function ManagerDashboard() {
@@ -337,17 +322,7 @@ function AttentionCases({
                 className="mt-3 flex flex-wrap gap-2"
               >
                 {submission.attention_flags.map((flag) => (
-                  <span
-                    key={flag}
-                    className={
-                      isOverdueFlag(flag)
-                        ? "inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"
-                        : "inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
-                    }
-                  >
-                    <AlertTriangle aria-hidden="true" className="size-3" />
-                    {attentionFlagLabels[flag]}
-                  </span>
+                  <AttentionFlagBadge key={flag} flag={flag} />
                 ))}
               </div>
             </article>
