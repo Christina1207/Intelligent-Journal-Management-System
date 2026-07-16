@@ -1,11 +1,19 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
+from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role, User
 
+class DefaultRoleBootstrapTests(TestCase):
+    def test_migrations_create_all_default_roles(self):
+        actual_roles = set(
+            Role.objects.values_list("name", flat=True)
+        )
+        expected_roles = set(Role.RoleName.values)
 
+        self.assertSetEqual(actual_roles, expected_roles)
 class CurrentUserProfileApiTests(APITestCase):
     def setUp(self):
         self.url = reverse("auth-me")
