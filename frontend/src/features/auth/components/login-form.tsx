@@ -3,13 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-
+import { getDefaultRouteForRoles } from "@/types/roles";
 import { getAuthFieldErrors, getAuthFormError } from "./auth-form-errors";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 
 function getSafeNextPath(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/author";
+    return null;
   }
 
   return value;
@@ -36,8 +36,12 @@ export function LoginForm() {
     setIsSubmitting(true);
 
     try {
-      await login({ username, password });
-      router.replace(getSafeNextPath(searchParams.get("next")));
+      const user = await login({ username, password });
+
+      const nextPath = getSafeNextPath(searchParams.get("next"));
+      const destination = nextPath ?? getDefaultRouteForRoles(user.roles);
+
+      router.replace(destination);
     } catch (error) {
       setFormError(getAuthFormError(error));
       setFieldErrors(getAuthFieldErrors(error));
@@ -124,11 +128,13 @@ export function LoginForm() {
       <p className="mt-6 text-center text-sm text-slate-600">
         New author?{" "}
         <Link
-          href={`/register${
-            searchParams.get("next")
-              ? `?next=${encodeURIComponent(getSafeNextPath(searchParams.get("next")))}`
-              : ""
-          }`}
+          href={
+            getSafeNextPath(searchParams.get("next"))
+              ? `/register?next=${encodeURIComponent(
+                  getSafeNextPath(searchParams.get("next"))!,
+                )}`
+              : "/register"
+          }
           className="font-medium text-slate-950 hover:underline"
         >
           Create an author account
