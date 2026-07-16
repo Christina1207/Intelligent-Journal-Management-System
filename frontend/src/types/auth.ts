@@ -1,10 +1,6 @@
-export type UserRole =
-  | "AUTHOR"
-  | "EDITOR_IN_CHIEF"
-  | "SECTION_MANAGER"
-  | "SECTION_EDITOR"
-  | "REVIEWER"
-  | "READER";
+import type { UserRole } from "@/types/roles";
+
+export type { UserRole } from "@/types/roles";
 
 export type BackendRoleDto = {
   id: number;
