@@ -18,10 +18,14 @@ from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny, BasePermission
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.submissions.permissions import filter_submissions_for_user
+
+from .permissions import CanPublishArticle, IsPublishingStaff
+from .selectors import publishing_records_for
 from apps.submissions.models import Submission
 
 from .exporters import (
@@ -148,18 +152,6 @@ ARTICLE_EXPORT_CONTENT = {
 }
 
 
-class IsPublishingStaffPlaceholder(BasePermission):
-    """
-    TODO: Replace with role-based publishing permissions for admins,
-    editors-in-chief, section managers, section editors, and copyeditors.
-    """
-
-    message = "Authentication is required for publishing management."
-
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated)
-
-
 class IgnoreFormatQueryContentNegotiation(BaseContentNegotiation):
     """
     DRF reserves ?format= for renderer selection. The citation export endpoint
@@ -175,7 +167,7 @@ class IgnoreFormatQueryContentNegotiation(BaseContentNegotiation):
 
 
 class CreateArticleDraftView(APIView):
-    permission_classes = [IsPublishingStaffPlaceholder]
+    permission_classes = [IsPublishingStaff]
 
     @extend_schema(
         tags=["Publishing"],
@@ -194,11 +186,22 @@ class CreateArticleDraftView(APIView):
         description="Create a publication draft from an accepted submission.",
     )
     def post(self, request, submission_id):
+        accessible_submissions = filter_submissions_for_user(
+            Submission.objects.select_related(
+                "section",
+                "author",
+                "assigned_editor",
+            ),
+            request.user,
+        )
         submission = get_object_or_404(
-            Submission.objects.select_related("section"),
+            accessible_submissions,
             pk=submission_id,
         )
-        article = PublishingService.create_draft_from_submission(editor=request.user, submission=submission)
+        article = PublishingService.create_draft_from_submission(
+            actor=request.user,
+            submission=submission,
+        )
         return Response(
             PublishedArticleManagementReadSerializer(article).data,
             status=status.HTTP_201_CREATED,
@@ -215,14 +218,11 @@ class CreateArticleDraftView(APIView):
     )
 )
 class ArticleManagementListView(generics.ListAPIView):
-    permission_classes = [IsPublishingStaffPlaceholder]
+    permission_classes = [IsPublishingStaff]
     serializer_class = PublishedArticleManagementReadSerializer
 
     def get_queryset(self):
-        return PublishedArticle.objects.select_related(
-            "section",
-            "submission",
-        ).prefetch_related("authors")
+        return publishing_records_for(self.request.user)
 
 
 @extend_schema_view(
@@ -242,16 +242,13 @@ class ArticleManagementListView(generics.ListAPIView):
     ),
 )
 class ArticleManagementDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsPublishingStaffPlaceholder]
+    permission_classes = [IsPublishingStaff]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     lookup_url_kwarg = "article_id"
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        return PublishedArticle.objects.select_related(
-            "section",
-            "submission",
-        ).prefetch_related("authors")
+        return publishing_records_for(self.request.user)
 
     def get_serializer_class(self):
         if self.request.method == "PATCH":
@@ -271,7 +268,7 @@ class ArticleManagementDetailView(generics.RetrieveUpdateAPIView):
 
 
 class PublishArticleView(APIView):
-    permission_classes = [IsPublishingStaffPlaceholder]
+    permission_classes = [CanPublishArticle]
 
     @extend_schema(
         tags=["Publishing"],
@@ -287,7 +284,10 @@ class PublishArticleView(APIView):
         description="Publish a draft article and set its publication timestamp.",
     )
     def post(self, request, article_id):
-        article = get_object_or_404(PublishedArticle, pk=article_id)
+        article = get_object_or_404(
+            publishing_records_for(request.user),
+            pk=article_id,
+        )
         article = PublishingService.publish_article(article)
         return Response(PublishedArticleManagementReadSerializer(article).data)
 

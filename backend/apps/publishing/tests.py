@@ -8,7 +8,9 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role
@@ -124,7 +126,7 @@ class PublishingServiceTests(TestCase):
                     "Only accepted submissions can be moved to publishing",
                 ):
                     PublishingService.create_draft_from_submission(
-                        editor=self.editor,
+                        actor=self.editor,
                         submission=submission,
                     )
 
@@ -138,7 +140,7 @@ class PublishingServiceTests(TestCase):
         )
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -162,7 +164,7 @@ class PublishingServiceTests(TestCase):
         submission = self._create_submission()
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -179,7 +181,7 @@ class PublishingServiceTests(TestCase):
         submission = self._create_submission()
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
         author_snapshot = article.authors.get()
@@ -223,7 +225,7 @@ class PublishingServiceTests(TestCase):
     def test_duplicate_published_author_order_is_rejected_for_same_article(self):
         submission = self._create_submission()
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -245,10 +247,10 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(
             PermissionDenied,
-            "Only section editors can create publishing drafts.",
+            "You cannot create a publishing draft for this submission.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=non_editor,
+                actor=non_editor,
                 submission=submission,
             )
 
@@ -263,10 +265,10 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(
             PermissionDenied,
-            "Only the assigned section editor can create a publishing draft",
+            "You cannot create a publishing draft for this submission.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=other_editor,
+                actor=other_editor,
                 submission=submission,
             )
 
@@ -285,10 +287,10 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(
             PermissionDenied,
-            "Only the assigned section editor can create a publishing draft",
+            "You cannot create a publishing draft for this submission.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=other_editor,
+                actor=other_editor,
                 submission=submission,
             )
 
@@ -306,7 +308,7 @@ class PublishingServiceTests(TestCase):
             "Only the latest accepted version can be moved to publishing.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -326,7 +328,7 @@ class PublishingServiceTests(TestCase):
             "Only the latest accepted version can be moved to publishing.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -335,13 +337,13 @@ class PublishingServiceTests(TestCase):
     def test_cannot_create_duplicate_draft_for_submission(self):
         submission = self._create_submission()
         PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
         with self.assertRaises(ValidationError):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -350,7 +352,7 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(ValidationError, "manuscript file"):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -363,7 +365,7 @@ class PublishingServiceTests(TestCase):
         submission = self._create_submission(version_file=long_object_path)
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -372,7 +374,7 @@ class PublishingServiceTests(TestCase):
     def test_publish_article_sets_published_status_and_timestamp(self):
         submission = self._create_submission()
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
         issue = create_current_open_issue()
@@ -709,7 +711,26 @@ class PublishingApiTests(TestCase):
             email="api-author@example.com",
             password="testpass123",
         )
-        self.section = Section.objects.create(name="Artificial Intelligence")
+        self.section_manager_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_MANAGER
+        )
+        self.manager = get_user_model().objects.create_user(
+            username="manager",
+            email="manager@example.com",
+            password="testpass123",
+        )
+        self.manager.roles.add(self.section_manager_role)
+
+        self.other_manager = get_user_model().objects.create_user(
+            username="other-manager",
+            email="other-manager@example.com",
+            password="testpass123",
+        )
+        self.other_manager.roles.add(self.section_manager_role)
+        self.section = Section.objects.create(
+            name="Artificial Intelligence",
+            manager=self.manager,
+        )
         self.submission = Submission.objects.create(
             title="Reviewer Recommendation for Journals",
             abstract="An accepted manuscript about reviewer recommendation.",
@@ -889,7 +910,7 @@ class PublishingApiTests(TestCase):
             str(self.submission_version.id),
         )
 
-    def test_unassigned_user_create_draft_endpoint_returns_403(self):
+    def test_unassigned_user_create_draft_endpoint_returns_404(self):
         unassigned_editor = get_user_model().objects.create_user(
             username="unassigned-editor",
             email="unassigned-editor@example.com",
@@ -902,8 +923,7 @@ class PublishingApiTests(TestCase):
             f"/api/v1/publishing/submissions/{self.submission.id}/create-draft/",
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertIn("Only the assigned section editor", str(response.data))
+        self.assertEqual(response.status_code, 404)
 
     def test_non_section_editor_create_draft_endpoint_returns_403(self):
         non_editor = get_user_model().objects.create_user(
@@ -919,7 +939,10 @@ class PublishingApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("Only section editors", str(response.data))
+        self.assertIn(
+            "You do not have permission to access publishing management.",
+            str(response.data),
+        )
 
     def test_duplicate_create_draft_endpoint_returns_clean_400(self):
         self.client.force_authenticate(self.user)
@@ -1463,9 +1486,9 @@ class PublishingApiTests(TestCase):
         self.assertEqual(article.download_count, 0)
 
     def test_publish_endpoint_publishes_draft_article(self):
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.manager)
         article = PublishingService.create_draft_from_submission(
-            editor=self.user,
+            actor=self.manager,
             submission=self.submission,
         )
         issue = create_current_open_issue()
@@ -1483,7 +1506,7 @@ class PublishingApiTests(TestCase):
     def test_patch_cannot_change_article_status_directly(self):
         self.client.force_authenticate(self.user)
         article = PublishingService.create_draft_from_submission(
-            editor=self.user,
+            actor=self.user,
             submission=self.submission,
         )
 
@@ -1499,7 +1522,7 @@ class PublishingApiTests(TestCase):
         self.assertEqual(response.data["status"], PublishedArticle.Status.DRAFT)
 
     def test_publish_endpoint_rejects_already_published_article(self):
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.manager)
         article = self._create_article(
             status=PublishedArticle.Status.PUBLISHED,
             slug="already-published",
@@ -1511,7 +1534,7 @@ class PublishingApiTests(TestCase):
         self.assertIn("already published", str(response.data))
 
     def test_publish_endpoint_rejects_retracted_article(self):
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.manager)
         article = self._create_article(
             status=PublishedArticle.Status.RETRACTED,
             slug="retracted-management",
@@ -1521,3 +1544,117 @@ class PublishingApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Retracted articles cannot be published", str(response.data))
+
+    def test_manager_can_create_draft_for_managed_section(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-create-draft",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_unrelated_manager_cannot_create_draft(self):
+        self.client.force_authenticate(self.other_manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-create-draft",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_manager_can_publish_article_from_managed_section(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="managed-draft",
+        )
+        create_current_open_issue()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-article-publish",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        article.refresh_from_db()
+        self.assertEqual(
+            article.status,
+            PublishedArticle.Status.PUBLISHED,
+        )
+
+    def test_unrelated_manager_cannot_publish_article(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="unrelated-manager-draft",
+        )
+        create_current_open_issue()
+        self.client.force_authenticate(self.other_manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-article-publish",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_section_editor_cannot_publish_article(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="section-editor-draft",
+        )
+        create_current_open_issue()
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            reverse(
+                "publishing-article-publish",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_list_is_limited_to_managed_sections(self):
+        managed_article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="managed-list-draft",
+        )
+        other_section = Section.objects.create(
+            name="Other Managed Section",
+            manager=self.other_manager,
+        )
+        self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="other-managed-list-draft",
+            section=other_section,
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse("publishing-article-list")
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        returned_ids = {
+            item["id"]
+            for item in response.data["results"]
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {str(managed_article.id)},
+        )

@@ -24,7 +24,7 @@ class PublishingService:
     @transaction.atomic
     def create_draft_from_submission(
         *,
-        editor,
+        actor,
         submission: Submission,
     ) -> PublishedArticle:
         """
@@ -37,15 +37,33 @@ class PublishingService:
             .get(pk=submission.pk)
         )
 
-        if not getattr(editor, "is_authenticated", False) or not editor.has_role(
-            Role.RoleName.SECTION_EDITOR
-        ):
-            raise PermissionDenied("Only section editors can create publishing drafts.")
+        role_names = set(
+            actor.roles.values_list("name", flat=True)
+        ) if getattr(actor, "is_authenticated", False) else set()
 
-        if submission.assigned_editor_id != editor.id:
+        has_global_access = (
+            getattr(actor, "is_superuser", False)
+            or Role.RoleName.EDITOR_IN_CHIEF in role_names
+            or Role.RoleName.ADMIN in role_names
+        )
+
+        manages_submission_section = (
+            Role.RoleName.SECTION_MANAGER in role_names
+            and submission.section.manager_id == actor.id
+        )
+
+        is_assigned_section_editor = (
+            Role.RoleName.SECTION_EDITOR in role_names
+            and submission.assigned_editor_id == actor.id
+        )
+
+        if not (
+            has_global_access
+            or manages_submission_section
+            or is_assigned_section_editor
+        ):
             raise PermissionDenied(
-                "Only the assigned section editor can create a publishing draft "
-                "for this submission."
+                "You cannot create a publishing draft for this submission."
             )
 
         if submission.status != Submission.Status.ACCEPTED:

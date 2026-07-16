@@ -10,6 +10,11 @@ urlpatterns = [
         name="publishing-create-draft",
     ),
     path(
+        "publishing/articles/",
+        views.ArticleManagementListView.as_view(),
+        name="publishing-article-list",
+    ),
+    path(
         "publishing/articles/<uuid:article_id>/",
         views.ArticleManagementDetailView.as_view(),
         name="publishing-article-detail",
