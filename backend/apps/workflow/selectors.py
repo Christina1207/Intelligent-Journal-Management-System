@@ -29,6 +29,33 @@ EDITOR_WORKLOAD_STATUSES = (
     Submission.Status.REVISED,
 )
 
+EDITOR_ACTIVE_STATUSES = EDITOR_WORKLOAD_STATUSES
+
+
+def active_submissions_for_editor(user):
+    """
+    Return active manuscripts currently assigned to this Section Editor.
+
+    Finalized submissions are excluded from the working queue.
+    """
+    if (
+        not user
+        or not user.is_authenticated
+        or not user.has_role(Role.RoleName.SECTION_EDITOR)
+    ):
+        return Submission.objects.none()
+
+    return (
+        Submission.objects.filter(
+            assigned_editor=user,
+            status__in=EDITOR_ACTIVE_STATUSES,
+        )
+        .select_related(
+            "section",
+            "author",
+        )
+        .order_by("-submitted_at")
+    )
 
 def eligible_section_editors_for(submission):
     """

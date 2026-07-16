@@ -677,3 +677,150 @@ class ReviewerAssignmentRegressionTests(APITestCase):
         )
 
         self.assertTrue(assignment.is_overdue)
+
+class EditorQueueApiTests(APITestCase):
+    def setUp(self):
+        self.editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR
+        )
+
+        user_model = get_user_model()
+
+        self.editor = user_model.objects.create_user(
+            username="queue-editor",
+            email="queue-editor@example.com",
+            password="testpass123",
+        )
+        self.editor.roles.add(self.editor_role)
+
+        self.other_editor = user_model.objects.create_user(
+            username="other-queue-editor",
+            email="other-queue-editor@example.com",
+            password="testpass123",
+        )
+        self.other_editor.roles.add(self.editor_role)
+
+        self.author = user_model.objects.create_user(
+            username="queue-author",
+            email="queue-author@example.com",
+            password="testpass123",
+        )
+        self.author.roles.add(self.author_role)
+
+        self.section = Section.objects.create(
+            name="Editor Queue Tests"
+        )
+
+    def create_submission(
+        self,
+        *,
+        title,
+        status,
+        assigned_editor,
+    ):
+        submission = Submission.objects.create(
+            title=title,
+            abstract="Queue test abstract.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=assigned_editor,
+            status=status,
+        )
+        SubmissionVersion.objects.create(
+            submission=submission,
+            version_number=1,
+            file=f"submissions/{submission.id}/v1/manuscript.pdf",
+        )
+        return submission
+
+    def test_editor_queue_requires_section_editor_role(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(reverse("editor-queue"))
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_editor_queue_contains_all_active_assigned_statuses(self):
+        active_statuses = [
+            Submission.Status.ASSIGNED,
+            Submission.Status.UNDER_REVIEW,
+            Submission.Status.SUSPENDED,
+            Submission.Status.REVIEWED,
+            Submission.Status.UNDER_REVISION,
+            Submission.Status.REVISED,
+        ]
+
+        expected_ids = set()
+
+        for submission_status in active_statuses:
+            submission = self.create_submission(
+                title=f"Active {submission_status}",
+                status=submission_status,
+                assigned_editor=self.editor,
+            )
+            expected_ids.add(str(submission.id))
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(reverse("editor-queue"))
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_ids = {
+            item["id"]
+            for item in response.data["results"]
+        }
+
+        self.assertEqual(returned_ids, expected_ids)
+
+    def test_editor_queue_excludes_finalized_submissions(self):
+        for submission_status in [
+            Submission.Status.ACCEPTED,
+            Submission.Status.REJECTED,
+        ]:
+            self.create_submission(
+                title=f"Finalized {submission_status}",
+                status=submission_status,
+                assigned_editor=self.editor,
+            )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(reverse("editor-queue"))
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(response.data["results"], [])
+
+    def test_editor_queue_excludes_another_editors_submission(self):
+        other_submission = self.create_submission(
+            title="Another editor submission",
+            status=Submission.Status.UNDER_REVIEW,
+            assigned_editor=self.other_editor,
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(reverse("editor-queue"))
+
+        returned_ids = {
+            item["id"]
+            for item in response.data["results"]
+        }
+
+        self.assertNotIn(
+            str(other_submission.id),
+            returned_ids,
+        )

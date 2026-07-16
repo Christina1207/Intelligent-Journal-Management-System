@@ -17,6 +17,10 @@ from apps.reviews.serializers import (
     ReviewSerializer,
     SubmissionVersionDecisionSerializer,
 )
+from apps.reviews.selectors import (
+    assigned_editor_reviewer_assignment_or_404,
+    assigned_editor_submission_or_404,
+)
 from config.constants import REVIEWER_RECOMMENDATION_COUNT
 from apps.core.recommendations import RecommendationService
 from apps.core.storage import StorageService
@@ -29,9 +33,9 @@ class AssignReviewerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, submission_id):
-        submission = get_object_or_404(
-            Submission.objects.select_related('author', 'section'),
-            pk=submission_id,
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
         )
 
         serializer = ReviewerAssignmentCreateSerializer(data=request.data)
@@ -67,15 +71,10 @@ class SubmissionReviewsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, submission_id):
-        submission = get_object_or_404(Submission.objects.select_related('assigned_editor'), pk=submission_id)
-
-        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
-            raise PermissionDenied("Only section editors can view submission reviews.")
-        
-        if submission.assigned_editor_id != request.user.id:
-            raise PermissionDenied(
-                "Only the assigned section editor can view reviews for this submission."
-            )
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
+        )
 
         if submission.status != Submission.Status.REVIEWED:
             return Response(
@@ -118,7 +117,10 @@ class ExpireAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, assignment_id):
-        assignment = get_object_or_404(ReviewerAssignment.objects.select_related("version__submission"), pk=assignment_id)
+        assignment = assigned_editor_reviewer_assignment_or_404(
+            editor=request.user,
+            assignment_id=assignment_id,
+        )
 
         assignment = ReviewService.mark_assignment_expired(
             editor=request.user,
@@ -170,9 +172,9 @@ class RespondToAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, assignment_id):
-        assignment = get_object_or_404(
-            ReviewerAssignment.objects.select_related('version__submission__section', 'reviewer'),
-            pk=assignment_id,
+        assignment = assigned_editor_reviewer_assignment_or_404(
+            editor=request.user,
+            assignment_id=assignment_id,
         )
 
         serializer = ReviewerAssignmentResponseSerializer(data=request.data)
@@ -227,17 +229,13 @@ class SubmitReviewView(APIView):
 # ------------------------------------------------------------------ #
 
 class ReviewerRecommendationsView(APIView):
-    from django.core.exceptions import PermissionDenied
     permission_classes = [IsAuthenticated]
 
     def get(self, request, submission_id):
 
-        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
-            raise PermissionDenied("Only section editors can view recommendations.")
-
-        submission = get_object_or_404(
-            Submission.objects.select_related("author"),
-            pk=submission_id,
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
         )
 
         # Limit capped at REVIEWER_RECOMMENDATION_COUNT — prevents abuse
@@ -266,9 +264,9 @@ class MakeEditorDecisionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, submission_id):
-        submission = get_object_or_404(
-            Submission.objects.select_related("assigned_editor"),
-            pk=submission_id,
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
         )
 
         serializer = EditorDecisionSerializer(data=request.data)

@@ -28,6 +28,7 @@ from .services import AssignmentService, TriageService
 from .permissions import IsSectionManager
 from .selectors import (
     MANAGER_MONITORED_STATUSES,
+    active_submissions_for_editor,
     eligible_section_editors_for,
     monitored_submissions_for_manager,
     submissions_managed_by,
@@ -104,15 +105,9 @@ class EditorQueueView(generics.ListAPIView):
     serializer_class = SubmissionListSerializer
 
     def get_queryset(self):
-        #TODO: shouldn't this also include UNDER_REVIEW submissions? or should those only be visible in the editor's review queue?
-        return (
-            Submission.objects.filter(
-            assigned_editor=self.request.user,
-            status=Submission.Status.ASSIGNED,
-            )
-            .select_related("section", "author")
-            .order_by("-submitted_at")
-        )
+        return active_submissions_for_editor(
+            self.request.user
+        ).select_related("section", "author").order_by("-submitted_at")
     
 def get_managed_submission_or_404(request, submission_id):
     return get_object_or_404(
