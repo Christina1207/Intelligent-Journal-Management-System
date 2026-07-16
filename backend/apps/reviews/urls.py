@@ -8,6 +8,7 @@ from apps.reviews.views import (
     RespondToAssignmentView,
     SubmitReviewView,
     ReviewerManuscriptDownloadView,
+    ReviewerCandidateSearchView,
 )
 from apps.reviews.views import ReviewerRecommendationsView
 
@@ -36,6 +37,11 @@ editor_urlpatterns = [
         'submissions/<uuid:submission_id>/decision/',
         MakeEditorDecisionView.as_view(),
         name='submission-make-editor-decision',
+    ),
+    path(
+    "submissions/<uuid:submission_id>/reviewer-candidates/",
+    ReviewerCandidateSearchView.as_view(),
+    name="reviewer-candidates",
     ),
 ]
 

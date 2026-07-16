@@ -155,3 +155,189 @@ class AssignedEditorAuthorizationTests(APITestCase):
                 reviewer=self.reviewer,
             ).exists()
         )
+    
+    def test_reviewer_invitation_rejects_past_response_deadline(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() - timedelta(days=1)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=10)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("response_deadline", response.data)
+
+
+    def test_reviewer_invitation_rejects_past_review_deadline(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=2)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() - timedelta(days=1)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("review_deadline", response.data)
+
+
+    def test_review_deadline_must_follow_response_deadline(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=10)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=5)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("review_deadline", response.data)
+
+    def test_assigned_editor_can_search_reviewer_candidates(self):
+        self.reviewer.first_name = "Grace"
+        self.reviewer.last_name = "Hopper"
+        self.reviewer.affiliation = "Computing Research Lab"
+        self.reviewer.save(
+            update_fields=[
+                "first_name",
+                "last_name",
+                "affiliation",
+            ]
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            ),
+            {"search": "Hopper"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["candidates"][0]["id"],
+            str(self.reviewer.id),
+        )
+
+
+    def test_unassigned_editor_cannot_search_candidates(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+
+    def test_candidate_search_excludes_already_invited_reviewer(self):
+        ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline=(
+                timezone.now() + timedelta(days=3)
+            ),
+            review_deadline=(
+                timezone.now() + timedelta(days=14)
+            ),
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        returned_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(
+            str(self.reviewer.id),
+            returned_ids,
+        )
+
+
+    def test_candidate_search_excludes_inactive_reviewer(self):
+        self.reviewer.status = get_user_model().Status.INACTIVE
+        self.reviewer.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        returned_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(
+            str(self.reviewer.id),
+            returned_ids,
+        )

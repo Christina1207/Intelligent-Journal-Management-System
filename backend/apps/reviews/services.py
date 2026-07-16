@@ -63,9 +63,34 @@ class ReviewService:
             )
 
         # --- deadline sanity ---
+        now = timezone.now()
+
+        if response_deadline <= now:
+            raise ValidationError(
+                {
+                    "response_deadline": (
+                        "Response deadline must be in the future."
+                    )
+                }
+            )
+
+        if review_deadline <= now:
+            raise ValidationError(
+                {
+                    "review_deadline": (
+                        "Review deadline must be in the future."
+                    )
+                }
+            )
+
         if response_deadline >= review_deadline:
             raise ValidationError(
-                "Response deadline must be earlier than the review deadline."
+                {
+                    "review_deadline": (
+                        "Review deadline must be later than "
+                        "the response deadline."
+                    )
+                }
             )
         # Assign to the latest version of the submission
         current_version = submission.versions.order_by("-version_number").first()

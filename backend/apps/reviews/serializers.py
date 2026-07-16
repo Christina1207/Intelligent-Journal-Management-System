@@ -1,5 +1,9 @@
 from rest_framework import serializers
 
+from django.utils import timezone
+from django.core.exceptions import ObjectDoesNotExist
+
+from apps.accounts.models import User
 from apps.workflow.models import ReviewerAssignment
 from apps.reviews.models import Review
 from apps.submissions.models import SubmissionVersion
@@ -42,6 +46,58 @@ class SubmissionVersionBriefSerializer(serializers.Serializer):
     submitted_at = serializers.DateTimeField()
     decision = serializers.CharField()
 
+
+class ReviewerCandidateSearchQuerySerializer(serializers.Serializer):
+    search = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=100,
+        default="",
+    )
+    limit = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=50,
+        default=20,
+    )
+
+
+class ReviewerCandidateSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    keywords = serializers.SerializerMethodField()
+    active_assignment_count = serializers.IntegerField(
+        read_only=True,
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "full_name",
+            "email",
+            "orcid",
+            "affiliation",
+            "country",
+            "keywords",
+            "active_assignment_count",
+        ]
+        read_only_fields = fields
+
+    def get_full_name(self, reviewer):
+        full_name = (
+            f"{reviewer.first_name} {reviewer.last_name}"
+        ).strip()
+
+        return full_name or reviewer.username
+
+    def get_keywords(self, reviewer):
+        try:
+            return reviewer.reviewer_profile.keywords or []
+        except ObjectDoesNotExist:
+            return []
+
 # ------------------------------------------------------------------ #
 #  REVIEWER ASSIGNMENT — INPUT                                        #
 # ------------------------------------------------------------------ #
@@ -56,10 +112,31 @@ class ReviewerAssignmentCreateSerializer(serializers.Serializer):
     review_deadline = serializers.DateTimeField()
 
     def validate(self, attrs):
-        if attrs['response_deadline'] >= attrs['review_deadline']:
-            raise serializers.ValidationError(
-                "Response deadline must be earlier than the review deadline."
+        response_deadline = attrs["response_deadline"]
+        review_deadline = attrs["review_deadline"]
+        now = timezone.now()
+
+        errors = {}
+
+        if response_deadline <= now:
+            errors["response_deadline"] = (
+                "Response deadline must be in the future."
             )
+
+        if review_deadline <= now:
+            errors["review_deadline"] = (
+                "Review deadline must be in the future."
+            )
+
+        if response_deadline >= review_deadline:
+            errors["review_deadline"] = (
+                "Review deadline must be later than "
+                "the response deadline."
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
         return attrs
 
 

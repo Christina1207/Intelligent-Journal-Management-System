@@ -1,7 +1,9 @@
 from django.shortcuts import get_object_or_404
+from django.db.models import Count, Q
+
 from rest_framework.exceptions import PermissionDenied
 
-from apps.accounts.models import Role
+from apps.accounts.models import Role, User
 from apps.submissions.models import Submission
 from apps.workflow.models import ReviewerAssignment
 
@@ -59,4 +61,78 @@ def assigned_editor_reviewer_assignment_or_404(
         ),
         pk=assignment_id,
         version__submission__assigned_editor=editor,
+    )
+
+ACTIVE_REVIEWER_ASSIGNMENT_STATUSES = (
+    ReviewerAssignment.Status.PENDING,
+    ReviewerAssignment.Status.ACCEPTED,
+)
+
+
+def reviewer_candidates_for(
+    *,
+    submission,
+    search="",
+):
+    """
+    Return active reviewer candidates for manual editor selection.
+
+    Excludes:
+    - the submission author;
+    - inactive users;
+    - users without the Reviewer role;
+    - reviewers already holding a pending or accepted assignment for
+      any version of this submission.
+    """
+    candidates = (
+        User.objects.filter(
+            status=User.Status.ACTIVE,
+            roles__name=Role.RoleName.REVIEWER,
+        )
+        .exclude(pk=submission.author_id)
+        .exclude(
+            reviewer_assignments__version__submission=submission,
+            reviewer_assignments__status__in=(
+                ACTIVE_REVIEWER_ASSIGNMENT_STATUSES
+            ),
+        )
+        .select_related("reviewer_profile")
+        .annotate(
+            active_assignment_count=Count(
+                "reviewer_assignments",
+                filter=Q(
+                    reviewer_assignments__status__in=(
+                        ACTIVE_REVIEWER_ASSIGNMENT_STATUSES
+                    )
+                ),
+                distinct=True,
+            )
+        )
+    )
+
+    normalized_search = search.strip()
+
+    if normalized_search:
+        candidates = candidates.filter(
+            Q(username__icontains=normalized_search)
+            | Q(first_name__icontains=normalized_search)
+            | Q(last_name__icontains=normalized_search)
+            | Q(email__icontains=normalized_search)
+            | Q(affiliation__icontains=normalized_search)
+            | Q(orcid__icontains=normalized_search)
+            | Q(
+                reviewer_profile__biography__icontains=
+                normalized_search
+            )
+        )
+
+    return (
+        candidates
+        .order_by(
+            "active_assignment_count",
+            "last_name",
+            "first_name",
+            "username",
+        )
+        .distinct()
     )

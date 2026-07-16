@@ -16,10 +16,13 @@ from apps.reviews.serializers import (
     ReviewSubmitSerializer,
     ReviewSerializer,
     SubmissionVersionDecisionSerializer,
+    ReviewerCandidateSearchQuerySerializer,
+    ReviewerCandidateSerializer,
 )
 from apps.reviews.selectors import (
     assigned_editor_reviewer_assignment_or_404,
     assigned_editor_submission_or_404,
+    reviewer_candidates_for,
 )
 from config.constants import REVIEWER_RECOMMENDATION_COUNT
 from apps.core.recommendations import RecommendationService
@@ -289,6 +292,44 @@ class MakeEditorDecisionView(APIView):
             status=status.HTTP_200_OK,
         )
     
+class ReviewerCandidateSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, submission_id):
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
+        )
+
+        query_serializer = (
+            ReviewerCandidateSearchQuerySerializer(
+                data=request.query_params
+            )
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        search = query_serializer.validated_data["search"]
+        limit = query_serializer.validated_data["limit"]
+
+        candidates = list(
+            reviewer_candidates_for(
+                submission=submission,
+                search=search,
+            )[:limit]
+        )
+
+        return Response(
+            {
+                "submission_id": str(submission.id),
+                "count": len(candidates),
+                "candidates": ReviewerCandidateSerializer(
+                    candidates,
+                    many=True,
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 class ReviewerManuscriptDownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
