@@ -84,6 +84,11 @@ def reviewer_candidates_for(
     - reviewers already holding a pending or accepted assignment for
       any version of this submission.
     """
+    current_version = (
+        submission.versions
+        .order_by("-version_number")
+        .first()
+    )
     candidates = (
         User.objects.filter(
             status=User.Status.ACTIVE,
@@ -109,6 +114,10 @@ def reviewer_candidates_for(
             )
         )
     )
+    if current_version is not None:
+        candidates = candidates.exclude(
+            reviewer_assignments__version=current_version,
+        )
 
     normalized_search = search.strip()
 

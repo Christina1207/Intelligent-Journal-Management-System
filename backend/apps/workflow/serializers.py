@@ -363,6 +363,7 @@ class ManagerReviewProgressSerializer(serializers.Serializer):
     reviews_submitted = serializers.IntegerField()
     overdue_invitations = serializers.IntegerField()
     overdue_reviews = serializers.IntegerField()
+    invitations_cancelled = serializers.IntegerField()
 
 
 class ManagerMonitoringSubmissionSerializer(
@@ -470,6 +471,11 @@ class ManagerMonitoringSubmissionSerializer(
                 == assignment.Status.ACCEPTED
                 and not has_review(assignment)
                 and assignment.review_deadline < now
+                for assignment in assignments
+            ),
+            "invitations_cancelled": sum(
+                assignment.status
+                == assignment.Status.CANCELLED
                 for assignment in assignments
             ),
         }

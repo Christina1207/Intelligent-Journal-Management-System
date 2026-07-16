@@ -48,20 +48,51 @@ class ReviewService:
         # Uniqueness enforced on current version only — append-only model
         # TODO: when reviewer carry-forward is active, also check previous versions
         # to avoid assigning a reviewer who was carried forward. Defer to Sprint 4.
-        active_exists = ReviewerAssignment.objects.filter(
-            version__submission=submission,
-            reviewer=reviewer,
-            status__in=[
-                ReviewerAssignment.Status.PENDING,
-                ReviewerAssignment.Status.ACCEPTED,
-            ],
-        ).exists()
+        
+        # Assign to the latest version of the submission
+        current_version = submission.versions.order_by("-version_number").first()
+        if current_version is None:
+          raise ValidationError("Submission has no versions. Cannot assign reviewer.")
 
-        if active_exists:
+
+        already_invited_for_round = (
+            ReviewerAssignment.objects.filter(
+                version=current_version,
+                reviewer=reviewer,
+            ).exists()
+        )
+
+        if already_invited_for_round:
             raise ValidationError(
-                "This reviewer already has an active assignment for this submission."
+                {
+                    "reviewer_id": (
+                        "This reviewer has already been invited for "
+                        "the current review round."
+                    )
+                }
             )
 
+        has_active_assignment = (
+            ReviewerAssignment.objects.filter(
+                version__submission=submission,
+                reviewer=reviewer,
+                status__in=[
+                    ReviewerAssignment.Status.PENDING,
+                    ReviewerAssignment.Status.ACCEPTED,
+                ],
+            ).exists()
+        )
+
+        if has_active_assignment:
+            raise ValidationError(
+                {
+                    "reviewer_id": (
+                        "This reviewer already has an active assignment "
+                        "for this submission."
+                    )
+                }
+            )
+        
         # --- deadline sanity ---
         now = timezone.now()
 
@@ -92,11 +123,6 @@ class ReviewService:
                     )
                 }
             )
-        # Assign to the latest version of the submission
-        current_version = submission.versions.order_by("-version_number").first()
-        if current_version is None:
-          raise ValidationError("Submission has no versions. Cannot assign reviewer.")
-
         # --- create assignment ---
         assignment = ReviewerAssignment.objects.create(
             version=current_version,
@@ -363,4 +389,135 @@ class ReviewService:
         submission.save(update_fields=["status"])
 
         return current_version
-     
+
+    @staticmethod
+    @transaction.atomic
+    def cancel_assignment(
+        *,
+        editor,
+        assignment,
+        reason,
+    ):
+        assignment = (
+            ReviewerAssignment.objects
+            .select_for_update()
+            .select_related(
+                "reviewer",
+                "version",
+                "version__submission",
+                "version__submission__assigned_editor",
+            )
+            .get(pk=assignment.pk)
+        )
+
+        submission = (
+            Submission.objects
+            .select_for_update()
+            .get(pk=assignment.version.submission_id)
+        )
+
+        if not editor.has_role(Role.RoleName.SECTION_EDITOR):
+            raise PermissionDenied(
+                "Only a Section Editor can cancel reviewer assignments."
+            )
+
+        if submission.assigned_editor_id != editor.id:
+            raise PermissionDenied(
+                "Only the assigned Section Editor can cancel "
+                "reviewer assignments for this submission."
+            )
+
+        latest_version = (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+        if (
+            latest_version is None
+            or assignment.version_id != latest_version.id
+        ):
+            raise ValidationError(
+                "Only assignments from the current review round "
+                "can be cancelled."
+            )
+
+        if assignment.status not in {
+            ReviewerAssignment.Status.PENDING,
+            ReviewerAssignment.Status.ACCEPTED,
+        }:
+            raise ValidationError(
+                {
+                    "assignment": (
+                        "Only pending or accepted reviewer assignments "
+                        "can be cancelled."
+                    )
+                }
+            )
+
+        if hasattr(assignment, "review"):
+            raise ValidationError(
+                {
+                    "assignment": (
+                        "A reviewer assignment cannot be cancelled "
+                        "after its review has been submitted."
+                    )
+                }
+            )
+
+        assignment.status = ReviewerAssignment.Status.CANCELLED
+        assignment.cancelled_at = timezone.now()
+        assignment.cancelled_by = editor
+        assignment.cancellation_reason = reason
+        assignment.save(
+            update_fields=[
+                "status",
+                "cancelled_at",
+                "cancelled_by",
+                "cancellation_reason",
+            ]
+        )
+
+        return assignment
+
+
+    @staticmethod
+    @transaction.atomic
+    def replace_assignment(
+        *,
+        editor,
+        assignment,
+        replacement_reviewer,
+        response_deadline,
+        review_deadline,
+        reason,
+    ):
+        if assignment.reviewer_id == replacement_reviewer.id:
+            raise ValidationError(
+                {
+                    "reviewer_id": (
+                        "Select a different reviewer as the replacement."
+                    )
+                }
+            )
+
+        cancelled_assignment = ReviewService.cancel_assignment(
+            editor=editor,
+            assignment=assignment,
+            reason=reason,
+        )
+
+        submission = cancelled_assignment.version.submission
+
+        replacement_assignment = ReviewService.assign_reviewer(
+            editor=editor,
+            reviewer=replacement_reviewer,
+            submission=submission,
+            response_deadline=response_deadline,
+            review_deadline=review_deadline,
+        )
+
+        replacement_assignment.replaces = cancelled_assignment
+        replacement_assignment.save(update_fields=["replaces"])
+
+        return cancelled_assignment, replacement_assignment    

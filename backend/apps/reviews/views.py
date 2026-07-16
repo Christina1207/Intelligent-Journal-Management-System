@@ -18,7 +18,10 @@ from apps.reviews.serializers import (
     SubmissionVersionDecisionSerializer,
     ReviewerCandidateSearchQuerySerializer,
     ReviewerCandidateSerializer,
+    ReviewerAssignmentCancelSerializer,
+    ReviewerAssignmentReplaceSerializer,
 )
+
 from apps.reviews.selectors import (
     assigned_editor_reviewer_assignment_or_404,
     assigned_editor_submission_or_404,
@@ -377,4 +380,98 @@ class ReviewerManuscriptDownloadView(APIView):
                 "manuscript_url": manuscript_url,
             },
             status=status.HTTP_200_OK,
+        )
+
+class CancelReviewerAssignmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, assignment_id):
+        assignment = (
+            assigned_editor_reviewer_assignment_or_404(
+                editor=request.user,
+                assignment_id=assignment_id,
+            )
+        )
+
+        serializer = ReviewerAssignmentCancelSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        assignment = ReviewService.cancel_assignment(
+            editor=request.user,
+            assignment=assignment,
+            reason=serializer.validated_data["reason"],
+        )
+
+        return Response(
+            ReviewerAssignmentSerializer(
+                assignment,
+                context={
+                    "is_editor": True,
+                    "request": request,
+                },
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ReplaceReviewerAssignmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, assignment_id):
+        assignment = (
+            assigned_editor_reviewer_assignment_or_404(
+                editor=request.user,
+                assignment_id=assignment_id,
+            )
+        )
+
+        serializer = ReviewerAssignmentReplaceSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        replacement_reviewer = get_object_or_404(
+            User,
+            pk=serializer.validated_data["reviewer_id"],
+        )
+
+        cancelled, replacement = (
+            ReviewService.replace_assignment(
+                editor=request.user,
+                assignment=assignment,
+                replacement_reviewer=replacement_reviewer,
+                response_deadline=serializer.validated_data[
+                    "response_deadline"
+                ],
+                review_deadline=serializer.validated_data[
+                    "review_deadline"
+                ],
+                reason=serializer.validated_data["reason"],
+            )
+        )
+
+        return Response(
+            {
+                "cancelled_assignment": (
+                    ReviewerAssignmentSerializer(
+                        cancelled,
+                        context={
+                            "is_editor": True,
+                            "request": request,
+                        },
+                    ).data
+                ),
+                "replacement_assignment": (
+                    ReviewerAssignmentSerializer(
+                        replacement,
+                        context={
+                            "is_editor": True,
+                            "request": request,
+                        },
+                    ).data
+                ),
+            },
+            status=status.HTTP_201_CREATED,
         )

@@ -99,6 +99,12 @@ export function ReviewProgress({
             {progress.invitations_expired}
           </dd>
         </div>
+        <div>
+          <dt className="text-xs text-slate-500">Cancelled</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+            {progress.invitations_cancelled}
+          </dd>
+        </div>
       </dl>
 
       {hasOverdueItems ? (

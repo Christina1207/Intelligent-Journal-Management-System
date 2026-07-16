@@ -139,6 +139,24 @@ class ReviewerAssignmentCreateSerializer(serializers.Serializer):
 
         return attrs
 
+class ReviewerAssignmentCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+        min_length=10,
+        max_length=2000,
+    )
+
+
+class ReviewerAssignmentReplaceSerializer(
+    ReviewerAssignmentCreateSerializer
+):
+    reason = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+        min_length=10,
+        max_length=2000,
+    )
 
 class ReviewerAssignmentResponseSerializer(serializers.Serializer):
     """
@@ -165,7 +183,12 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     version = serializers.SerializerMethodField()
     reviewer    = UserBriefSerializer(read_only=True)
     assigned_by = UserBriefSerializer(read_only=True)
-
+    cancelled_by = UserBriefSerializer(read_only=True)
+    replaces = serializers.UUIDField(
+        source="replaces_id",
+        allow_null=True,
+        read_only=True,
+    )
     class Meta:
         model  = ReviewerAssignment
         fields = [
@@ -179,6 +202,10 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
             'review_deadline',
             'assigned_at',
             'is_overdue',
+            "cancelled_at",
+            "cancelled_by",
+            "cancellation_reason",
+            "replaces",
         ]
         
     def get_submission(self, instance):
@@ -192,7 +219,9 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         is_editor = self.context.get('is_editor', False)
         if not is_editor:
-            data.pop('assigned_by', None)
+            data.pop("assigned_by", None)
+            data.pop("cancelled_by", None)
+            data.pop("replaces", None)
         return data
 
 

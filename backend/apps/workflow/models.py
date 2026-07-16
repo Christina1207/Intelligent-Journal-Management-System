@@ -72,6 +72,7 @@ class ReviewerAssignment(models.Model):
         ACCEPTED = 'ACCEPTED', 'Accepted'
         DECLINED = 'DECLINED', 'Declined'
         EXPIRED  = 'EXPIRED',  'Expired'
+        CANCELLED = "CANCELLED", "Cancelled"
         #OVERDUE  = 'OVERDUE',  'Overdue'
 
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -110,6 +111,31 @@ class ReviewerAssignment(models.Model):
     response_deadline = models.DateTimeField()
     review_deadline   = models.DateTimeField()
     assigned_at       = models.DateTimeField(auto_now_add=True)
+    cancelled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="reviewer_assignments_cancelled",
+        null=True,
+        blank=True,
+    )
+    cancellation_reason = models.TextField(
+        blank=True,
+        default="",
+    )
+    replaces = models.OneToOneField(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="replacement",
+        null=True,
+        blank=True,
+        help_text=(
+            "The cancelled reviewer assignment replaced by this invitation."
+        ),
+    )
     
     @property
     def is_overdue(self):

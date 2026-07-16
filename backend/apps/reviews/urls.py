@@ -1,7 +1,9 @@
 from django.urls import path
 from apps.reviews.views import (
     AssignReviewerView,
+    CancelReviewerAssignmentView,
     MakeEditorDecisionView,
+    ReplaceReviewerAssignmentView,
     SubmissionReviewsView,
     ExpireAssignmentView,
     MyAssignmentsView,
@@ -29,6 +31,16 @@ editor_urlpatterns = [
         name='expire-assignment',
     ),
     path(
+        "assignments/<uuid:assignment_id>/cancel/",
+        CancelReviewerAssignmentView.as_view(),
+        name="cancel-assignment",
+    ),
+    path(
+        "assignments/<uuid:assignment_id>/replace/",
+        ReplaceReviewerAssignmentView.as_view(),
+        name="replace-assignment",
+    ),
+    path(
         'submissions/<uuid:submission_id>/reviewer-recommendations/',
         ReviewerRecommendationsView.as_view(),
         name='reviewer-recommendations',
@@ -39,9 +51,9 @@ editor_urlpatterns = [
         name='submission-make-editor-decision',
     ),
     path(
-    "submissions/<uuid:submission_id>/reviewer-candidates/",
-    ReviewerCandidateSearchView.as_view(),
-    name="reviewer-candidates",
+        "submissions/<uuid:submission_id>/reviewer-candidates/",
+        ReviewerCandidateSearchView.as_view(),
+        name="reviewer-candidates",
     ),
 ]
 

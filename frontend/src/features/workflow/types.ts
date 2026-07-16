@@ -57,6 +57,7 @@ export type ManagerReviewProgress = {
   reviews_submitted: number;
   overdue_invitations: number;
   overdue_reviews: number;
+  invitations_cancelled: number;
 };
 
 export type ManagerAttentionFlag =
