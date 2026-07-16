@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
+import { EditorReassignmentDialog } from "@/features/workflow/components/assignment/editor-reassignment-dialog";
 import { AttentionFlagBadge } from "@/features/workflow/components/attention-flag-badge";
 import { ReviewProgress } from "@/features/workflow/components/review-progress";
 import { getManagerMonitoring } from "@/features/workflow/api/manager-api";
@@ -59,6 +60,8 @@ export function ManagerMonitoringPage() {
   const [page, setPage] = React.useState(1);
   const [statusFilter, setStatusFilter] =
     React.useState<MonitoringFilter>("ALL");
+  const [reassignmentTarget, setReassignmentTarget] =
+    React.useState<ManagerMonitoringSubmission | null>(null);
 
   const apiStatus = statusFilter === "ALL" ? undefined : statusFilter;
 
@@ -166,7 +169,10 @@ export function ManagerMonitoringPage() {
         ) : (
           <>
             <div className="hidden overflow-x-auto xl:block">
-              <MonitoringTable submissions={submissions} />
+              <MonitoringTable
+                submissions={submissions}
+                onReassign={setReassignmentTarget}
+              />
             </div>
 
             <div className="divide-y divide-slate-200 xl:hidden">
@@ -174,6 +180,7 @@ export function ManagerMonitoringPage() {
                 <MonitoringMobileCard
                   key={submission.id}
                   submission={submission}
+                  onReassign={setReassignmentTarget}
                 />
               ))}
             </div>
@@ -213,14 +220,30 @@ export function ManagerMonitoringPage() {
           </nav>
         ) : null}
       </section>
+
+      {reassignmentTarget?.assigned_editor ? (
+        <EditorReassignmentDialog
+          open
+          submissionId={reassignmentTarget.id}
+          submissionTitle={reassignmentTarget.title}
+          currentEditor={reassignmentTarget.assigned_editor}
+          onOpenChange={(open) => {
+            if (!open) {
+              setReassignmentTarget(null);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 function MonitoringTable({
   submissions,
+  onReassign,
 }: {
   submissions: ManagerMonitoringSubmission[];
+  onReassign: (submission: ManagerMonitoringSubmission) => void;
 }) {
   return (
     <table className="min-w-full divide-y divide-slate-200">
@@ -265,6 +288,12 @@ function MonitoringTable({
             className="min-w-60 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
           >
             Attention
+          </th>
+          <th
+            scope="col"
+            className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
+          >
+            Action
           </th>
         </tr>
       </thead>
@@ -335,6 +364,17 @@ function MonitoringTable({
                 <span className="text-sm text-slate-500">No active flags</span>
               )}
             </td>
+
+            <td className="px-5 py-4 text-right align-top">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!submission.assigned_editor}
+                onClick={() => onReassign(submission)}
+              >
+                Reassign
+              </Button>
+            </td>
           </tr>
         ))}
       </tbody>
@@ -344,8 +384,10 @@ function MonitoringTable({
 
 function MonitoringMobileCard({
   submission,
+  onReassign,
 }: {
   submission: ManagerMonitoringSubmission;
+  onReassign: (submission: ManagerMonitoringSubmission) => void;
 }) {
   return (
     <article className="p-5">
@@ -426,6 +468,16 @@ function MonitoringMobileCard({
           </p>
         )}
       </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        disabled={!submission.assigned_editor}
+        onClick={() => onReassign(submission)}
+        className="mt-5 w-full"
+      >
+        Reassign Section Editor
+      </Button>
     </article>
   );
 }

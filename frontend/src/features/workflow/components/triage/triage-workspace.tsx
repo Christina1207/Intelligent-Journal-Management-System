@@ -37,6 +37,7 @@ import type {
   TriageState,
 } from "@/features/workflow/types";
 import { ApiError } from "@/lib/api/errors";
+import { EditorAssignmentPanel } from "@/features/workflow/components/assignment/editor-assignment-panel";
 
 const languageNames = new Intl.DisplayNames(["en"], {
   type: "language",
@@ -482,7 +483,12 @@ function TriageWorkspaceContent({
               placeholder="Record internal editorial observations."
             />
           </section>
-
+          {triage.status === "COMPLETED" && triage.outcome === "PROCEED" ? (
+            <EditorAssignmentPanel
+              submissionId={submission.id}
+              submissionStatus={submission.status}
+            />
+          ) : null}
           <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
             <div className="flex items-center gap-2">
               <ShieldAlert
