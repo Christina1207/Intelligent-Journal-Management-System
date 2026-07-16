@@ -400,7 +400,7 @@ class ReviewService:
     ):
         assignment = (
             ReviewerAssignment.objects
-            .select_for_update()
+            .select_for_update(of=("self",))
             .select_related(
                 "reviewer",
                 "version",

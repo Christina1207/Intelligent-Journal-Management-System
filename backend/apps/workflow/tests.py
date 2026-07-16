@@ -425,6 +425,60 @@ class ManagerAssignmentApiTests(APITestCase):
         )
 
 
+    def test_monitoring_queue_reports_cancelled_invitations(self):
+        reviewer = self.create_user(
+            "cancelled-monitoring-reviewer",
+            Role.RoleName.REVIEWER,
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        self.client.post(
+            reverse(
+                "manager-assign-editor",
+                args=[self.submission.id],
+            ),
+            {
+                "editor_id": str(self.eligible_editor.id),
+            },
+            format="json",
+        )
+
+        version = self.submission.versions.order_by(
+            "-version_number"
+        ).first()
+
+        ReviewerAssignment.objects.create(
+            version=version,
+            reviewer=reviewer,
+            assigned_by=self.eligible_editor,
+            status=ReviewerAssignment.Status.CANCELLED,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+            cancelled_at=timezone.now(),
+            cancelled_by=self.eligible_editor,
+            cancellation_reason=(
+                "The original reviewer became unavailable."
+            ),
+        )
+
+        self.submission.status = Submission.Status.UNDER_REVIEW
+        self.submission.save(update_fields=["status"])
+
+        response = self.client.get(reverse("manager-monitoring"))
+
+        item = next(
+            result
+            for result in response.data["results"]
+            if result["id"] == str(self.submission.id)
+        )
+
+        self.assertEqual(
+            item["review_progress"]["invitations_cancelled"],
+            1,
+        )
+
+
     def test_monitoring_queue_can_filter_by_status(self):
         self.client.force_authenticate(self.manager)
 

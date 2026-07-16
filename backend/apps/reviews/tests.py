@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role
 from apps.journals.models import Section
+from apps.reviews.models import Review
 from apps.submissions.models import Submission, SubmissionVersion
 from apps.workflow.models import ReviewerAssignment
 
@@ -46,6 +47,11 @@ class AssignedEditorAuthorizationTests(APITestCase):
             "candidate-reviewer",
             self.reviewer_role,
         )
+        self.replacement_reviewer = self.create_user(
+            user_model,
+            "replacement-reviewer",
+            self.reviewer_role,
+        )
 
         self.section = Section.objects.create(
             name="Review Authorization Tests"
@@ -75,6 +81,32 @@ class AssignedEditorAuthorizationTests(APITestCase):
         )
         user.roles.add(role)
         return user
+
+    def create_assignment(self, *, reviewer=None, status_value=None):
+        return ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=reviewer or self.reviewer,
+            assigned_by=self.editor,
+            status=status_value or ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+
+    def replacement_payload(self, *, reviewer=None):
+        return {
+            "reviewer_id": str(
+                (reviewer or self.replacement_reviewer).id
+            ),
+            "response_deadline": (
+                timezone.now() + timedelta(days=3)
+            ).isoformat(),
+            "review_deadline": (
+                timezone.now() + timedelta(days=14)
+            ).isoformat(),
+            "reason": (
+                "The original reviewer became unavailable."
+            ),
+        }
 
     def test_non_editor_cannot_view_recommendations(self):
         self.client.force_authenticate(self.author)
@@ -155,6 +187,184 @@ class AssignedEditorAuthorizationTests(APITestCase):
                 reviewer=self.reviewer,
             ).exists()
         )
+
+    def test_accepted_assignment_can_be_replaced(self):
+        assignment = self.create_assignment()
+        before_request = timezone.now()
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            self.replacement_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.CANCELLED,
+        )
+        self.assertEqual(assignment.cancelled_by, self.editor)
+        self.assertGreaterEqual(
+            assignment.cancelled_at,
+            before_request,
+        )
+        self.assertEqual(
+            assignment.cancellation_reason,
+            "The original reviewer became unavailable.",
+        )
+
+        replacement = ReviewerAssignment.objects.get(
+            reviewer=self.replacement_reviewer,
+            version=self.version,
+        )
+        self.assertEqual(
+            replacement.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertEqual(replacement.replaces, assignment)
+
+        self.assertEqual(
+            response.data["cancelled_assignment"]["status"],
+            ReviewerAssignment.Status.CANCELLED,
+        )
+        self.assertEqual(
+            response.data["replacement_assignment"]["status"],
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertEqual(
+            response.data["replacement_assignment"]["replaces"],
+            str(assignment.id),
+        )
+
+    def test_submitted_review_assignment_cannot_be_cancelled_or_replaced(self):
+        assignment = self.create_assignment()
+        Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="This manuscript is ready.",
+            comments_for_editor="No confidential concerns.",
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        cancel_response = self.client.post(
+            reverse(
+                "editor-reviews:cancel-assignment",
+                args=[assignment.id],
+            ),
+            {
+                "reason": (
+                    "The original reviewer became unavailable."
+                ),
+            },
+            format="json",
+        )
+        replace_response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            self.replacement_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            cancel_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            replace_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertIsNone(assignment.cancelled_at)
+        self.assertIsNone(assignment.cancelled_by)
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                reviewer=self.replacement_reviewer,
+                version=self.version,
+            ).exists()
+        )
+
+    def test_unrelated_editor_cannot_replace_assignment(self):
+        assignment = self.create_assignment()
+
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            self.replacement_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertIsNone(assignment.cancelled_at)
+        self.assertIsNone(assignment.cancelled_by)
+
+    def test_invalid_replacement_reviewer_rolls_back_cancellation(self):
+        assignment = self.create_assignment()
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            {
+                "reviewer_id": str(self.author.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+                "reason": (
+                    "The original reviewer became unavailable."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertIsNone(assignment.cancelled_at)
+        self.assertIsNone(assignment.cancelled_by)
     
     def test_reviewer_invitation_rejects_past_response_deadline(self):
         self.client.force_authenticate(self.editor)
