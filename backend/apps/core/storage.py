@@ -1,5 +1,6 @@
 from django.conf import settings
 from minio import Minio
+from pathlib import Path
 
 
 class StorageService:
@@ -33,20 +34,38 @@ class StorageService:
         if not self.client.bucket_exists(self.bucket):
             self.client.make_bucket(self.bucket)
 
-    def upload(self, file_obj, submission_id: str, version_number: int, filename: str) -> str:
+    def upload(
+        self,
+        file_obj,
+        submission_id: str,
+        version_number: int,
+        filename: str,
+        *,
+        variant: str,
+    ) -> str:
         """
-        Upload a file and return its object path.
-        Path: submissions/{submission_id}/v{version_number}/{filename}
+        Upload a manuscript and return its private object path.
+
+        Paths:
+        submissions/{submission_id}/v{version_number}/full/{filename}
+        submissions/{submission_id}/v{version_number}/blinded/{filename}
         """
-        object_name = f"submissions/{submission_id}/v{version_number}/{filename}"
+        if variant not in {"full", "blinded"}:
+            raise ValueError("Manuscript variant must be 'full' or 'blinded'.")
+
+        safe_filename = Path(filename).name
+        object_name = (
+            f"submissions/{submission_id}/v{version_number}/"
+            f"{variant}/{safe_filename}"
+        )
 
         self.client.put_object(
             bucket_name=self.bucket,
             object_name=object_name,
             data=file_obj,
             length=-1,
-            part_size=10 * 1024 * 1024,  # 10MB parts
-            content_type='application/pdf',
+            part_size=10 * 1024 * 1024,
+            content_type="application/pdf",
         )
 
         return object_name
@@ -76,4 +95,10 @@ class StorageService:
             object_name,
             expires_in_seconds=expires_in_seconds,
             public=True,
+        )
+    
+    def delete(self, object_name: str) -> None:
+        self.client.remove_object(
+            bucket_name=self.bucket,
+            object_name=object_name,
         )

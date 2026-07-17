@@ -41,6 +41,7 @@ export function createSubmission(payload: CreateSubmissionPayload) {
   formData.append("language", payload.language);
   formData.append("section", payload.section);
   formData.append("file", payload.file);
+  formData.append("blinded_file", payload.blinded_file);
 
   if (payload.cover_letter?.trim()) {
     formData.append("cover_letter", payload.cover_letter.trim());
@@ -56,6 +57,7 @@ export function uploadRevisedManuscript(
   const formData = new FormData();
 
   formData.append("file", payload.file);
+  formData.append("blinded_file", payload.blinded_file);
 
   if (payload.response_to_reviewers?.trim()) {
     formData.append(

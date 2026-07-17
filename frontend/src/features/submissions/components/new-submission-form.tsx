@@ -68,6 +68,7 @@ export function NewSubmissionForm() {
   const queryClient = useQueryClient();
 
   const [file, setFile] = React.useState<File | null>(null);
+  const [blindedFile, setBlindedFile] = React.useState<File | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<FormErrors>({});
 
@@ -122,6 +123,15 @@ export function NewSubmissionForm() {
       errors.file = "Only PDF files are accepted.";
     } else if (file.size > MAX_FILE_SIZE_BYTES) {
       errors.file = "The manuscript file must be 50MB or smaller.";
+    }
+
+    if (!blindedFile) {
+      errors.blinded_file = "Please upload the blinded manuscript PDF.";
+    } else if (!isPdfFile(blindedFile)) {
+      errors.blinded_file = "Only PDF files are accepted.";
+    } else if (blindedFile.size > MAX_FILE_SIZE_BYTES) {
+      errors.blinded_file =
+        "The blinded manuscript file must be 50MB or smaller.";
     }
 
     const confirmations = [
@@ -179,6 +189,7 @@ export function NewSubmissionForm() {
       section: String(formData.get("section") ?? "").trim(),
       cover_letter: String(formData.get("cover_letter") ?? "").trim(),
       file: file as File,
+      blinded_file: blindedFile as File,
     });
   }
 
@@ -335,12 +346,12 @@ export function NewSubmissionForm() {
           Manuscript file
         </h2>
 
-        <div className="mt-5">
+        <div className="mt-5 space-y-5">
           <label
             htmlFor="file"
             className="block text-sm font-medium text-slate-700"
           >
-            Upload PDF
+            Full manuscript PDF - may contain author names, affiliations and acknowledgements.
           </label>
           <input
             id="file"
@@ -360,11 +371,60 @@ export function NewSubmissionForm() {
           )}
         </div>
 
+        <div>
+          <label
+            htmlFor="blinded_file"
+            className="block text-sm font-medium text-slate-700"
+          >
+            Blinded manuscript PDF - must remove author names, affiliations, acknowledgements and identifying metadata.
+          </label>
+          <input
+            id="blinded_file"
+            name="blinded_file"
+            type="file"
+            accept="application/pdf,.pdf"
+            required
+            onChange={(event) => {
+              const selectedFile = event.target.files?.[0] ?? null;
+              setBlindedFile(selectedFile);
+
+              if (!selectedFile) {
+                return;
+              }
+
+              setFieldErrors((currentErrors) => {
+                const nextErrors = { ...currentErrors };
+                delete nextErrors.blinded_file;
+                return nextErrors;
+              });
+            }}
+            className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
+          />
+          {fieldErrors.blinded_file ? (
+            <p className="mt-1 text-sm text-red-600">
+              {fieldErrors.blinded_file}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-slate-500">
+              PDF only. Maximum file size: 50MB.
+            </p>
+          )}
+        </div>
+
         {file ? (
           <div className="mt-4 rounded-lg border bg-slate-50 p-4 text-sm text-slate-700">
             <p className="font-medium text-slate-950">{file.name}</p>
             <p className="mt-1 text-slate-500">
               {(file.size / 1024 / 1024).toFixed(2)} MB
+            </p>
+          </div>
+        ) : null}
+
+        {blindedFile ? (
+          <div className="mt-4 rounded-lg border bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-950">{blindedFile.name}</p>
+            <p className="mt-1 text-slate-500">
+              {(blindedFile.size / 1024 / 1024).toFixed(2)} MB
             </p>
           </div>
         ) : null}

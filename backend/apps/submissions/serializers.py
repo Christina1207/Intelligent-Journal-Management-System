@@ -3,6 +3,20 @@ from .models import Submission, SubmissionTopic, SubmissionVersion
 from apps.journals.models import Section
 from apps.journals.serializers import SectionSerializer
 
+#TODO: move this to constants
+MAX_MANUSCRIPT_SIZE = 50 * 1024 * 1024
+
+
+def validate_pdf_file(uploaded_file):
+    if uploaded_file.content_type != "application/pdf":
+        raise serializers.ValidationError("Only PDF files are accepted.")
+
+    if uploaded_file.size > MAX_MANUSCRIPT_SIZE:
+        raise serializers.ValidationError(
+            "File size exceeds the 50MB limit."
+        )
+
+    return uploaded_file
 
 class SubmissionCreateSerializer(serializers.Serializer):
     """
@@ -19,7 +33,15 @@ class SubmissionCreateSerializer(serializers.Serializer):
             "apps.journals.models", fromlist=["Section"]
         ).Section.objects.filter(is_active=True)
     )
-    file = serializers.FileField()
+    file = serializers.FileField(
+        validators=[validate_pdf_file],
+        help_text="Full manuscript PDF containing author information.",
+    )
+
+    blinded_file = serializers.FileField(
+        validators=[validate_pdf_file],
+        help_text="Anonymized manuscript PDF for peer reviewers.",
+    )
 
     def validate_section(self, section):
         if not section.is_active:
@@ -41,12 +63,16 @@ class SubmissionCreateSerializer(serializers.Serializer):
 
 
 class SubmissionVersionSerializer(serializers.ModelSerializer):
+    full_manuscript_available = serializers.SerializerMethodField()
+    blinded_manuscript_available = serializers.SerializerMethodField()
+
     class Meta:
         model = SubmissionVersion
         fields = [
             "id",
             "version_number",
-            "file",
+            "full_manuscript_available",
+            "blinded_manuscript_available",
             "submitted_at",
             "decision",
             "decision_letter",
@@ -55,6 +81,12 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
             "decided_by",
         ]
         read_only_fields = fields
+
+    def get_full_manuscript_available(self, version):
+        return bool(version.file)
+
+    def get_blinded_manuscript_available(self, version):
+        return bool(version.blinded_file)
 
 
 class SubmissionTopicSerializer(serializers.ModelSerializer):
@@ -183,7 +215,14 @@ class RevisionUploadSerializer(serializers.Serializer):
     Used for revision upload only. File validation mirrors
     SubmissionCreateSerializer.
     """
-    file = serializers.FileField()
+    file = serializers.FileField(
+        validators=[validate_pdf_file],
+        help_text="Full manuscript PDF containing author information.",
+    )
+    blinded_file = serializers.FileField(
+        validators=[validate_pdf_file],
+        help_text="Anonymized manuscript PDF for peer reviewers.",
+    )
     response_to_reviewers = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -201,11 +240,3 @@ class RevisionUploadSerializer(serializers.Serializer):
                 }
             )
         return attrs
-
-    def validate_file(self, file):
-        if file.content_type != "application/pdf":
-            raise serializers.ValidationError("Only PDF files are accepted.")
-        max_size = 50 * 1024 * 1024
-        if file.size > max_size:
-            raise serializers.ValidationError("File size exceeds the 50MB limit.")
-        return file

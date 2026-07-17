@@ -88,7 +88,8 @@ export type AuthorSubmissionsResponse =
 export type SubmissionVersion = {
   id: string;
   version_number: number;
-  file: string;
+  full_manuscript_available: boolean;
+  blinded_manuscript_available: boolean;
   submitted_at: string;
   decision: SubmissionDecision;
   decision_letter: string;
@@ -102,12 +103,14 @@ export type CreateSubmissionPayload = {
   cover_letter?: string;
   section: string;
   file: File;
+  blinded_file: File;
 };
 
 export type CreateSubmissionResponse = AuthorSubmissionListItem;
 
 export type UploadRevisedManuscriptPayload = {
   file: File;
+  blinded_file: File;
   response_to_reviewers?: string;
 };
 

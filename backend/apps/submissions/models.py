@@ -8,18 +8,8 @@ from pgvector.django import VectorField
 LANGUAGE_CHOICES = [
     # Top 20 Most Used Languages First
     ("en", "English"),
-    ("zh", "Chinese"),
-    ("hi", "Hindi"),
-    ("es", "Spanish"),
     ("ar", "Arabic"),
     ("fr", "French"),
-    ("bn", "Bengali"),
-    ("pt", "Portuguese"),
-    ("id", "Indonesian"),
-    ("ur", "Urdu"),
-    ("ru", "Russian"),
-    ("de", "German"),
-    ("ja", "Japanese"),
 ]
 
 
@@ -110,7 +100,19 @@ class SubmissionVersion(models.Model):
                        related_name='versions',
                      )
     version_number = models.PositiveIntegerField()
-    file           = models.CharField(max_length=500, null=True, blank=True)  # MinIO object path
+    file = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Private MinIO object path for the full manuscript.",
+    )
+
+    blinded_file = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Private MinIO object path for the anonymized manuscript.",
+    )
     submitted_at   = models.DateTimeField(auto_now_add=True)
     decision       = models.CharField(
                        max_length=20,

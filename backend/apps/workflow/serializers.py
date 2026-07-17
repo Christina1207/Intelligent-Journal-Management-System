@@ -1,3 +1,5 @@
+from ensurepip import version
+
 from rest_framework import serializers
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
@@ -159,6 +161,7 @@ class ManagerSubmissionVersionSerializer(
     serializers.ModelSerializer
 ):
     manuscript_available = serializers.SerializerMethodField()
+    blinded_manuscript_available = serializers.SerializerMethodField()
 
     class Meta:
         model = SubmissionVersion
@@ -167,12 +170,16 @@ class ManagerSubmissionVersionSerializer(
             "version_number",
             "submitted_at",
             "manuscript_available",
+            "blinded_manuscript_available",
         ]
         read_only_fields = fields
 
     @extend_schema_field(serializers.BooleanField())
     def get_manuscript_available(self, version):
         return bool(version.file)
+    
+    def get_blinded_manuscript_available(self, version):
+        return bool(version.blinded_file)
 
 
 class ManagerSubmissionDetailSerializer(

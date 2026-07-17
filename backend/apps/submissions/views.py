@@ -41,10 +41,12 @@ class SubmissionCreateView(APIView):
         if serializer.is_valid():
             data = serializer.validated_data
             file = data.pop("file")
+            blinded_file = data.pop("blinded_file")
             submission = SubmissionService.create_submission(
                 author=request.user,
                 validated_data=data,
                 file=file,
+                blinded_file=blinded_file,
             )
             return Response(
                 SubmissionListSerializer(submission).data,
@@ -150,6 +152,7 @@ class RevisionUploadView(APIView):
                     author=request.user,
                     submission=submission,
                     file=serializer.validated_data["file"],
+                    blinded_file=serializer.validated_data["blinded_file"],
                     response_to_reviewers=serializer.validated_data.get(
                         "response_to_reviewers",
                         "",

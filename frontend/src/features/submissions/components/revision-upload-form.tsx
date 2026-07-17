@@ -12,7 +12,9 @@ type RevisionUploadFormProps = {
   submissionId: string;
 };
 
-type FormErrors = Partial<Record<"file" | "response_to_reviewers", string>>;
+type FormErrors = Partial<
+  Record<"file" | "blinded_file" | "response_to_reviewers", string>
+>;
 
 function isPdfFile(file: File) {
   return (
@@ -62,6 +64,7 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
   const queryClient = useQueryClient();
 
   const [file, setFile] = React.useState<File | null>(null);
+  const [blindedFile, setBlindedFile] = React.useState<File | null>(null);
   const [responseToReviewers, setResponseToReviewers] = React.useState("");
   const [formError, setFormError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<FormErrors>({});
@@ -75,13 +78,19 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
         throw new Error("Please upload the revised manuscript PDF.");
       }
 
+      if (!blindedFile) {
+        throw new Error("Please upload the blinded manuscript PDF.");
+      }
+
       return uploadRevisedManuscript(submissionId, {
         file,
+        blinded_file: blindedFile,
         response_to_reviewers: responseToReviewers,
       });
     },
     onSuccess: async () => {
       setFile(null);
+      setBlindedFile(null);
       setResponseToReviewers("");
       setFormError(null);
       setFieldErrors({});
@@ -122,6 +131,23 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
     });
   }
 
+  function handleBlindedFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0] ?? null;
+    setBlindedFile(selectedFile);
+
+    setSuccessMessage(null);
+
+    if (!selectedFile) {
+      return;
+    }
+
+    setFieldErrors((currentErrors) => {
+      const nextErrors = { ...currentErrors };
+      delete nextErrors.blinded_file;
+      return nextErrors;
+    });
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -133,6 +159,14 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
       errors.file = "Only PDF files are accepted.";
     } else if (file.size > MAX_FILE_SIZE_BYTES) {
       errors.file = "The revised manuscript must be 50MB or smaller.";
+    }
+
+    if (!blindedFile) {
+      errors.blinded_file = "Please upload the blinded manuscript PDF.";
+    } else if (!isPdfFile(blindedFile)) {
+      errors.blinded_file = "Only PDF files are accepted.";
+    } else if (blindedFile.size > MAX_FILE_SIZE_BYTES) {
+      errors.blinded_file = "The blinded manuscript must be 50MB or smaller.";
     }
 
     setFormError(null);
@@ -177,7 +211,7 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
             htmlFor="revision-file"
             className="block text-sm font-medium text-slate-700"
           >
-            Revised manuscript PDF
+            Full manuscript PDF - may contain author names, affiliations and acknowledgements.
           </label>
           <input
             id="revision-file"
@@ -196,11 +230,46 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
           )}
         </div>
 
+        <div>
+          <label
+            htmlFor="revision-blinded-file"
+            className="block text-sm font-medium text-slate-700"
+          >
+            Blinded manuscript PDF - must remove author names, affiliations, acknowledgements and identifying metadata.
+          </label>
+          <input
+            id="revision-blinded-file"
+            name="blinded_file"
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={handleBlindedFileChange}
+            className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
+          />
+          {fieldErrors.blinded_file ? (
+            <p className="mt-1 text-sm text-red-600">
+              {fieldErrors.blinded_file}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-slate-600">
+              PDF only. Maximum file size: 50MB.
+            </p>
+          )}
+        </div>
+
         {file ? (
           <div className="rounded-lg border bg-white p-4 text-sm text-slate-700">
             <p className="font-medium text-slate-950">{file.name}</p>
             <p className="mt-1 text-slate-500">
               {(file.size / 1024 / 1024).toFixed(2)} MB
+            </p>
+          </div>
+        ) : null}
+
+        {blindedFile ? (
+          <div className="rounded-lg border bg-white p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-950">{blindedFile.name}</p>
+            <p className="mt-1 text-slate-500">
+              {(blindedFile.size / 1024 / 1024).toFixed(2)} MB
             </p>
           </div>
         ) : null}

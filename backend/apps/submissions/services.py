@@ -73,7 +73,7 @@ class SubmissionService:
 
     @staticmethod
     @transaction.atomic
-    def create_submission(author, validated_data: dict, file) -> Submission:
+    def create_submission(author, validated_data: dict, file, blinded_file) -> Submission:
         # TODO check author has AUTHOR role here or in the view?
         # TODO check how the author is passed(token)
         """
@@ -99,19 +99,43 @@ class SubmissionService:
 
         # Upload PDF to MinIO
         storage = StorageService()
-        object_name = storage.upload(
-            file_obj=file,
-            submission_id=str(submission.id),
-            version_number=1,
-            filename=file.name,
-        )
+        uploaded_objects = []
 
-        # Create v1 atomically with submission
-        SubmissionVersion.objects.create(
-            submission=submission,
-            version_number=1,
-            file=object_name,
-        )
+        try:
+            full_object_name = storage.upload(
+                file_obj=file,
+                submission_id=str(submission.id),
+                version_number=1,
+                filename=file.name,
+                variant="full",
+            )
+            uploaded_objects.append(full_object_name)
+
+            blinded_object_name = storage.upload(
+                file_obj=blinded_file,
+                submission_id=str(submission.id),
+                version_number=1,
+                filename=blinded_file.name,
+                variant="blinded",
+            )
+            uploaded_objects.append(blinded_object_name)
+
+            SubmissionVersion.objects.create(
+                submission=submission,
+                version_number=1,
+                file=full_object_name,
+                blinded_file=blinded_object_name,
+            )
+        except Exception:
+            for object_name in uploaded_objects:
+                try:
+                    storage.delete(object_name)
+                except Exception:
+                    logger.exception(
+                        "Failed to clean up manuscript object %s.",
+                        object_name,
+                    )
+            raise
 
         # Dispatch embedding task after transaction commits
         # Import here to avoid circular imports
@@ -133,6 +157,7 @@ class SubmissionService:
         author,
         submission: Submission,
         file,
+        blinded_file,
         response_to_reviewers: str = "",
     ) -> SubmissionVersion:
         """
@@ -206,42 +231,68 @@ class SubmissionService:
         new_version_number = previous_version.version_number + 1
 
         storage = StorageService()
-        object_name = storage.upload(
-            file_obj=file,
-            submission_id=str(submission.id),
-            version_number=new_version_number,
-            filename=file.name,
-        )
+        uploaded_objects = []
 
-        new_version = SubmissionVersion.objects.create(
-            submission=submission,
-            version_number=new_version_number,
-            file=object_name,
-            response_to_reviewers=response_to_reviewers or "",
-        )
-
-        response_deadline = timezone.now()
-        review_deadline = response_deadline + timedelta(
-            days=REVISION_REVIEW_DEADLINE_DAYS,
-        )
-        for assignment in accepted_assignments:
-            ReviewerAssignment.objects.create(
-                version=new_version,
-                reviewer=assignment.reviewer,
-                assigned_by=submission.assigned_editor or assignment.assigned_by,
-                carried_from=assignment,
-                status=ReviewerAssignment.Status.ACCEPTED,
-                response_deadline=response_deadline,
-                review_deadline=review_deadline,
+        try:
+            full_object_name = storage.upload(
+                file_obj=file,
+                submission_id=str(submission.id),
+                version_number=new_version_number,
+                filename=file.name,
+                variant="full",
             )
-        submission.status = Submission.Status.UNDER_REVIEW
-        submission.save(update_fields=["status"])
+            uploaded_objects.append(full_object_name)
 
-        logger.info(
-            "Revision v%d created for submission %s. "
-            "%d reviewers carried forward.",
-            new_version_number,
-            submission.id,
-            len(accepted_assignments),
-        )
-        return new_version
+            blinded_object_name = storage.upload(
+                file_obj=blinded_file,
+                submission_id=str(submission.id),
+                version_number=new_version_number,
+                filename=blinded_file.name,
+                variant="blinded",
+            )
+            uploaded_objects.append(blinded_object_name)
+
+            new_version = SubmissionVersion.objects.create(
+                submission=submission,
+                version_number=new_version_number,
+                file=full_object_name,
+                blinded_file=blinded_object_name,
+                response_to_reviewers=response_to_reviewers or "",
+            )
+
+            response_deadline = timezone.now()
+            review_deadline = response_deadline + timedelta(
+                days=REVISION_REVIEW_DEADLINE_DAYS,
+            )
+            for assignment in accepted_assignments:
+                ReviewerAssignment.objects.create(
+                    version=new_version,
+                    reviewer=assignment.reviewer,
+                    assigned_by=submission.assigned_editor or assignment.assigned_by,
+                    carried_from=assignment,
+                    status=ReviewerAssignment.Status.ACCEPTED,
+                    response_deadline=response_deadline,
+                    review_deadline=review_deadline,
+                )
+            submission.status = Submission.Status.UNDER_REVIEW
+            submission.save(update_fields=["status"])
+
+            logger.info(
+                "Revision v%d created for submission %s. "
+                "%d reviewers carried forward.",
+                new_version_number,
+                submission.id,
+                len(accepted_assignments),
+            )
+            return new_version
+        except Exception:
+            for object_name in uploaded_objects:
+                try:
+                    storage.delete(object_name)
+                except Exception:
+                    logger.exception(
+                        "Failed to clean up manuscript object %s.",
+                        object_name,
+                    )
+            raise
+        

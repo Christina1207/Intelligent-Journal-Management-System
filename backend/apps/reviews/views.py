@@ -355,7 +355,7 @@ class ReviewerManuscriptDownloadView(APIView):
                 "You can access the manuscript only after accepting the review invitation."
             )
 
-        object_name = assignment.version.file
+        object_name = assignment.version.blinded_file
 
         if not object_name:
             raise ValidationError(

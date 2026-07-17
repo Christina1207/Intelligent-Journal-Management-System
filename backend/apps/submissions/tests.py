@@ -15,6 +15,22 @@ from apps.workflow.models import ReviewerAssignment
 from config.constants import REVISION_REVIEW_DEADLINE_DAYS
 
 
+def pdf_upload(name="manuscript.pdf", content=b"%PDF-1.4\nmanuscript\n%%EOF"):
+    return SimpleUploadedFile(
+        name,
+        content,
+        content_type="application/pdf",
+    )
+
+
+def text_upload(name="manuscript.txt"):
+    return SimpleUploadedFile(
+        name,
+        b"not a pdf",
+        content_type="text/plain",
+    )
+
+
 class SubmissionDetailApiTests(APITestCase):
     def setUp(self):
         self.roles = {}
@@ -564,30 +580,24 @@ class RevisionUploadApiTests(APITestCase):
         return user
 
     def _pdf_upload(self, name="revision.pdf"):
-        return SimpleUploadedFile(
-            name,
-            b"%PDF-1.4\nrevised manuscript\n%%EOF",
-            content_type="application/pdf",
-        )
+        return pdf_upload(name=name, content=b"%PDF-1.4\nrevised manuscript\n%%EOF")
 
     def _text_upload(self):
-        return SimpleUploadedFile(
-            "revision.txt",
-            b"not a pdf",
-            content_type="text/plain",
-        )
-
-    def _mock_storage_upload(self, storage_class):
-        object_name = f"submissions/{self.submission.id}/v2/revision.pdf"
-        storage_class.return_value.upload.return_value = object_name
-        return object_name
+        return text_upload("revision.txt")
 
     @patch("apps.submissions.services.StorageService")
     def test_author_can_upload_revision_with_response_to_reviewers(
         self,
         storage_class,
     ):
-        object_name = self._mock_storage_upload(storage_class)
+        full_object_name = f"submissions/{self.submission.id}/v2/revision.pdf"
+        blinded_object_name = (
+            f"submissions/{self.submission.id}/v2/revision-blinded.pdf"
+        )
+        storage_class.return_value.upload.side_effect = [
+            full_object_name,
+            blinded_object_name,
+        ]
         response_text = "We revised the methods and expanded the discussion."
         self.client.force_authenticate(self.author)
 
@@ -595,6 +605,7 @@ class RevisionUploadApiTests(APITestCase):
             self.url,
             {
                 "file": self._pdf_upload(),
+                "blinded_file": self._pdf_upload("revision-blinded.pdf"),
                 "response_to_reviewers": response_text,
             },
             format="multipart",
@@ -607,7 +618,8 @@ class RevisionUploadApiTests(APITestCase):
         self.assertEqual(self.submission.status, Submission.Status.UNDER_REVIEW)
 
         new_version = self.submission.versions.get(version_number=2)
-        self.assertEqual(new_version.file, object_name)
+        self.assertEqual(new_version.file, full_object_name)
+        self.assertEqual(new_version.blinded_file, blinded_object_name)
         self.assertEqual(new_version.response_to_reviewers, response_text)
 
         carried_assignment = ReviewerAssignment.objects.get(
@@ -622,19 +634,29 @@ class RevisionUploadApiTests(APITestCase):
             timedelta(days=REVISION_REVIEW_DEADLINE_DAYS),
         )
         self.assertGreater(carried_assignment.review_deadline, timezone.now())
-        storage_class.return_value.upload.assert_called_once()
+        self.assertEqual(storage_class.return_value.upload.call_count, 2)
 
     @patch("apps.submissions.services.StorageService")
     def test_author_can_upload_revision_without_response_to_reviewers(
         self,
         storage_class,
     ):
-        self._mock_storage_upload(storage_class)
+        full_object_name = f"submissions/{self.submission.id}/v2/revision.pdf"
+        blinded_object_name = (
+            f"submissions/{self.submission.id}/v2/revision-blinded.pdf"
+        )
+        storage_class.return_value.upload.side_effect = [
+            full_object_name,
+            blinded_object_name,
+        ]
         self.client.force_authenticate(self.author)
 
         response = self.client.post(
             self.url,
-            {"file": self._pdf_upload()},
+            {
+                "file": self._pdf_upload(),
+                "blinded_file": self._pdf_upload("revision-blinded.pdf"),
+            },
             format="multipart",
         )
 
@@ -642,6 +664,8 @@ class RevisionUploadApiTests(APITestCase):
         self.assertEqual(response.data["response_to_reviewers"], "")
 
         new_version = self.submission.versions.get(version_number=2)
+        self.assertEqual(new_version.file, full_object_name)
+        self.assertEqual(new_version.blinded_file, blinded_object_name)
         self.assertEqual(new_version.response_to_reviewers, "")
 
     @patch("apps.submissions.services.StorageService")
@@ -655,6 +679,7 @@ class RevisionUploadApiTests(APITestCase):
             self.url,
             {
                 "file": self._pdf_upload(),
+                "blinded_file": self._pdf_upload("revision-blinded.pdf"),
                 "review_deadline": timezone.now().isoformat(),
             },
             format="multipart",
@@ -671,7 +696,10 @@ class RevisionUploadApiTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"file": self._text_upload()},
+            {
+                "file": self._text_upload(),
+                "blinded_file": self._pdf_upload("revision-blinded.pdf"),
+            },
             format="multipart",
         )
 
@@ -679,3 +707,124 @@ class RevisionUploadApiTests(APITestCase):
         self.assertIn("file", response.data)
         self.assertFalse(self.submission.versions.filter(version_number=2).exists())
         storage_class.return_value.upload.assert_not_called()
+
+    @patch("apps.submissions.services.StorageService")
+    def test_revision_upload_rejects_missing_blinded_file(self, storage_class):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {"file": self._pdf_upload()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("blinded_file", response.data)
+        self.assertFalse(self.submission.versions.filter(version_number=2).exists())
+        storage_class.return_value.upload.assert_not_called()
+
+
+class SubmissionCreateApiTests(APITestCase):
+    def setUp(self):
+        self.roles = {}
+        for role_name, _ in Role.RoleName.choices:
+            role, _ = Role.objects.get_or_create(name=role_name)
+            self.roles[role_name] = role
+
+        self.author = self._create_user("submission-author", Role.RoleName.AUTHOR)
+        self.reviewer = self._create_user("submission-reviewer", Role.RoleName.REVIEWER)
+        self.section = Section.objects.create(name="Artificial Intelligence")
+        self.url = reverse("submission-create")
+
+    def _create_user(self, username, role_names):
+        if isinstance(role_names, str):
+            role_names = [role_names]
+
+        user = get_user_model().objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+            first_name=username.replace("-", " ").title(),
+            last_name="User",
+        )
+        for role_name in role_names:
+            user.roles.add(self.roles[role_name])
+
+        return user
+
+    @patch("apps.submissions.services.StorageService")
+    def test_author_can_create_submission_with_full_and_blinded_files(
+        self,
+        storage_class,
+    ):
+        submission_id = "submission-1"
+        full_object_name = f"submissions/{submission_id}/v1/full.pdf"
+        blinded_object_name = f"submissions/{submission_id}/v1/blinded.pdf"
+        storage_class.return_value.upload.side_effect = [
+            full_object_name,
+            blinded_object_name,
+        ]
+
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Submission with blinded manuscript",
+                "abstract": "A detailed research abstract.",
+                "language": "en",
+                "section": str(self.section.id),
+                "file": pdf_upload("full.pdf"),
+                "blinded_file": pdf_upload("blinded.pdf"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        submission = Submission.objects.get(title="Submission with blinded manuscript")
+        self.assertEqual(submission.versions.count(), 1)
+
+        version = submission.versions.get(version_number=1)
+        self.assertEqual(version.file, full_object_name)
+        self.assertEqual(version.blinded_file, blinded_object_name)
+
+        self.assertEqual(storage_class.return_value.upload.call_count, 2)
+
+    @patch("apps.submissions.services.StorageService")
+    def test_submission_create_rejects_missing_blinded_file(self, storage_class):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Submission missing blinded file",
+                "abstract": "A detailed research abstract.",
+                "language": "en",
+                "section": str(self.section.id),
+                "file": pdf_upload("full.pdf"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("blinded_file", response.data)
+        self.assertFalse(Submission.objects.filter(title="Submission missing blinded file").exists())
+        storage_class.return_value.upload.assert_not_called()
+
+    def test_non_author_cannot_create_submission(self):
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Unauthorized submission",
+                "abstract": "A detailed research abstract.",
+                "language": "en",
+                "section": str(self.section.id),
+                "file": pdf_upload("full.pdf"),
+                "blinded_file": pdf_upload("blinded.pdf"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
