@@ -122,6 +122,7 @@ def reviewer_candidates_for(
         User.objects.filter(
             status=User.Status.ACTIVE,
             roles__name=Role.RoleName.REVIEWER,
+            reviewer_profile__sections=submission.section,
         )
         .exclude(pk=submission.author_id)
         .exclude(

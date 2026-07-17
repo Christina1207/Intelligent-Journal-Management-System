@@ -2,8 +2,9 @@ import logging
 from pgvector.django import CosineDistance
 from django.db.models import Exists, OuterRef
 
-from apps.accounts.models import Role
+from apps.accounts.models import Role, User, ReviewerProfile
 from apps.reviews.models import Review
+from apps.workflow.models import ReviewerAssignment
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,6 @@ class RecommendationService:
         # TODO Sprint 4: exclude reviewers who have a conflict of interest
         # declaration against this submission.
         """
-        from apps.accounts.models import ReviewerProfile
-
         if submission.abstract_embedding is None:
             logger.warning(
                 "RecommendationService: submission %s has no abstract_embedding. "
@@ -49,6 +48,29 @@ class RecommendationService:
                 assignment__reviewer=OuterRef("user"),
             )
         )
+        current_version = (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+        active_assignment_exists = (
+            ReviewerAssignment.objects.filter(
+                reviewer=OuterRef("user_id"),
+                version__submission=submission,
+                status__in=[
+                    ReviewerAssignment.Status.PENDING,
+                    ReviewerAssignment.Status.ACCEPTED,
+                ],
+            )
+        )
+
+        current_round_invitation_exists = (
+            ReviewerAssignment.objects.filter(
+                reviewer=OuterRef("user_id"),
+                version=current_version,
+            )
+        )
 
         profiles = (
             ReviewerProfile.objects.annotate(
@@ -57,14 +79,25 @@ class RecommendationService:
                     submission.abstract_embedding,
                 ),
                 has_reviewed_before=has_reviewed_before,
+                has_active_assignment=Exists(
+                    active_assignment_exists
+                ),
+                already_invited_current_round=Exists(
+                    current_round_invitation_exists
+                ),
             )
             .filter(
+                sections=submission.section,
+                user__status=User.Status.ACTIVE,
                 user__roles__name=Role.RoleName.REVIEWER,
                 expertise_embedding__isnull=False,
+                has_active_assignment=False,
+                already_invited_current_round=False,
             )
             .exclude(user=submission.author)
             .select_related("user")
-            .order_by("-similarity")[:limit]
+            .order_by("-similarity")
+            .distinct()[:limit]
         )
 
         return [

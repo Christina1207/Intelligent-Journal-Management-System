@@ -80,6 +80,15 @@ class ReviewerProfile(models.Model):
         on_delete=models.PROTECT,
         related_name="reviewer_profile",
     )
+    sections = models.ManyToManyField(
+        "journals.Section",
+        related_name="reviewer_profiles",
+        blank=True,
+        help_text=(
+            "Journal sections in which this reviewer is approved "
+            "to review manuscripts."
+        ),
+    )
     keywords = ArrayField(
         base_field=models.CharField(max_length=100),
         blank=True,
