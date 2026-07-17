@@ -144,3 +144,14 @@ export type AssignReviewerPayload = {
   response_deadline: string;
   review_deadline: string;
 };
+
+export type AssignReviewersPayload = {
+  reviewer_ids: string[];
+  response_deadline: string;
+  review_deadline: string;
+};
+
+export type AssignReviewersResponse = {
+  count: number;
+  assignments: ReviewerAssignment[];
+};

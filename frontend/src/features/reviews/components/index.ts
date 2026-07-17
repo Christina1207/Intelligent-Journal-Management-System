@@ -1,7 +1,7 @@
 export { ReviewReportForm } from "./review-report-form";
 export { ReviewerAssignmentCard } from "./reviewer-assignment-card";
 export {
-  ReviewerInvitationForm,
+  ReviewerInvitationBatchForm,
   type ReviewerSelection,
-} from "./reviewer-invitation-form";
+} from "./reviewer-invitation-batch-form";
 export { ReviewerDiscoveryPanel } from "./reviewer-discovery-panel";

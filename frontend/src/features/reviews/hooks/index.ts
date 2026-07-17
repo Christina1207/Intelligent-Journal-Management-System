@@ -66,7 +66,7 @@ export function useSubmitReview() {
   });
 }
 
-export { useAssignReviewer } from "./use-assign-reviewer";
+export { useAssignReviewers } from "./use-assign-reviewers";
 export {
   useReviewerCandidates,
   useReviewerRecommendations,

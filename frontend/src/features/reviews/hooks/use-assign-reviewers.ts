@@ -2,23 +2,23 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { assignReviewer } from "@/features/reviews/api";
+import { assignReviewers } from "@/features/reviews/api";
 import { reviewQueryKeys } from "@/features/reviews/api/review-query-keys";
-import type { AssignReviewerPayload } from "@/features/reviews/types";
+import type { AssignReviewersPayload } from "@/features/reviews/types";
 
-interface AssignReviewerVariables {
+interface AssignReviewersVariables {
   submissionId: string;
-  payload: AssignReviewerPayload;
+  payload: AssignReviewersPayload;
 }
 
-export function useAssignReviewer() {
+export function useAssignReviewers() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ submissionId, payload }: AssignReviewerVariables) =>
-      assignReviewer(submissionId, payload),
+    mutationFn: ({ submissionId, payload }: AssignReviewersVariables) =>
+      assignReviewers(submissionId, payload),
 
-    onSuccess: async (_assignment, variables) => {
+    onSuccess: async (_response, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: reviewQueryKeys.sectionEditor(),

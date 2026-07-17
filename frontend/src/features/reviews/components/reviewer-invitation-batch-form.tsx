@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAssignReviewer } from "@/features/reviews/hooks";
+import { useAssignReviewers } from "@/features/reviews/hooks";
 
 export type ReviewerSelection = {
   id: string;
@@ -16,11 +16,11 @@ export type ReviewerSelection = {
   keywords: string[];
 };
 
-interface ReviewerInvitationFormProps {
+interface ReviewerInvitationBatchFormProps {
   submissionId: string;
-  reviewer: ReviewerSelection;
+  reviewers: ReviewerSelection[];
   onCancel: () => void;
-  onAssigned: (reviewerName: string) => void;
+  onAssigned: (count: number) => void;
 }
 
 function toDateTimeLocal(date: Date) {
@@ -44,16 +44,16 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "The reviewer invitation could not be sent.";
+  return "The reviewer invitations could not be sent.";
 }
 
-export function ReviewerInvitationForm({
+export function ReviewerInvitationBatchForm({
   submissionId,
-  reviewer,
+  reviewers,
   onCancel,
   onAssigned,
-}: ReviewerInvitationFormProps) {
-  const assignReviewer = useAssignReviewer();
+}: ReviewerInvitationBatchFormProps) {
+  const assignReviewers = useAssignReviewers();
 
   const [responseDeadline, setResponseDeadline] = useState(() =>
     deadlineAfterDays(3),
@@ -66,6 +66,11 @@ export function ReviewerInvitationForm({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationError(null);
+
+    if (reviewers.length === 0) {
+      setValidationError("Select at least one reviewer.");
+      return;
+    }
 
     const responseDate = new Date(responseDeadline);
     const reviewDate = new Date(reviewDeadline);
@@ -93,95 +98,128 @@ export function ReviewerInvitationForm({
       return;
     }
 
-    assignReviewer.mutate(
+    assignReviewers.mutate(
       {
         submissionId,
         payload: {
-          reviewer_id: reviewer.id,
+          reviewer_ids: reviewers.map((reviewer) => reviewer.id),
           response_deadline: responseDate.toISOString(),
           review_deadline: reviewDate.toISOString(),
         },
       },
       {
-        onSuccess: () => onAssigned(reviewer.fullName),
+        onSuccess: (response) => onAssigned(response.count),
       },
     );
   };
 
   const error = validationError
     ? validationError
-    : assignReviewer.isError
-      ? getErrorMessage(assignReviewer.error)
+    : assignReviewers.isError
+      ? getErrorMessage(assignReviewers.error)
       : null;
 
   return (
     <form
-      className="space-y-4 rounded-lg border bg-muted/20 p-4"
+      className="space-y-5 rounded-lg border bg-muted/20 p-4"
       onSubmit={handleSubmit}
     >
       <div>
-        <h3 className="font-medium">Invite {reviewer.fullName}</h3>
+        <h3 className="font-medium">
+          Invite {reviewers.length} reviewer
+          {reviewers.length === 1 ? "" : "s"}
+        </h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          {reviewer.email}
-          {reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}
+          The same response and review deadlines will apply to every selected
+          reviewer.
         </p>
       </div>
 
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Invitation not sent</AlertTitle>
+          <AlertTitle>Invitations not sent</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
+      <ul className="space-y-2">
+        {reviewers.map((reviewer) => (
+          <li
+            key={reviewer.id}
+            className="rounded-md border bg-background px-3 py-2"
+          >
+            <p className="text-sm font-medium">{reviewer.fullName}</p>
+            <p className="text-xs text-muted-foreground">
+              {reviewer.email}
+              {reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}
+            </p>
+          </li>
+        ))}
+      </ul>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor={`response-deadline-${reviewer.id}`}>
+          <Label htmlFor="batch-response-deadline">
             Invitation response deadline
           </Label>
           <Input
-            id={`response-deadline-${reviewer.id}`}
+            id="batch-response-deadline"
             type="datetime-local"
             min={toDateTimeLocal(new Date())}
             value={responseDeadline}
-            disabled={assignReviewer.isPending}
+            disabled={assignReviewers.isPending}
             onChange={(event) => setResponseDeadline(event.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            The reviewer must accept or decline by this time.
+            Every selected reviewer must accept or decline by this time.
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor={`review-deadline-${reviewer.id}`}>
+          <Label htmlFor="batch-review-deadline">
             Review submission deadline
           </Label>
           <Input
-            id={`review-deadline-${reviewer.id}`}
+            id="batch-review-deadline"
             type="datetime-local"
             min={responseDeadline}
             value={reviewDeadline}
-            disabled={assignReviewer.isPending}
+            disabled={assignReviewers.isPending}
             onChange={(event) => setReviewDeadline(event.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            This deadline applies after the invitation is accepted.
+            This deadline applies after each invitation is accepted.
           </p>
         </div>
       </div>
+
+      <Alert>
+        <AlertTitle>Atomic invitation batch</AlertTitle>
+        <AlertDescription>
+          If any selected reviewer is no longer eligible, no invitations will be
+          created. Review the selection and retry.
+        </AlertDescription>
+      </Alert>
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button
           type="button"
           variant="outline"
-          disabled={assignReviewer.isPending}
+          disabled={assignReviewers.isPending}
           onClick={onCancel}
         >
           Cancel
         </Button>
 
-        <Button type="submit" disabled={assignReviewer.isPending}>
-          {assignReviewer.isPending ? "Sending invitation…" : "Send invitation"}
+        <Button
+          type="submit"
+          disabled={assignReviewers.isPending || reviewers.length === 0}
+        >
+          {assignReviewers.isPending
+            ? "Sending invitations…"
+            : `Send ${reviewers.length} invitation${
+                reviewers.length === 1 ? "" : "s"
+              }`}
         </Button>
       </div>
     </form>

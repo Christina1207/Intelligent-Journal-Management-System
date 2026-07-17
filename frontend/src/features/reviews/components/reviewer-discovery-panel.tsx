@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Sparkles, UserRoundSearch } from "lucide-react";
+import { Check, Search, Sparkles, UserRoundSearch, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
-  ReviewerInvitationForm,
+  ReviewerInvitationBatchForm,
   type ReviewerSelection,
-} from "@/features/reviews/components/reviewer-invitation-form";
+} from "@/features/reviews/components/reviewer-invitation-batch-form";
 import {
   useReviewerCandidates,
   useReviewerRecommendations,
@@ -56,12 +56,21 @@ function similarityPercentage(score: number) {
 export function ReviewerDiscoveryPanel({
   submission,
 }: ReviewerDiscoveryPanelProps) {
+  return (
+    <ReviewerDiscoveryPanelContent key={submission.id} submission={submission} />
+  );
+}
+
+function ReviewerDiscoveryPanelContent({
+  submission,
+}: ReviewerDiscoveryPanelProps) {
   const canInvite = ["ASSIGNED", "UNDER_REVIEW"].includes(submission.status);
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [selectedReviewer, setSelectedReviewer] =
-    useState<ReviewerSelection | null>(null);
+  const [selectedReviewers, setSelectedReviewers] = useState<
+    ReviewerSelection[]
+  >([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,8 +100,7 @@ export function ReviewerDiscoveryPanel({
         <AlertTitle>Reviewer invitations unavailable</AlertTitle>
         <AlertDescription>
           Invitations can only be created while the manuscript is assigned or
-          under review. This manuscript is currently{" "}
-          {submission.status.toLowerCase().replaceAll("_", " ")}.
+          under review.
         </AlertDescription>
       </Alert>
     );
@@ -101,16 +109,43 @@ export function ReviewerDiscoveryPanel({
   const recommendations = recommendationsQuery.data?.recommendations ?? [];
   const candidates = candidatesQuery.data?.candidates ?? [];
 
-  const handleAssigned = (reviewerName: string) => {
-    setSelectedReviewer(null);
-    setSuccessMessage(`Invitation sent successfully to ${reviewerName}.`);
+  const isSelected = (reviewerId: string) =>
+    selectedReviewers.some((reviewer) => reviewer.id === reviewerId);
+
+  const toggleReviewer = (reviewer: ReviewerSelection) => {
+    setSuccessMessage(null);
+
+    setSelectedReviewers((current) => {
+      const alreadySelected = current.some(
+        (selected) => selected.id === reviewer.id,
+      );
+
+      if (alreadySelected) {
+        return current.filter((selected) => selected.id !== reviewer.id);
+      }
+
+      return [...current, reviewer];
+    });
+  };
+
+  const removeReviewer = (reviewerId: string) => {
+    setSelectedReviewers((current) =>
+      current.filter((reviewer) => reviewer.id !== reviewerId),
+    );
+  };
+
+  const handleAssigned = (count: number) => {
+    setSelectedReviewers([]);
+    setSuccessMessage(
+      `${count} reviewer invitation${count === 1 ? "" : "s"} sent successfully.`,
+    );
   };
 
   return (
     <div className="space-y-6">
       {successMessage ? (
         <Alert>
-          <AlertTitle>Invitation sent</AlertTitle>
+          <AlertTitle>Invitations sent</AlertTitle>
           <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       ) : null}
@@ -121,7 +156,8 @@ export function ReviewerDiscoveryPanel({
           <div>
             <h3 className="font-medium">Recommended reviewers</h3>
             <p className="text-sm text-muted-foreground">
-              Ranked using the manuscript topic and reviewer expertise.
+              Eligible reviewers from {submission.section.name}, ranked by
+              manuscript and expertise similarity.
             </p>
           </div>
         </div>
@@ -134,57 +170,67 @@ export function ReviewerDiscoveryPanel({
           <Alert variant="destructive">
             <AlertTitle>Recommendations unavailable</AlertTitle>
             <AlertDescription>
-              Manual reviewer search remains available below.
+              Manual section-scoped search remains available below.
             </AlertDescription>
           </Alert>
         ) : recommendations.length === 0 ? (
           <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            No semantic recommendations are available. This can happen when
-            manuscript or reviewer expertise embeddings have not been generated.
-            Use manual search below.
+            No semantic recommendations are currently available for this
+            section. Use manual search below.
           </p>
         ) : (
           <div className="grid gap-3 xl:grid-cols-2">
-            {recommendations.map((reviewer) => (
-              <button
-                key={reviewer.reviewer_id}
-                type="button"
-                className="rounded-lg border p-4 text-left transition hover:border-primary hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                onClick={() => {
-                  setSuccessMessage(null);
-                  setSelectedReviewer(recommendationSelection(reviewer));
-                }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{reviewer.full_name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {reviewer.affiliation || reviewer.email}
-                    </p>
-                  </div>
+            {recommendations.map((reviewer) => {
+              const selected = isSelected(reviewer.reviewer_id);
 
-                  <Badge variant="secondary">
-                    {similarityPercentage(reviewer.similarity_score)}% match
-                  </Badge>
-                </div>
+              return (
+                <button
+                  key={reviewer.reviewer_id}
+                  type="button"
+                  aria-pressed={selected}
+                  className={`rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "hover:border-primary hover:bg-muted/30"
+                  }`}
+                  onClick={() =>
+                    toggleReviewer(recommendationSelection(reviewer))
+                  }
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{reviewer.full_name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {reviewer.affiliation || reviewer.email}
+                      </p>
+                    </div>
 
-                {reviewer.keywords.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {reviewer.keywords.slice(0, 4).map((keyword) => (
-                      <Badge key={keyword} variant="outline">
-                        {keyword}
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {similarityPercentage(reviewer.similarity_score)}% match
                       </Badge>
-                    ))}
-                  </div>
-                ) : null}
 
-                {reviewer.has_reviewed_before ? (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Has previously completed a review in this journal.
-                  </p>
-                ) : null}
-              </button>
-            ))}
+                      {selected ? (
+                        <Check
+                          className="size-4 text-primary"
+                          aria-label="Selected"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {reviewer.keywords.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {reviewer.keywords.slice(0, 4).map((keyword) => (
+                        <Badge key={keyword} variant="outline">
+                          {keyword}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -200,8 +246,7 @@ export function ReviewerDiscoveryPanel({
           <div>
             <h3 className="font-medium">Search reviewer pool</h3>
             <p className="text-sm text-muted-foreground">
-              Search active reviewers by name, email, affiliation, or expertise
-              keyword.
+              Search reviewers approved for {submission.section.name}.
             </p>
           </div>
         </div>
@@ -214,7 +259,7 @@ export function ReviewerDiscoveryPanel({
           <Input
             type="search"
             value={searchInput}
-            placeholder="Search reviewers"
+            placeholder="Search by name, email, affiliation, or expertise"
             className="h-10 pl-9"
             onChange={(event) => setSearchInput(event.target.value)}
           />
@@ -233,63 +278,99 @@ export function ReviewerDiscoveryPanel({
           </Alert>
         ) : candidates.length === 0 ? (
           <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            No eligible reviewers match this search. Reviewers already invited
-            for the current round are excluded.
+            No eligible reviewers match this search.
           </p>
         ) : (
           <div className="divide-y rounded-lg border">
-            {candidates.map((reviewer) => (
-              <div
-                key={reviewer.id}
-                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium">{reviewer.full_name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {reviewer.email}
-                    {reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}
-                  </p>
+            {candidates.map((reviewer) => {
+              const selected = isSelected(reviewer.id);
 
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {reviewer.keywords.slice(0, 5).map((keyword) => (
-                      <Badge key={keyword} variant="outline">
-                        {keyword}
-                      </Badge>
-                    ))}
-
-                    <Badge variant="secondary">
-                      {reviewer.active_assignment_count} active
-                    </Badge>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setSuccessMessage(null);
-                    setSelectedReviewer(candidateSelection(reviewer));
-                  }}
+              return (
+                <div
+                  key={reviewer.id}
+                  className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  Select reviewer
-                </Button>
-              </div>
-            ))}
+                  <div>
+                    <p className="font-medium">{reviewer.full_name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {reviewer.email}
+                      {reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {reviewer.keywords.slice(0, 5).map((keyword) => (
+                        <Badge key={keyword} variant="outline">
+                          {keyword}
+                        </Badge>
+                      ))}
+
+                      <Badge variant="secondary">
+                        {reviewer.active_assignment_count} active
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant={selected ? "secondary" : "outline"}
+                    onClick={() => toggleReviewer(candidateSelection(reviewer))}
+                  >
+                    {selected ? (
+                      <>
+                        <Check aria-hidden="true" />
+                        Selected
+                      </>
+                    ) : (
+                      "Select reviewer"
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
 
-      {selectedReviewer ? (
+      {selectedReviewers.length > 0 ? (
         <>
           <Separator />
 
-          <ReviewerInvitationForm
-            key={selectedReviewer.id}
-            submissionId={submission.id}
-            reviewer={selectedReviewer}
-            onCancel={() => setSelectedReviewer(null)}
-            onAssigned={handleAssigned}
-          />
+          <section className="space-y-3">
+            <div>
+              <h3 className="font-medium">
+                Selected reviewers ({selectedReviewers.length})
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Remove any reviewer before sending the invitation batch.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {selectedReviewers.map((reviewer) => (
+                <div
+                  key={reviewer.id}
+                  className="inline-flex items-center gap-2 rounded-full border bg-background py-1 pr-1 pl-3 text-sm"
+                >
+                  <span>{reviewer.fullName}</span>
+                  <button
+                    type="button"
+                    className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Remove ${reviewer.fullName}`}
+                    onClick={() => removeReviewer(reviewer.id)}
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <ReviewerInvitationBatchForm
+              submissionId={submission.id}
+              reviewers={selectedReviewers}
+              onCancel={() => setSelectedReviewers([])}
+              onAssigned={handleAssigned}
+            />
+          </section>
         </>
       ) : null}
     </div>

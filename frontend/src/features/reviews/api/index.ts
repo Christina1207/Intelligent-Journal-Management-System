@@ -9,6 +9,8 @@ import type {
   ReviewerCandidateResponse,
   ReviewerRecommendationResponse,
   SectionEditorQueueResponse,
+  AssignReviewersPayload,
+  AssignReviewersResponse,
 } from "@/features/reviews/types";
 
 export function getReviewerAssignments() {
@@ -77,6 +79,16 @@ export function assignReviewer(
 ) {
   return apiClient.post<ReviewerAssignment>(
     `/editor/submissions/${submissionId}/assign-reviewer/`,
+    payload,
+  );
+}
+
+export function assignReviewers(
+  submissionId: string,
+  payload: AssignReviewersPayload,
+) {
+  return apiClient.post<AssignReviewersResponse>(
+    `/editor/submissions/${submissionId}/assign-reviewers/`,
     payload,
   );
 }
