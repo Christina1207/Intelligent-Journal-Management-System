@@ -5,6 +5,10 @@ import type {
   ReviewerManuscriptDownload,
   SubmittedReview,
   SubmitReviewPayload,
+  AssignReviewerPayload,
+  ReviewerCandidateResponse,
+  ReviewerRecommendationResponse,
+  SectionEditorQueueResponse,
 } from "@/features/reviews/types";
 
 export function getReviewerAssignments() {
@@ -33,6 +37,46 @@ export function submitReview(
 ) {
   return apiClient.post<SubmittedReview>(
     `/reviewer/assignments/${assignmentId}/submit-review/`,
+    payload,
+  );
+}
+export function getSectionEditorQueue(page = 1) {
+  return apiClient.get<SectionEditorQueueResponse>(
+    `/editor/queue/?page=${page}`,
+  );
+}
+
+export function getReviewerCandidates(
+  submissionId: string,
+  search = "",
+  limit = 20,
+) {
+  const searchParams = new URLSearchParams({
+    search: search.trim(),
+    limit: String(limit),
+  });
+
+  return apiClient.get<ReviewerCandidateResponse>(
+    `/editor/submissions/${submissionId}/reviewer-candidates/?${searchParams.toString()}`,
+  );
+}
+
+export function getReviewerRecommendations(submissionId: string, limit = 5) {
+  const searchParams = new URLSearchParams({
+    limit: String(limit),
+  });
+
+  return apiClient.get<ReviewerRecommendationResponse>(
+    `/editor/submissions/${submissionId}/reviewer-recommendations/?${searchParams.toString()}`,
+  );
+}
+
+export function assignReviewer(
+  submissionId: string,
+  payload: AssignReviewerPayload,
+) {
+  return apiClient.post<ReviewerAssignment>(
+    `/editor/submissions/${submissionId}/assign-reviewer/`,
     payload,
   );
 }

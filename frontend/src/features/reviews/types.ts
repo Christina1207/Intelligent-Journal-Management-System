@@ -1,4 +1,9 @@
-import type { SubmissionDecision } from "@/features/submissions/types";
+import type {
+  SubmissionDecision,
+  SubmissionStatus,
+  SubmissionTopic,
+} from "@/features/submissions/types";
+import type { PaginatedApiResponse } from "@/types/api";
 
 export type ReviewerAssignmentStatus =
   | "PENDING"
@@ -79,4 +84,63 @@ export type SubmittedReview = {
   comments_for_author: string;
   comments_for_editor: string;
   submitted_at: string;
+};
+
+export type SectionEditorQueueSubmission = {
+  id: string;
+  title: string;
+  abstract: string;
+  language: string;
+  status: SubmissionStatus;
+  section: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  topic: SubmissionTopic | null;
+  submitted_at: string;
+};
+
+export type SectionEditorQueueResponse =
+  PaginatedApiResponse<SectionEditorQueueSubmission>;
+
+export type ReviewerCandidate = {
+  id: string;
+  username: string;
+  full_name: string;
+  email: string;
+  orcid: string;
+  affiliation: string;
+  country: string;
+  keywords: string[];
+  active_assignment_count: number;
+};
+
+export type ReviewerCandidateResponse = {
+  submission_id: string;
+  count: number;
+  candidates: ReviewerCandidate[];
+};
+
+export type ReviewerRecommendation = {
+  reviewer_id: string;
+  full_name: string;
+  email: string;
+  affiliation: string;
+  keywords: string[];
+  biography_excerpt: string;
+  similarity_score: number;
+  has_reviewed_before: boolean;
+};
+
+export type ReviewerRecommendationResponse = {
+  submission_id: string;
+  count: number;
+  recommendations: ReviewerRecommendation[];
+};
+
+export type AssignReviewerPayload = {
+  reviewer_id: string;
+  response_deadline: string;
+  review_deadline: string;
 };

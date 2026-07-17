@@ -13,7 +13,7 @@ import type { SubmitReviewPayload } from "@/features/reviews/types";
 
 export function useReviewerAssignments() {
   return useQuery({
-    queryKey: reviewQueryKeys.reviewerAssignments,
+    queryKey: reviewQueryKeys.reviewerAssignments(),
     queryFn: getReviewerAssignments,
     staleTime: 30_000,
   });
@@ -33,7 +33,7 @@ export function useRespondToReviewInvitation() {
 
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: reviewQueryKeys.reviewerAssignments,
+        queryKey: reviewQueryKeys.reviewerAssignments(),
       });
     },
   });
@@ -60,8 +60,15 @@ export function useSubmitReview() {
 
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: reviewQueryKeys.reviewerAssignments,
+        queryKey: reviewQueryKeys.reviewerAssignments(),
       });
     },
   });
 }
+
+export { useAssignReviewer } from "./use-assign-reviewer";
+export {
+  useReviewerCandidates,
+  useReviewerRecommendations,
+} from "./use-reviewer-discovery";
+export { useSectionEditorQueue } from "./use-section-editor-queue";

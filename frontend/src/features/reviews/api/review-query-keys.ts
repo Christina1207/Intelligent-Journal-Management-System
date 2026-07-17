@@ -1,13 +1,30 @@
-const REVIEW_QUERY_ROOT = ["reviews"] as const;
-
 export const reviewQueryKeys = {
-  all: REVIEW_QUERY_ROOT,
+  all: ["reviews"] as const,
 
-  reviewerRoot: [...REVIEW_QUERY_ROOT, "reviewer"] as const,
+  reviewerAssignments: () =>
+    [...reviewQueryKeys.all, "reviewer", "assignments"] as const,
 
-  reviewerAssignments: [
-    ...REVIEW_QUERY_ROOT,
-    "reviewer",
-    "assignments",
-  ] as const,
+  sectionEditor: () => [...reviewQueryKeys.all, "section-editor"] as const,
+
+  sectionEditorQueue: (page: number) =>
+    [...reviewQueryKeys.sectionEditor(), "queue", page] as const,
+
+  reviewerCandidates: (submissionId: string, search: string, limit: number) =>
+    [
+      ...reviewQueryKeys.sectionEditor(),
+      "submissions",
+      submissionId,
+      "reviewer-candidates",
+      search,
+      limit,
+    ] as const,
+
+  reviewerRecommendations: (submissionId: string, limit: number) =>
+    [
+      ...reviewQueryKeys.sectionEditor(),
+      "submissions",
+      submissionId,
+      "reviewer-recommendations",
+      limit,
+    ] as const,
 };
