@@ -303,14 +303,22 @@ export async function getPublicPageSafe(slug: string) {
 }
 
 export async function getEditorialBoard() {
-  const response = await publicFetch<
-    | EditorialBoardMemberApiDto[]
-    | PaginatedApiResponse<EditorialBoardMemberApiDto>
-  >("/public/editorial-board/", {}, { revalidate: 300 });
+  try {
+    const response = await publicFetch<
+      | EditorialBoardMemberApiDto[]
+      | PaginatedApiResponse<EditorialBoardMemberApiDto>
+    >("/public/editorial-board/", {}, { revalidate: 300 });
 
-  const members = Array.isArray(response) ? response : response.results;
+    const members = Array.isArray(response) ? response : response.results;
 
-  return members.map(mapEditorialBoardMember);
+    return members.map(mapEditorialBoardMember);
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 export async function getContactMethods() {

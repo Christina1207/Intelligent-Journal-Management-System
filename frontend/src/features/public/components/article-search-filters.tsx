@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PublicSection } from "../types";
 import type { ArticleSearchParams } from "../utils/article-search";
 
@@ -131,12 +132,12 @@ export function ArticleSearchFilters({
           Apply filters
         </button>
 
-        <link
+        <Link
           href="/articles"
           className="rounded-lg border px-5 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           Clear filters
-        </link>
+        </Link>
       </div>
     </form>
   );

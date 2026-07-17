@@ -60,7 +60,7 @@ export function PublicFooter({ journal }: PublicFooterProps) {
 
               <ul className="mt-4 space-y-3">
                 {group.links.map((link) => (
-                  <li key={link.href}>
+                  <li key={`${group.title}-${link.label}-${link.href}`}>
                     <Link
                       href={link.href}
                       className="text-sm text-slate-300 transition hover:text-white"
