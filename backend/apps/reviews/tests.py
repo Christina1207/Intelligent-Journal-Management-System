@@ -162,7 +162,7 @@ class ReviewerManuscriptDownloadApiTests(APITestCase):
         response = self.client.get(self.download_url(assignment))
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("No manuscript file", str(response.data))
+        self.assertIn("No blinded manuscript file", str(response.data))
         storage_service_class.assert_not_called()
 
 
@@ -703,4 +703,153 @@ class AssignedEditorAuthorizationTests(APITestCase):
         self.assertNotIn(
             str(self.reviewer.id),
             returned_ids,
+        )
+
+class ReviewerInvitationResponseApiTests(APITestCase):
+    def setUp(self):
+        reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+        editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR,
+        )
+
+        user_model = get_user_model()
+
+        self.author = user_model.objects.create_user(
+            username="response-author",
+            email="response-author@example.com",
+            password="testpass123",
+        )
+        self.author.roles.add(author_role)
+
+        self.editor = user_model.objects.create_user(
+            username="response-editor",
+            email="response-editor@example.com",
+            password="testpass123",
+        )
+        self.editor.roles.add(editor_role)
+
+        self.reviewer = user_model.objects.create_user(
+            username="invited-response-reviewer",
+            email="invited-response-reviewer@example.com",
+            password="testpass123",
+        )
+        self.reviewer.roles.add(reviewer_role)
+
+        self.other_reviewer = user_model.objects.create_user(
+            username="other-response-reviewer",
+            email="other-response-reviewer@example.com",
+            password="testpass123",
+        )
+        self.other_reviewer.roles.add(reviewer_role)
+
+        self.section = Section.objects.create(
+            name="Reviewer Response Tests",
+        )
+        self.submission = Submission.objects.create(
+            title="Invitation response manuscript",
+            abstract="Reviewer invitation response test.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/response/v1/full/manuscript.pdf",
+            blinded_file="submissions/response/v1/blinded/manuscript.pdf",
+        )
+        self.assignment = ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+        self.url = reverse(
+            "reviewer:respond-assignment",
+            args=[self.assignment.id],
+        )
+
+    def test_invited_reviewer_can_accept(self):
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["status"],
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+
+    def test_invited_reviewer_can_decline(self):
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["status"],
+            ReviewerAssignment.Status.DECLINED,
+        )
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.DECLINED,
+        )
+
+    def test_another_reviewer_cannot_respond(self):
+        self.client.force_authenticate(self.other_reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+
+    def test_user_without_reviewer_role_cannot_respond(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.PENDING,
         )

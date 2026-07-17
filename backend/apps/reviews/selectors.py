@@ -13,7 +13,36 @@ def require_section_editor(user):
         raise PermissionDenied(
             "Only Section Editors can perform this action."
         )
+def require_reviewer(user):
+    if not user.has_role(Role.RoleName.REVIEWER):
+        raise PermissionDenied(
+            "Only Reviewers can perform this action."
+        )
 
+
+def reviewer_assignment_or_404(
+    *,
+    reviewer,
+    assignment_id,
+):
+    """
+    Return an assignment only when it belongs to the authenticated reviewer.
+
+    A 404 is returned for another reviewer's assignment so its existence and
+    manuscript metadata are not disclosed.
+    """
+    require_reviewer(reviewer)
+
+    return get_object_or_404(
+        ReviewerAssignment.objects.select_related(
+            "reviewer",
+            "version",
+            "version__submission",
+            "version__submission__section",
+        ),
+        pk=assignment_id,
+        reviewer=reviewer,
+    )
 
 def assigned_editor_submission_or_404(
     *,

@@ -25,6 +25,7 @@ from apps.reviews.serializers import (
 from apps.reviews.selectors import (
     assigned_editor_reviewer_assignment_or_404,
     assigned_editor_submission_or_404,
+    reviewer_assignment_or_404,
     reviewer_candidates_for,
 )
 from config.constants import REVIEWER_RECOMMENDATION_COUNT
@@ -178,8 +179,8 @@ class RespondToAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, assignment_id):
-        assignment = assigned_editor_reviewer_assignment_or_404(
-            editor=request.user,
+        assignment = reviewer_assignment_or_404(
+            reviewer=request.user,
             assignment_id=assignment_id,
         )
 
@@ -359,7 +360,7 @@ class ReviewerManuscriptDownloadView(APIView):
 
         if not object_name:
             raise ValidationError(
-                "No manuscript file is attached to this submission version."
+                "No blinded manuscript file is attached to this submission version."
             )
 
         storage = StorageService()
