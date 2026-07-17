@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.reviews.models import Review
 from apps.accounts.models import Role
 from apps.journals.models import Section
 from apps.submissions.models import Submission, SubmissionVersion
@@ -338,6 +339,108 @@ class SubmissionDetailApiTests(APITestCase):
             self.assertIn("full_manuscript_available", version)
             self.assertIn("blinded_manuscript_available", version)
 
+    def test_decided_version_exposes_only_anonymized_author_feedback(self):
+        assignment = ReviewerAssignment.objects.create(
+            version=self.version_one,
+            reviewer=self.reviewer,
+            assigned_by=self.section_editor,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=timezone.now() - timedelta(days=10),
+            review_deadline=timezone.now() - timedelta(days=3),
+        )
+        Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.MINOR_REVISION,
+            comments_for_author=(
+                "Please clarify the sampling method and evaluation protocol."
+            ),
+            comments_for_editor=(
+                "The paper can become publishable after revision."
+            ),
+        )
+
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(
+            reverse(
+                "submission-version-list",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        versions = {
+            version["version_number"]: version
+            for version in response.data["results"]
+        }
+        feedback = versions[1]["reviewer_feedback"]
+
+        self.assertEqual(
+            feedback,
+            [
+                {
+                    "reviewer_label": "Reviewer 1",
+                    "comments_for_author": (
+                        "Please clarify the sampling method and "
+                        "evaluation protocol."
+                    ),
+                }
+            ],
+        )
+
+        serialized_feedback = str(feedback)
+
+        self.assertNotIn(str(self.reviewer.id), serialized_feedback)
+        self.assertNotIn(self.reviewer.email, serialized_feedback)
+        self.assertNotIn(
+            "The paper can become publishable",
+            serialized_feedback,
+        )
+        self.assertNotIn("recommendation", feedback[0])
+        self.assertNotIn("comments_for_editor", feedback[0])
+    def test_pending_version_does_not_release_reviewer_feedback(self):
+        assignment = ReviewerAssignment.objects.create(
+            version=self.version_two,
+            reviewer=self.reviewer,
+            assigned_by=self.section_editor,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=timezone.now() - timedelta(days=10),
+            review_deadline=timezone.now() - timedelta(days=3),
+        )
+        Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="This report has not been released yet.",
+            comments_for_editor="Confidential editorial note.",
+        )
+
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(
+            reverse(
+                "submission-version-list",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        versions = {
+            version["version_number"]: version
+            for version in response.data["results"]
+        }
+
+        self.assertEqual(versions[2]["decision"], "PENDING")
+        self.assertEqual(versions[2]["reviewer_feedback"], [])
+        self.assertNotIn(
+            "This report has not been released yet.",
+            str(response.data),
+        )
+        self.assertNotIn(
+            "Confidential editorial note.",
+            str(response.data),
+        )
 
 class AuthorDashboardApiTests(APITestCase):
     def setUp(self):

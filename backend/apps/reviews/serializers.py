@@ -45,6 +45,7 @@ class SubmissionVersionBriefSerializer(serializers.Serializer):
     version_number = serializers.IntegerField()
     submitted_at = serializers.DateTimeField()
     decision = serializers.CharField()
+    response_to_reviewers = serializers.CharField()
 
 
 class ReviewerCandidateSearchQuerySerializer(serializers.Serializer):

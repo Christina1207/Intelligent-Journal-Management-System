@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
+from apps.workflow.models import ReviewerAssignment
 from apps.accounts.models import Role
 from .models import Submission, SubmissionVersion
 from .permissions import filter_submissions_for_user
@@ -120,6 +121,17 @@ class SubmissionVersionListView(generics.ListAPIView):
         return (
             SubmissionVersion.objects.filter(submission=submission)
             .select_related("decided_by")
+            .prefetch_related(
+                Prefetch(
+                    "reviewer_assignments",
+                    queryset=(
+                        ReviewerAssignment.objects
+                        .select_related("review")
+                        .order_by("assigned_at", "id")
+                    ),
+                    to_attr="author_feedback_assignments",
+                )
+            )
             .order_by("-version_number")
         )
 

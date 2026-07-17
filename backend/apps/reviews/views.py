@@ -285,8 +285,13 @@ class MyAssignmentsView(APIView):
             ReviewerAssignment.objects
             .filter(reviewer=request.user)
             .select_related(
-                'version__submission__section',
-                'assigned_by',
+                "review",
+                "reviewer",
+                "version",
+                "version__submission",
+                "version__submission__section",
+                "assigned_by",
+                "cancelled_by",
             )
             .order_by('-assigned_at')
         )

@@ -7,8 +7,9 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.workflow.models import ReviewerAssignment
 from apps.core.storage import StorageService
-from config.constants import MAX_REVISION_ROUNDS, REVISION_REVIEW_DEADLINE_DAYS
+from config.constants import  REVISION_REVIEW_DEADLINE_DAYS
 from .models import Submission, SubmissionVersion
+from .policies import validate_revision_round_available
 
 logger = logging.getLogger(__name__)
 
@@ -205,14 +206,8 @@ class SubmissionService:
                 f"Previous version decision must be MAJOR_REVISION or MINOR_REVISION. "
                 f"Current decision: {previous_version.decision}"
             )
-        current_version_count = submission.versions.count()
         
-        # TODO: i think this check doesn't belong here , it belongs in the decision
-        if current_version_count >= MAX_REVISION_ROUNDS:
-            raise ValidationError(
-                f"Maximum revision rounds ({MAX_REVISION_ROUNDS}) reached. "
-                "No further revisions are allowed."
-            )
+        validate_revision_round_available(submission)
 
         accepted_assignments = list(
             ReviewerAssignment.objects

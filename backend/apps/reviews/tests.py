@@ -1056,3 +1056,127 @@ class ReviewWorkspaceContractTests(APITestCase):
         response = self.client.get(self.workspace_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    @patch(
+        "apps.submissions.policies.MAX_REVISION_ROUNDS",
+        1,
+    )
+    def test_first_revision_request_is_allowed(self):
+        for assignment in self.assignments:
+            Review.objects.create(
+                assignment=assignment,
+                recommendation=Review.Recommendation.MINOR_REVISION,
+                comments_for_author="Please revise the methodology.",
+                comments_for_editor="A further round is appropriate.",
+            )
+
+        self.submission.status = Submission.Status.REVIEWED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:submission-make-editor-decision",
+                args=[self.submission.id],
+            ),
+            {
+                "decision": SubmissionVersion.Decision.MINOR_REVISION,
+                "decision_letter": (
+                    "Please revise the manuscript using the reviewer feedback."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.submission.refresh_from_db()
+        self.version.refresh_from_db()
+
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.UNDER_REVISION,
+        )
+        self.assertEqual(
+            self.version.decision,
+            SubmissionVersion.Decision.MINOR_REVISION,
+        )
+    @patch(
+        "apps.submissions.policies.MAX_REVISION_ROUNDS",
+        1,
+    )
+    def test_revision_decision_is_rejected_after_limit(self):
+        self.version.decision = SubmissionVersion.Decision.MINOR_REVISION
+        self.version.decided_by = self.editor
+        self.version.decided_at = timezone.now()
+        self.version.save(
+            update_fields=[
+                "decision",
+                "decided_by",
+                "decided_at",
+            ]
+        )
+
+        second_version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=2,
+            file="submissions/workspace/v2/full/manuscript.pdf",
+            blinded_file=(
+                "submissions/workspace/v2/blinded/manuscript.pdf"
+            ),
+            response_to_reviewers=(
+                "We addressed every point raised in the first round."
+            ),
+        )
+
+        for reviewer in self.reviewers:
+            second_assignment = ReviewerAssignment.objects.create(
+                version=second_version,
+                reviewer=reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=timezone.now() - timedelta(days=7),
+                review_deadline=timezone.now() + timedelta(days=7),
+            )
+            Review.objects.create(
+                assignment=second_assignment,
+                recommendation=Review.Recommendation.MINOR_REVISION,
+                comments_for_author="A further change would be helpful.",
+                comments_for_editor="This is the second-round report.",
+            )
+
+        self.submission.status = Submission.Status.REVIEWED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:submission-make-editor-decision",
+                args=[self.submission.id],
+            ),
+            {
+                "decision": SubmissionVersion.Decision.MINOR_REVISION,
+                "decision_letter": "Please revise the manuscript again.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "Maximum revision rounds (1) reached",
+            str(response.data),
+        )
+
+        self.submission.refresh_from_db()
+        second_version.refresh_from_db()
+
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.REVIEWED,
+        )
+        self.assertEqual(
+            second_version.decision,
+            SubmissionVersion.Decision.PENDING,
+        )

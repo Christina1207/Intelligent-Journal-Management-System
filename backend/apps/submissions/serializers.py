@@ -1,3 +1,5 @@
+from curses import version
+
 from rest_framework import serializers
 from .models import Submission, SubmissionTopic, SubmissionVersion
 from apps.journals.models import Section
@@ -61,10 +63,14 @@ class SubmissionCreateSerializer(serializers.Serializer):
             )
         return file
 
+class AuthorReviewFeedbackSerializer(serializers.Serializer):
+    reviewer_label = serializers.CharField()
+    comments_for_author = serializers.CharField()
 
 class SubmissionVersionSerializer(serializers.ModelSerializer):
     full_manuscript_available = serializers.SerializerMethodField()
     blinded_manuscript_available = serializers.SerializerMethodField()
+    reviewer_feedback = serializers.SerializerMethodField()
 
     class Meta:
         model = SubmissionVersion
@@ -77,6 +83,7 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
             "decision",
             "decision_letter",
             "response_to_reviewers",
+            "reviewer_feedback",
             "decided_at",
             "decided_by",
         ]
@@ -87,6 +94,51 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
 
     def get_blinded_manuscript_available(self, version):
         return bool(version.blinded_file)
+    
+    def get_reviewer_feedback(self, version):
+        """
+        Release only author-directed comments after an editorial decision.
+
+        Reviewer identity, recommendation, and confidential editor comments
+        deliberately remain outside this representation.
+        """
+        if version.decision == SubmissionVersion.Decision.PENDING:
+            return []
+
+        assignments = getattr(
+            version,
+            "author_feedback_assignments",
+            None,
+        )
+
+        if assignments is None:
+            assignments = (
+                version.reviewer_assignments
+                .select_related("review")
+                .order_by("assigned_at", "id")
+            )
+
+        feedback = []
+
+        for assignment in assignments:
+            if not hasattr(assignment, "review"):
+                continue
+
+            feedback.append(
+                {
+                    "reviewer_label": (
+                        f"Reviewer {len(feedback) + 1}"
+                    ),
+                    "comments_for_author": (
+                        assignment.review.comments_for_author
+                    ),
+                }
+            )
+
+        return AuthorReviewFeedbackSerializer(
+            feedback,
+            many=True,
+        ).data
 
 
 class SubmissionTopicSerializer(serializers.ModelSerializer):

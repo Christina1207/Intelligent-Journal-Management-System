@@ -3,6 +3,9 @@ from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils import timezone
 from apps.accounts.models import Role
 from apps.submissions.models import Submission, SubmissionVersion
+from apps.submissions.policies import (
+    validate_revision_round_available,
+)
 from apps.workflow.models import ReviewerAssignment
 from apps.reviews.models import Review
 from config.constants import REQUIRED_REVIEWS_COUNT
@@ -304,7 +307,7 @@ class ReviewService:
 
         submission = (
             Submission.objects
-            .select_for_update()
+            .select_for_update(of=("self",))
             .select_related("assigned_editor")
             .get(pk=submission.pk)
         )
@@ -335,6 +338,13 @@ class ReviewService:
 
         if decision == SubmissionVersion.Decision.PENDING:
             raise ValidationError("PENDING is not a valid editor decision.")
+        revision_decisions = {
+            SubmissionVersion.Decision.MINOR_REVISION,
+            SubmissionVersion.Decision.MAJOR_REVISION,
+        }
+
+        if decision in revision_decisions:
+            validate_revision_round_available(submission)
 
         accepted_count = ReviewerAssignment.objects.filter(
             version=current_version,
