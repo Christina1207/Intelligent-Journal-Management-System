@@ -90,7 +90,8 @@ class ManagerAssignmentApiTests(APITestCase):
         SubmissionVersion.objects.create(
             submission=submission,
             version_number=1,
-            file=f"submissions/{submission.id}/v1/manuscript.pdf",
+            file=f"submissions/{submission.id}/v1/full/manuscript.pdf",
+            blinded_file=f"submissions/{submission.id}/v1/blinded/manuscript.pdf",
         )
         return submission
     def complete_triage(self, submission):
@@ -601,6 +602,10 @@ class ManagerAssignmentApiTests(APITestCase):
             self.submission.versions
             .order_by("-version_number")
             .first()
+        )
+        self.assertNotEqual(
+            latest_version.file,
+            latest_version.blinded_file,
         )
 
         self.client.force_authenticate(self.manager)

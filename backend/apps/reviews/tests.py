@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -11,6 +12,158 @@ from apps.journals.models import Section
 from apps.reviews.models import Review
 from apps.submissions.models import Submission, SubmissionVersion
 from apps.workflow.models import ReviewerAssignment
+
+
+class ReviewerManuscriptDownloadApiTests(APITestCase):
+    def setUp(self):
+        self.reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR
+        )
+        self.editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR
+        )
+
+        user_model = get_user_model()
+        self.author = self.create_user(user_model, "download-author", self.author_role)
+        self.editor = self.create_user(user_model, "download-editor", self.editor_role)
+        self.reviewer = self.create_user(
+            user_model,
+            "accepted-download-reviewer",
+            self.reviewer_role,
+        )
+        self.other_reviewer = self.create_user(
+            user_model,
+            "other-download-reviewer",
+            self.reviewer_role,
+        )
+
+        self.section = Section.objects.create(name="Reviewer Downloads")
+        self.submission = Submission.objects.create(
+            title="Blinded reviewer manuscript",
+            abstract="Reviewer download test abstract.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/download/v1/full/manuscript.pdf",
+            blinded_file="submissions/download/v1/blinded/manuscript.pdf",
+        )
+
+    def create_user(self, user_model, username, role):
+        user = user_model.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        user.roles.add(role)
+        return user
+
+    def create_assignment(self, *, reviewer=None, status_value):
+        return ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=reviewer or self.reviewer,
+            assigned_by=self.editor,
+            status=status_value,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+
+    def download_url(self, assignment):
+        return reverse(
+            "reviewer:reviewer-manuscript-download",
+            args=[assignment.id],
+        )
+
+    @patch("apps.reviews.views.StorageService")
+    def test_accepted_reviewer_receives_url_signed_from_blinded_file(
+        self,
+        storage_service_class,
+    ):
+        assignment = self.create_assignment(
+            status_value=ReviewerAssignment.Status.ACCEPTED,
+        )
+        storage_service = storage_service_class.return_value
+        storage_service.get_public_url.return_value = (
+            "http://localhost:9000/manuscripts/blinded-signed-url"
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(self.download_url(assignment))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["assignment_id"], str(assignment.id))
+        self.assertEqual(response.data["version_id"], str(self.version.id))
+        self.assertEqual(response.data["version_number"], 1)
+        self.assertEqual(response.data["expires_in_seconds"], 600)
+        self.assertEqual(
+            response.data["manuscript_url"],
+            "http://localhost:9000/manuscripts/blinded-signed-url",
+        )
+        self.assertNotIn("file", response.data)
+        self.assertNotIn("blinded_file", response.data)
+        storage_service.get_public_url.assert_called_once_with(
+            object_name=self.version.blinded_file,
+            expires_in_seconds=600,
+        )
+
+    @patch("apps.reviews.views.StorageService")
+    def test_non_accepted_and_unrelated_reviewers_are_denied(
+        self,
+        storage_service_class,
+    ):
+        cases = [
+            ("pending", ReviewerAssignment.Status.PENDING, self.reviewer),
+            ("declined", ReviewerAssignment.Status.DECLINED, self.reviewer),
+            ("cancelled", ReviewerAssignment.Status.CANCELLED, self.reviewer),
+            (
+                "unrelated",
+                ReviewerAssignment.Status.ACCEPTED,
+                self.other_reviewer,
+            ),
+        ]
+
+        for label, assignment_status, authenticated_user in cases:
+            with self.subTest(label=label):
+                assignment = self.create_assignment(
+                    reviewer=self.reviewer,
+                    status_value=assignment_status,
+                )
+                self.client.force_authenticate(authenticated_user)
+
+                response = self.client.get(self.download_url(assignment))
+
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+                assignment.delete()
+
+        storage_service_class.assert_not_called()
+
+    @patch("apps.reviews.views.StorageService")
+    def test_missing_blinded_file_returns_400_and_never_signs_full_file(
+        self,
+        storage_service_class,
+    ):
+        self.version.blinded_file = ""
+        self.version.save(update_fields=["blinded_file"])
+        assignment = self.create_assignment(
+            status_value=ReviewerAssignment.Status.ACCEPTED,
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(self.download_url(assignment))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("No manuscript file", str(response.data))
+        storage_service_class.assert_not_called()
 
 
 class AssignedEditorAuthorizationTests(APITestCase):

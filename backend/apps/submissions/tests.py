@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import ANY, call, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -83,6 +83,7 @@ class SubmissionDetailApiTests(APITestCase):
             submission=self.submission,
             version_number=1,
             file="submissions/private/v1/manuscript.pdf",
+            blinded_file="submissions/private/v1/blinded.pdf",
             decision=SubmissionVersion.Decision.MINOR_REVISION,
             decision_letter="Please revise.",
         )
@@ -90,6 +91,7 @@ class SubmissionDetailApiTests(APITestCase):
             submission=self.submission,
             version_number=2,
             file="submissions/private/v2/manuscript.pdf",
+            blinded_file="submissions/private/v2/blinded.pdf",
             decision=SubmissionVersion.Decision.PENDING,
             decision_letter="",
         )
@@ -104,6 +106,7 @@ class SubmissionDetailApiTests(APITestCase):
             submission=self.other_submission,
             version_number=1,
             file="submissions/private/other/v1/manuscript.pdf",
+            blinded_file="submissions/private/other/v1/blinded.pdf",
         )
 
     def _create_user(self, username, role_names):
@@ -279,6 +282,7 @@ class SubmissionDetailApiTests(APITestCase):
         }
         forbidden_version_fields = {
             "file",
+            "blinded_file",
             "decided_at",
             "decided_by",
             "reviewer",
@@ -314,6 +318,25 @@ class SubmissionDetailApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_version_list_response_does_not_expose_manuscript_paths(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(
+            reverse(
+                "submission-version-list",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 2)
+
+        for version in response.data["results"]:
+            self.assertNotIn("file", version)
+            self.assertNotIn("blinded_file", version)
+            self.assertIn("full_manuscript_available", version)
+            self.assertIn("blinded_manuscript_available", version)
 
 
 class AuthorDashboardApiTests(APITestCase):
@@ -550,6 +573,7 @@ class RevisionUploadApiTests(APITestCase):
             submission=self.submission,
             version_number=1,
             file="submissions/private/v1/manuscript.pdf",
+            blinded_file="submissions/private/v1/blinded.pdf",
             decision=SubmissionVersion.Decision.MINOR_REVISION,
             decision_letter="Please revise and respond to reviewer comments.",
         )
@@ -635,6 +659,24 @@ class RevisionUploadApiTests(APITestCase):
         )
         self.assertGreater(carried_assignment.review_deadline, timezone.now())
         self.assertEqual(storage_class.return_value.upload.call_count, 2)
+        storage_class.return_value.upload.assert_has_calls(
+            [
+                call(
+                    file_obj=ANY,
+                    submission_id=str(self.submission.id),
+                    version_number=2,
+                    filename="revision.pdf",
+                    variant="full",
+                ),
+                call(
+                    file_obj=ANY,
+                    submission_id=str(self.submission.id),
+                    version_number=2,
+                    filename="revision-blinded.pdf",
+                    variant="blinded",
+                ),
+            ]
+        )
 
     @patch("apps.submissions.services.StorageService")
     def test_author_can_upload_revision_without_response_to_reviewers(
@@ -789,6 +831,24 @@ class SubmissionCreateApiTests(APITestCase):
         self.assertEqual(version.blinded_file, blinded_object_name)
 
         self.assertEqual(storage_class.return_value.upload.call_count, 2)
+        storage_class.return_value.upload.assert_has_calls(
+            [
+                call(
+                    file_obj=ANY,
+                    submission_id=str(submission.id),
+                    version_number=1,
+                    filename="full.pdf",
+                    variant="full",
+                ),
+                call(
+                    file_obj=ANY,
+                    submission_id=str(submission.id),
+                    version_number=1,
+                    filename="blinded.pdf",
+                    variant="blinded",
+                ),
+            ]
+        )
 
     @patch("apps.submissions.services.StorageService")
     def test_submission_create_rejects_missing_blinded_file(self, storage_class):
