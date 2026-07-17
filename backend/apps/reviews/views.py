@@ -10,6 +10,7 @@ from apps.accounts.models import Role, User
 from apps.reviews.services import ReviewService
 from apps.reviews.serializers import (
     EditorDecisionSerializer,
+    EditorReviewWorkspaceSerializer,
     ReviewerAssignmentCreateSerializer,
     ReviewerAssignmentResponseSerializer,
     ReviewerAssignmentSerializer,
@@ -28,7 +29,10 @@ from apps.reviews.selectors import (
     reviewer_assignment_or_404,
     reviewer_candidates_for,
 )
-from config.constants import REVIEWER_RECOMMENDATION_COUNT
+from config.constants import (
+    REQUIRED_REVIEWS_COUNT,
+    REVIEWER_RECOMMENDATION_COUNT,
+)
 from apps.core.recommendations import RecommendationService
 from apps.core.storage import StorageService
 
@@ -83,38 +87,164 @@ class SubmissionReviewsView(APIView):
             submission_id=submission_id,
         )
 
-        if submission.status != Submission.Status.REVIEWED:
-            return Response(
-                {
-                    'available': False,
-                    'reason': 'Reviews are not available until all reviewers have submitted.',
-                    'reviews': [],
+        current_version = (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
+
+        if current_version is None:
+            payload = {
+                "submission_id": submission.id,
+                "submission_status": submission.status,
+                "current_version": None,
+                "required_reviews": REQUIRED_REVIEWS_COUNT,
+                "progress": {
+                    "total_invitations": 0,
+                    "pending": 0,
+                    "accepted": 0,
+                    "declined": 0,
+                    "expired": 0,
+                    "cancelled": 0,
+                    "submitted": 0,
+                    "overdue": 0,
                 },
+                "assignments": [],
+                "reviews_available": False,
+                "reviews_unavailable_reason": (
+                    "This submission has no manuscript version."
+                ),
+                "reviews": [],
+                "can_make_decision": False,
+            }
+
+            return Response(
+                EditorReviewWorkspaceSerializer(
+                    payload,
+                    context={
+                        "is_editor": True,
+                        "request": request,
+                    },
+                ).data,
                 status=status.HTTP_200_OK,
             )
-        current_version = submission.versions.order_by('-version_number').first()
-        assignments = (
-            ReviewerAssignment.objects
-            .filter(
+
+        assignments = list(
+            ReviewerAssignment.objects.filter(
                 version=current_version,
-                status=ReviewerAssignment.Status.ACCEPTED,
             )
-            .select_related('review',"reviewer")
+            .select_related(
+                "review",
+                "reviewer",
+                "assigned_by",
+                "cancelled_by",
+                "version",
+                "version__submission",
+                "version__submission__section",
+            )
+            .order_by("assigned_at")
         )
+
+        status_counts = {
+            assignment_status: sum(
+                assignment.status == assignment_status
+                for assignment in assignments
+            )
+            for assignment_status in ReviewerAssignment.Status.values
+        }
+
+        accepted_count = status_counts[
+            ReviewerAssignment.Status.ACCEPTED
+        ]
+        submitted_count = sum(
+            hasattr(assignment, "review")
+            for assignment in assignments
+            if assignment.status == ReviewerAssignment.Status.ACCEPTED
+        )
+        overdue_count = sum(
+            assignment.is_overdue
+            for assignment in assignments
+        )
+
+        reviews_available = (
+            accepted_count >= REQUIRED_REVIEWS_COUNT
+            and submitted_count == accepted_count
+        )
+
+        if accepted_count < REQUIRED_REVIEWS_COUNT:
+            unavailable_reason = (
+                f"At least {REQUIRED_REVIEWS_COUNT} accepted reviewers "
+                f"are required. Currently accepted: {accepted_count}."
+            )
+        elif submitted_count < accepted_count:
+            remaining_count = accepted_count - submitted_count
+            unavailable_reason = (
+                f"Waiting for {remaining_count} accepted reviewer"
+                f"{'' if remaining_count == 1 else 's'} to submit."
+            )
+        else:
+            unavailable_reason = ""
 
         reviews = [
-            a.review for a in assignments
-            if hasattr(a, 'review')
+            assignment.review
+            for assignment in assignments
+            if (
+                reviews_available
+                and assignment.status
+                == ReviewerAssignment.Status.ACCEPTED
+                and hasattr(assignment, "review")
+            )
         ]
 
-        return Response(
-            {
-                'available': True,
-                'reviews': ReviewSerializer(reviews, many=True).data,
-            },
-            status=status.HTTP_200_OK,
+        can_make_decision = (
+            reviews_available
+            and submission.status == Submission.Status.REVIEWED
+            and current_version.decision
+            == current_version.Decision.PENDING
         )
 
+        payload = {
+            "submission_id": submission.id,
+            "submission_status": submission.status,
+            "current_version": current_version,
+            "required_reviews": REQUIRED_REVIEWS_COUNT,
+            "progress": {
+                "total_invitations": len(assignments),
+                "pending": status_counts[
+                    ReviewerAssignment.Status.PENDING
+                ],
+                "accepted": accepted_count,
+                "declined": status_counts[
+                    ReviewerAssignment.Status.DECLINED
+                ],
+                "expired": status_counts[
+                    ReviewerAssignment.Status.EXPIRED
+                ],
+                "cancelled": status_counts[
+                    ReviewerAssignment.Status.CANCELLED
+                ],
+                "submitted": submitted_count,
+                "overdue": overdue_count,
+            },
+            "assignments": assignments,
+            "reviews_available": reviews_available,
+            "reviews_unavailable_reason": unavailable_reason,
+            "reviews": reviews,
+            "can_make_decision": can_make_decision,
+        }
+
+        serializer = EditorReviewWorkspaceSerializer(
+            payload,
+            context={
+                "is_editor": True,
+                "request": request,
+            },
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
 # ------------------------------------------------------------------ #
 #  EDITOR — EXPIRE ASSIGNMENT                                         #

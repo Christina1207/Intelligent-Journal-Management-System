@@ -184,6 +184,12 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     reviewer    = UserBriefSerializer(read_only=True)
     assigned_by = UserBriefSerializer(read_only=True)
     cancelled_by = UserBriefSerializer(read_only=True)
+    
+    review_submitted = serializers.SerializerMethodField()
+    can_respond = serializers.SerializerMethodField()
+    can_download_manuscript = serializers.SerializerMethodField()
+    can_submit_review = serializers.SerializerMethodField()
+    
     replaces = serializers.UUIDField(
         source="replaces_id",
         allow_null=True,
@@ -202,6 +208,10 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
             'review_deadline',
             'assigned_at',
             'is_overdue',
+            "review_submitted",
+            "can_respond",
+            "can_download_manuscript",
+            "can_submit_review",
             "cancelled_at",
             "cancelled_by",
             "cancellation_reason",
@@ -214,6 +224,26 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
     
     def get_version(self, instance):
         return SubmissionVersionBriefSerializer(instance.version).data
+    
+    def get_review_submitted(self, instance):
+        try:
+            instance.review
+        except ObjectDoesNotExist:
+            return False
+
+        return True
+
+    def get_can_respond(self, instance):
+        return instance.status == ReviewerAssignment.Status.PENDING
+
+    def get_can_download_manuscript(self, instance):
+        return instance.status == ReviewerAssignment.Status.ACCEPTED
+
+    def get_can_submit_review(self, instance):
+        return (
+            instance.status == ReviewerAssignment.Status.ACCEPTED
+            and not self.get_review_submitted(instance)
+        )
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -305,3 +335,45 @@ class SubmissionVersionDecisionSerializer(serializers.ModelSerializer):
             "decided_at",
             "decided_by",
         ]
+
+class EditorReviewVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubmissionVersion
+        fields = [
+            "id",
+            "version_number",
+            "decision",
+            "decision_letter",
+            "response_to_reviewers",
+            "submitted_at",
+            "decided_at",
+        ]
+        read_only_fields = fields
+
+
+class EditorReviewProgressSerializer(serializers.Serializer):
+    total_invitations = serializers.IntegerField()
+    pending = serializers.IntegerField()
+    accepted = serializers.IntegerField()
+    declined = serializers.IntegerField()
+    expired = serializers.IntegerField()
+    cancelled = serializers.IntegerField()
+    submitted = serializers.IntegerField()
+    overdue = serializers.IntegerField()
+
+
+class EditorReviewWorkspaceSerializer(serializers.Serializer):
+    submission_id = serializers.UUIDField()
+    submission_status = serializers.CharField()
+    current_version = EditorReviewVersionSerializer(
+        allow_null=True,
+    )
+    required_reviews = serializers.IntegerField()
+    progress = EditorReviewProgressSerializer()
+    assignments = ReviewerAssignmentSerializer(many=True)
+    reviews_available = serializers.BooleanField()
+    reviews_unavailable_reason = serializers.CharField(
+        allow_blank=True,
+    )
+    reviews = ReviewSerializer(many=True)
+    can_make_decision = serializers.BooleanField()

@@ -13,6 +13,7 @@ from apps.reviews.models import Review
 from apps.submissions.models import Submission, SubmissionVersion
 from apps.workflow.models import ReviewerAssignment
 
+from config.constants import REQUIRED_REVIEWS_COUNT
 
 class ReviewerManuscriptDownloadApiTests(APITestCase):
     def setUp(self):
@@ -853,3 +854,205 @@ class ReviewerInvitationResponseApiTests(APITestCase):
             self.assignment.status,
             ReviewerAssignment.Status.PENDING,
         )
+
+class ReviewWorkspaceContractTests(APITestCase):
+    def setUp(self):
+        self.reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+        self.editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR,
+        )
+
+        user_model = get_user_model()
+
+        self.author = self.create_user(
+            user_model,
+            "workspace-author",
+            self.author_role,
+        )
+        self.editor = self.create_user(
+            user_model,
+            "workspace-editor",
+            self.editor_role,
+        )
+        self.other_editor = self.create_user(
+            user_model,
+            "workspace-other-editor",
+            self.editor_role,
+        )
+
+        self.section = Section.objects.create(
+            name="Review Workspace Tests",
+        )
+        self.submission = Submission.objects.create(
+            title="Review workspace manuscript",
+            abstract="Review workspace contract test.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/workspace/v1/full/manuscript.pdf",
+            blinded_file=(
+                "submissions/workspace/v1/blinded/manuscript.pdf"
+            ),
+        )
+
+        self.reviewers = []
+        self.assignments = []
+
+        for index in range(REQUIRED_REVIEWS_COUNT):
+            reviewer = self.create_user(
+                user_model,
+                f"workspace-reviewer-{index}",
+                self.reviewer_role,
+            )
+            assignment = ReviewerAssignment.objects.create(
+                version=self.version,
+                reviewer=reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=timezone.now() + timedelta(days=3),
+                review_deadline=timezone.now() + timedelta(days=14),
+            )
+            self.reviewers.append(reviewer)
+            self.assignments.append(assignment)
+
+        self.workspace_url = reverse(
+            "editor-reviews:submission-reviews",
+            args=[self.submission.id],
+        )
+
+    def create_user(self, user_model, username, role):
+        user = user_model.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        user.roles.add(role)
+        return user
+
+    def test_workspace_reports_current_round_progress(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(self.workspace_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["submission_id"],
+            str(self.submission.id),
+        )
+        self.assertEqual(
+            response.data["current_version"]["version_number"],
+            1,
+        )
+        self.assertEqual(
+            response.data["progress"]["accepted"],
+            REQUIRED_REVIEWS_COUNT,
+        )
+        self.assertEqual(response.data["progress"]["submitted"], 0)
+        self.assertFalse(response.data["reviews_available"])
+        self.assertFalse(response.data["can_make_decision"])
+        self.assertEqual(
+            len(response.data["assignments"]),
+            REQUIRED_REVIEWS_COUNT,
+        )
+
+    def test_completed_round_exposes_reviews_and_allows_decision(self):
+        for assignment in self.assignments:
+            Review.objects.create(
+                assignment=assignment,
+                recommendation=Review.Recommendation.MINOR_REVISION,
+                comments_for_author="Please clarify the methodology.",
+                comments_for_editor="The manuscript is revisable.",
+            )
+
+        self.submission.status = Submission.Status.REVIEWED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(self.workspace_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["reviews_available"])
+        self.assertTrue(response.data["can_make_decision"])
+        self.assertEqual(
+            response.data["progress"]["submitted"],
+            REQUIRED_REVIEWS_COUNT,
+        )
+        self.assertEqual(
+            len(response.data["reviews"]),
+            REQUIRED_REVIEWS_COUNT,
+        )
+        self.assertIn(
+            "comments_for_editor",
+            response.data["reviews"][0],
+        )
+
+    def test_assignment_response_exposes_reviewer_action_state(self):
+        assignment = self.assignments[0]
+        reviewer = self.reviewers[0]
+
+        assignment.status = ReviewerAssignment.Status.PENDING
+        assignment.save(update_fields=["status"])
+
+        self.client.force_authenticate(reviewer)
+
+        response = self.client.get(
+            reverse("reviewer:my-assignments"),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        returned_assignment = response.data[0]
+
+        self.assertFalse(returned_assignment["review_submitted"])
+        self.assertTrue(returned_assignment["can_respond"])
+        self.assertFalse(
+            returned_assignment["can_download_manuscript"]
+        )
+        self.assertFalse(returned_assignment["can_submit_review"])
+
+    def test_submitted_review_disables_duplicate_submission(self):
+        assignment = self.assignments[0]
+        reviewer = self.reviewers[0]
+
+        Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="The manuscript is suitable.",
+            comments_for_editor="No confidential concerns.",
+        )
+
+        self.client.force_authenticate(reviewer)
+
+        response = self.client.get(
+            reverse("reviewer:my-assignments"),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        returned_assignment = response.data[0]
+
+        self.assertTrue(returned_assignment["review_submitted"])
+        self.assertFalse(returned_assignment["can_respond"])
+        self.assertTrue(
+            returned_assignment["can_download_manuscript"]
+        )
+        self.assertFalse(returned_assignment["can_submit_review"])
+
+    def test_unrelated_editor_cannot_open_workspace(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.get(self.workspace_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
