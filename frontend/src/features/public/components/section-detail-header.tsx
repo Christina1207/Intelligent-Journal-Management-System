@@ -13,7 +13,7 @@ export function SectionDetailHeader({
   articles,
 }: SectionDetailHeaderProps) {
   const latestArticle = articles[0];
-  const keywords = getSectionKeywords(section);
+  const keywords = getSectionKeywords(articles);
 
   return (
     <section className="border-b bg-white">

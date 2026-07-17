@@ -49,3 +49,5 @@ desktop.ini
 *.pkl
 *.safetensors
 models/
+
+!frontend/src/features/public/data/

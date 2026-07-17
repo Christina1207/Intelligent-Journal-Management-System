@@ -2,13 +2,20 @@ import { EditorialMemberCard } from "../components/editorial-member-card";
 import { InfoPageHero } from "../components/info-page-hero";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import { journalInfo } from "../data/public-home.mock";
-import { editorialBoardMembers } from "../data/public-info.mock";
+import type { EditorialBoardMember, JournalInfo } from "../types";
 
-export function PublicEditorialBoardPage() {
+type PublicEditorialBoardPageProps = {
+  journal: JournalInfo;
+  members: EditorialBoardMember[];
+};
+
+export function PublicEditorialBoardPage({
+  journal,
+  members,
+}: PublicEditorialBoardPageProps) {
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <InfoPageHero
@@ -16,7 +23,10 @@ export function PublicEditorialBoardPage() {
           title="Editorial leadership and scientific section management."
           description="The editorial board is responsible for journal quality, editorial policies, section supervision, peer-review coordination, and final publication decisions."
           actions={[
-            { label: "Publication Ethics", href: "/publication-ethics" },
+            {
+              label: "Publication Ethics",
+              href: "/publication-ethics",
+            },
             {
               label: "Contact the Journal",
               href: "/contact",
@@ -31,16 +41,28 @@ export function PublicEditorialBoardPage() {
               Editorial board members
             </h2>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              {editorialBoardMembers.map((member) => (
-                <EditorialMemberCard key={member.id} member={member} />
-              ))}
-            </div>
+            {members.length > 0 ? (
+              <div className="grid gap-6 md:grid-cols-2">
+                {members.map((member) => (
+                  <EditorialMemberCard key={member.id} member={member} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
+                <h2 className="text-xl font-bold text-slate-950">
+                  Editorial board information unavailable
+                </h2>
+
+                <p className="mt-3 text-slate-600">
+                  Editorial board information has not been published yet.
+                </p>
+              </div>
+            )}
           </div>
         </section>
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

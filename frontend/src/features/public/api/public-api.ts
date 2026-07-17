@@ -18,7 +18,7 @@ import type {
   PublicPageApiDto,
   PublicSectionApiDto,
 } from "./public-api.types";
-
+import { fallbackJournalInfo } from "../data/public-fallbacks";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -81,6 +81,13 @@ function isNotFoundError(error: unknown) {
   return error instanceof PublicApiError && error.status === 404;
 }
 
+function reportPublicFallback(resource: string, error: unknown) {
+  console.error(
+    `[public-api] Using controlled fallback for ${resource}.`,
+    error,
+  );
+}
+
 export async function getPublicJournal() {
   const dto = await publicFetch<PublicJournalApiDto>(
     "/public/journal/",
@@ -91,6 +98,15 @@ export async function getPublicJournal() {
   );
 
   return mapJournal(dto);
+}
+
+export async function getPublicJournalSafe() {
+  try {
+    return await getPublicJournal();
+  } catch (error) {
+    reportPublicFallback("journal metadata", error);
+    return fallbackJournalInfo;
+  }
 }
 
 export async function getPublicArticles(query: PublicArticleListQuery = {}) {
@@ -277,6 +293,15 @@ export async function getPublicPage(slug: string) {
   }
 }
 
+export async function getPublicPageSafe(slug: string) {
+  try {
+    return await getPublicPage(slug);
+  } catch (error) {
+    reportPublicFallback(`public page "${slug}"`, error);
+    return null;
+  }
+}
+
 export async function getEditorialBoard() {
   const response = await publicFetch<
     | EditorialBoardMemberApiDto[]
@@ -296,4 +321,21 @@ export async function getContactMethods() {
   const contacts = Array.isArray(response) ? response : response.results;
 
   return contacts.map(mapContactMethod);
+}
+export async function getEditorialBoardSafe() {
+  try {
+    return await getEditorialBoard();
+  } catch (error) {
+    reportPublicFallback("editorial board", error);
+    return [];
+  }
+}
+
+export async function getContactMethodsSafe() {
+  try {
+    return await getContactMethods();
+  } catch (error) {
+    reportPublicFallback("contact methods", error);
+    return [];
+  }
 }

@@ -2,19 +2,37 @@ import { InfoContentSection } from "../components/info-content-section";
 import { InfoPageHero } from "../components/info-page-hero";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import { aboutSections } from "../data/public-info.mock";
-import { journalInfo } from "../data/public-home.mock";
+import { fallbackAboutSections } from "../data/public-fallbacks";
+import type { JournalInfo, PublicPageContent } from "../types";
 
-export function PublicAboutPage() {
+type PublicAboutPageProps = {
+  journal: JournalInfo;
+  page: PublicPageContent | null;
+};
+
+export function PublicAboutPage({ journal, page }: PublicAboutPageProps) {
+  const sections = page
+    ? [
+        {
+          id: page.slug,
+          title: page.title,
+          body: page.content,
+        },
+      ]
+    : fallbackAboutSections;
+
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <InfoPageHero
           eyebrow="About the Journal"
-          title="A peer-reviewed open-access journal for scientific research."
-          description="Learn about the journal mission, scope, publishing model, and the public research portal provided by the system."
+          title={page?.title ?? "About the Journal"}
+          description={
+            page?.excerpt ??
+            "Learn about the journal mission, scope, and publishing model."
+          }
           actions={[
             { label: "Browse Articles", href: "/articles" },
             {
@@ -25,10 +43,10 @@ export function PublicAboutPage() {
           ]}
         />
 
-        <InfoContentSection sections={aboutSections} />
+        <InfoContentSection sections={sections} />
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }
