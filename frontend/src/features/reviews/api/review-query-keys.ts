@@ -27,4 +27,12 @@ export const reviewQueryKeys = {
       "reviewer-recommendations",
       limit,
     ] as const,
+
+  editorReviewWorkspace: (submissionId: string) =>
+    [
+      ...reviewQueryKeys.sectionEditor(),
+      "submissions",
+      submissionId,
+      "review-workspace",
+    ] as const,
 };

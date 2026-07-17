@@ -14,9 +14,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ReviewerDiscoveryPanel } from "@/features/reviews/components";
+import {
+  EditorReviewProgressPanel,
+  ReviewerDiscoveryPanel,
+} from "@/features/reviews/components";
 import { useSectionEditorQueue } from "@/features/reviews/hooks";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
+import { Separator } from "@/components/ui/separator";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -211,10 +215,15 @@ export function SectionEditorAssignmentsPage() {
                     </p>
                   </div>
 
-                  <ReviewerDiscoveryPanel
-                    key={selectedSubmission.id}
-                    submission={selectedSubmission}
+                  <Separator />
+
+                  <EditorReviewProgressPanel
+                    submissionId={selectedSubmission.id}
                   />
+
+                  <Separator />
+
+                  <ReviewerDiscoveryPanel submission={selectedSubmission} />
                 </CardContent>
               </Card>
             ) : (

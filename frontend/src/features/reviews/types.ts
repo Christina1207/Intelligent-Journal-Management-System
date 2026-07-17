@@ -155,3 +155,34 @@ export type AssignReviewersResponse = {
   count: number;
   assignments: ReviewerAssignment[];
 };
+
+export type EditorReview = {
+  id: string;
+  reviewer: {
+    id: string;
+    email: string;
+    full_name: string;
+  };
+  recommendation: string;
+  comments_for_author: string;
+  comments_for_editor: string;
+  submitted_at: string;
+};
+
+export type EditorReviewWorkspaceResponse = {
+  submission_id: string;
+  submission_status: SubmissionStatus;
+  current_version: {
+    id: string;
+    version_number: number;
+    submitted_at: string;
+    decision: string;
+    response_to_reviewers?: string;
+  } | null;
+  required_reviews: number;
+  assignments: ReviewerAssignment[];
+  reviews_available: boolean;
+  reviews_unavailable_reason: string | null;
+  reviews: EditorReview[];
+  can_make_decision: boolean;
+};

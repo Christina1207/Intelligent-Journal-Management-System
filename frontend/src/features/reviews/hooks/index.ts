@@ -72,3 +72,4 @@ export {
   useReviewerRecommendations,
 } from "./use-reviewer-discovery";
 export { useSectionEditorQueue } from "./use-section-editor-queue";
+export { useEditorReviewWorkspace } from "./use-editor-review-workspace";
