@@ -1,6 +1,7 @@
 from django.urls import path
 from apps.reviews.views import (
     AssignReviewerView,
+    AssignReviewersView,
     CancelReviewerAssignmentView,
     MakeEditorDecisionView,
     ReplaceReviewerAssignmentView,
@@ -19,6 +20,11 @@ editor_urlpatterns = [
         'submissions/<uuid:submission_id>/assign-reviewer/',
         AssignReviewerView.as_view(),
         name='assign-reviewer',
+    ),
+    path(
+        "submissions/<uuid:submission_id>/assign-reviewers/",
+        AssignReviewersView.as_view(),
+        name="assign-reviewers",
     ),
     path(
         'submissions/<uuid:submission_id>/reviews/',

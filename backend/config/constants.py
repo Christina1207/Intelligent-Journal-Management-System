@@ -16,3 +16,9 @@ ORCID_REFRESH_INTERVAL_DAYS     = config('ORCID_REFRESH_INTERVAL_DAYS', default=
 
 # Celery
 CELERY_TASK_MAX_RETRIES         = config('CELERY_TASK_MAX_RETRIES', default=3, cast=int)
+
+MAX_REVIEWER_INVITATIONS_PER_BATCH = config(
+    "MAX_REVIEWER_INVITATIONS_PER_BATCH",
+    default=10,
+    cast=int,
+)

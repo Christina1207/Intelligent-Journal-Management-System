@@ -162,6 +162,49 @@ class ReviewService:
 
         return assignment
 
+    
+
+    @staticmethod
+    @transaction.atomic
+    def assign_reviewers(
+        *,
+        editor,
+        reviewers,
+        submission,
+        response_deadline,
+        review_deadline,
+    ):
+        """
+        Invite multiple reviewers using shared deadlines.
+
+        A separate ReviewerAssignment is created for every reviewer.
+        The outer transaction guarantees all-or-nothing behavior.
+        """
+
+        if not reviewers:
+            raise ValidationError(
+                {
+                    "reviewer_ids": (
+                        "Select at least one reviewer."
+                    )
+                }
+            )
+
+        assignments = []
+
+        for reviewer in reviewers:
+            assignment = ReviewService.assign_reviewer(
+                editor=editor,
+                reviewer=reviewer,
+                submission=submission,
+                response_deadline=response_deadline,
+                review_deadline=review_deadline,
+            )
+            assignments.append(assignment)
+
+        return assignments
+
+
     # ------------------------------------------------------------------ #
     #  RESPOND TO ASSIGNMENT                                               #
     # ------------------------------------------------------------------ #

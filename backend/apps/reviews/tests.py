@@ -715,103 +715,288 @@ class AssignedEditorAuthorizationTests(APITestCase):
             returned_ids,
         )
 
-        def test_candidate_search_only_returns_reviewers_for_submission_section(
+    def test_candidate_search_only_returns_reviewers_for_submission_section(
         self,
     ):
-            user_model = get_user_model()
+        user_model = get_user_model()
 
-            other_section = Section.objects.create(
-                name="Unrelated Medical Section",
+        other_section = Section.objects.create(
+            name="Unrelated Medical Section",
+        )
+
+        unrelated_reviewer = self.create_user(
+            user_model,
+            "unrelated-section-reviewer",
+            self.reviewer_role,
+        )
+
+        unrelated_profile = ReviewerProfile.objects.create(
+            user=unrelated_reviewer,
+        )
+        unrelated_profile.sections.add(other_section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
             )
+        )
 
-            unrelated_reviewer = self.create_user(
-                user_model,
-                "unrelated-section-reviewer",
-                self.reviewer_role,
-            )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
 
-            unrelated_profile = ReviewerProfile.objects.create(
-                user=unrelated_reviewer,
-            )
-            unrelated_profile.sections.add(other_section)
+        returned_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
 
-            self.client.force_authenticate(self.editor)
-
-            response = self.client.get(
-                reverse(
-                    "editor-reviews:reviewer-candidates",
-                    args=[self.submission.id],
-                )
-            )
-
-            self.assertEqual(
-                response.status_code,
-                status.HTTP_200_OK,
-            )
-
-            returned_ids = {
-                candidate["id"]
-                for candidate in response.data["candidates"]
-            }
-
-            self.assertIn(str(self.reviewer.id), returned_ids)
-            self.assertNotIn(
-                str(unrelated_reviewer.id),
-                returned_ids,
-            )
+        self.assertIn(str(self.reviewer.id), returned_ids)
+        self.assertNotIn(
+            str(unrelated_reviewer.id),
+            returned_ids,
+        )
 
 
-        def test_editor_cannot_invite_reviewer_from_another_section(
-            self,
-        ):
-            user_model = get_user_model()
+    def test_editor_cannot_invite_reviewer_from_another_section(
+        self,
+    ):
+        user_model = get_user_model()
 
-            other_section = Section.objects.create(
-                name="Other Reviewer Section",
-            )
+        other_section = Section.objects.create(
+            name="Other Reviewer Section",
+        )
 
-            unrelated_reviewer = self.create_user(
-                user_model,
-                "wrong-section-reviewer",
-                self.reviewer_role,
-            )
+        unrelated_reviewer = self.create_user(
+            user_model,
+            "wrong-section-reviewer",
+            self.reviewer_role,
+        )
 
-            unrelated_profile = ReviewerProfile.objects.create(
-                user=unrelated_reviewer,
-            )
-            unrelated_profile.sections.add(other_section)
+        unrelated_profile = ReviewerProfile.objects.create(
+            user=unrelated_reviewer,
+        )
+        unrelated_profile.sections.add(other_section)
 
-            self.client.force_authenticate(self.editor)
+        self.client.force_authenticate(self.editor)
 
-            response = self.client.post(
-                reverse(
-                    "editor-reviews:assign-reviewer",
-                    args=[self.submission.id],
-                ),
-                {
-                    "reviewer_id": str(unrelated_reviewer.id),
-                    "response_deadline": (
-                        timezone.now() + timedelta(days=3)
-                    ).isoformat(),
-                    "review_deadline": (
-                        timezone.now() + timedelta(days=14)
-                    ).isoformat(),
-                },
-                format="json",
-            )
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(unrelated_reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
 
-            self.assertEqual(
-                response.status_code,
-                status.HTTP_400_BAD_REQUEST,
-            )
-            self.assertIn("reviewer_id", response.data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("reviewer_id", response.data)
 
-            self.assertFalse(
-                ReviewerAssignment.objects.filter(
-                    version=self.version,
-                    reviewer=unrelated_reviewer,
-                ).exists()
-            )
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+                reviewer=unrelated_reviewer,
+            ).exists()
+        )
+    
+    def test_assigned_editor_can_invite_multiple_reviewers(self):
+        user_model = get_user_model()
+
+        second_reviewer = self.create_user(
+            user_model,
+            "second-batch-reviewer",
+            self.reviewer_role,
+        )
+
+        second_profile = ReviewerProfile.objects.create(
+            user=second_reviewer,
+        )
+        second_profile.sections.add(self.section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [
+                    str(self.reviewer.id),
+                    str(second_reviewer.id),
+                ],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["assignments"]), 2)
+
+        assignments = ReviewerAssignment.objects.filter(
+            version=self.version,
+        )
+
+        self.assertEqual(assignments.count(), 2)
+        self.assertSetEqual(
+            set(assignments.values_list("reviewer_id", flat=True)),
+            {
+                self.reviewer.id,
+                second_reviewer.id,
+            },
+        )
+
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.UNDER_REVIEW,
+        )
+
+    def test_batch_invitation_rejects_duplicate_reviewers(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [
+                    str(self.reviewer.id),
+                    str(self.reviewer.id),
+                ],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("reviewer_ids", response.data)
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+            ).exists()
+        )    
+    
+    def test_batch_invitation_rolls_back_when_one_reviewer_is_invalid(
+        self,
+    ):
+        user_model = get_user_model()
+
+        other_section = Section.objects.create(
+            name="Batch Rollback Other Section",
+        )
+
+        wrong_section_reviewer = self.create_user(
+            user_model,
+            "wrong-section-batch-reviewer",
+            self.reviewer_role,
+        )
+
+        wrong_section_profile = ReviewerProfile.objects.create(
+            user=wrong_section_reviewer,
+        )
+        wrong_section_profile.sections.add(other_section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [
+                    str(self.reviewer.id),
+                    str(wrong_section_reviewer.id),
+                ],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+            ).exists()
+        )
+
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.ASSIGNED,
+        )
+
+    def test_unassigned_editor_cannot_send_batch_invitation(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [str(self.reviewer.id)],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+            ).exists()
+        )
 class ReviewerInvitationResponseApiTests(APITestCase):
     def setUp(self):
         reviewer_role, _ = Role.objects.get_or_create(

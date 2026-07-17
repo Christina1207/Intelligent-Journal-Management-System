@@ -8,6 +8,7 @@ from apps.workflow.models import ReviewerAssignment
 from apps.reviews.models import Review
 from apps.submissions.models import SubmissionVersion
 
+from config.constants import MAX_REVIEWER_INVITATIONS_PER_BATCH
 
 # ------------------------------------------------------------------ #
 #  SHARED NESTED SERIALIZERS                                          #
@@ -111,6 +112,52 @@ class ReviewerAssignmentCreateSerializer(serializers.Serializer):
     reviewer_id       = serializers.UUIDField()
     response_deadline = serializers.DateTimeField()
     review_deadline = serializers.DateTimeField()
+
+    def validate(self, attrs):
+        response_deadline = attrs["response_deadline"]
+        review_deadline = attrs["review_deadline"]
+        now = timezone.now()
+
+        errors = {}
+
+        if response_deadline <= now:
+            errors["response_deadline"] = (
+                "Response deadline must be in the future."
+            )
+
+        if review_deadline <= now:
+            errors["review_deadline"] = (
+                "Review deadline must be in the future."
+            )
+
+        if response_deadline >= review_deadline:
+            errors["review_deadline"] = (
+                "Review deadline must be later than "
+                "the response deadline."
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+class ReviewerAssignmentsBulkCreateSerializer(serializers.Serializer):
+    reviewer_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+        min_length=1,
+        max_length=MAX_REVIEWER_INVITATIONS_PER_BATCH,
+    )
+    response_deadline = serializers.DateTimeField()
+    review_deadline = serializers.DateTimeField()
+
+    def validate_reviewer_ids(self, reviewer_ids):
+        if len(reviewer_ids) != len(set(reviewer_ids)):
+            raise serializers.ValidationError(
+                "Each reviewer may appear only once."
+            )
+
+        return reviewer_ids
 
     def validate(self, attrs):
         response_deadline = attrs["response_deadline"]

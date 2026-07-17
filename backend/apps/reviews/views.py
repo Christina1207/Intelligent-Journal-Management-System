@@ -12,6 +12,7 @@ from apps.reviews.serializers import (
     EditorDecisionSerializer,
     EditorReviewWorkspaceSerializer,
     ReviewerAssignmentCreateSerializer,
+    ReviewerAssignmentsBulkCreateSerializer,
     ReviewerAssignmentResponseSerializer,
     ReviewerAssignmentSerializer,
     ReviewSubmitSerializer,
@@ -73,6 +74,80 @@ class AssignReviewerView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+
+class AssignReviewersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, submission_id):
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
+        )
+
+        serializer = ReviewerAssignmentsBulkCreateSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        reviewer_ids = serializer.validated_data["reviewer_ids"]
+
+        reviewers = list(
+            User.objects
+            .filter(pk__in=reviewer_ids)
+            .prefetch_related("roles")
+        )
+
+        reviewers_by_id = {
+            reviewer.id: reviewer
+            for reviewer in reviewers
+        }
+
+        missing_reviewer_ids = [
+            str(reviewer_id)
+            for reviewer_id in reviewer_ids
+            if reviewer_id not in reviewers_by_id
+        ]
+
+        if missing_reviewer_ids:
+            raise ValidationError(
+                {
+                    "reviewer_ids": (
+                        "One or more selected reviewers do not exist."
+                    )
+                }
+            )
+
+        ordered_reviewers = [
+            reviewers_by_id[reviewer_id]
+            for reviewer_id in reviewer_ids
+        ]
+
+        assignments = ReviewService.assign_reviewers(
+            editor=request.user,
+            reviewers=ordered_reviewers,
+            submission=submission,
+            response_deadline=(
+                serializer.validated_data["response_deadline"]
+            ),
+            review_deadline=(
+                serializer.validated_data["review_deadline"]
+            ),
+        )
+
+        return Response(
+            {
+                "count": len(assignments),
+                "assignments": ReviewerAssignmentSerializer(
+                    assignments,
+                    many=True,
+                    context={
+                        "is_editor": True,
+                        "request": request,
+                    },
+                ).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 # ------------------------------------------------------------------ #
 #  EDITOR — VIEW REVIEWS FOR SUBMISSION                               #
