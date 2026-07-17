@@ -71,22 +71,34 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class ReviewerProfileSerializer(serializers.ModelSerializer):
     """
-    Exposes reviewer expertise profile fields.
-    keywords and biography are writable by the reviewer.
-    publications, last_synced_at, sync_status are read-only (system-managed).
-    expertise_embedding is never exposed — internal vector field.
+    Exposes reviewer expertise data.
+
+    Sections are assigned by journal staff and are read-only to the
+    reviewer. Reviewers must not be able to approve themselves for a
+    journal section.
     """
+
+    sections = serializers.StringRelatedField(
+        many=True,
+        read_only=True,
+    )
 
     class Meta:
         model = ReviewerProfile
         fields = [
+            "sections",
             "keywords",
             "biography",
             "publications",
             "last_synced_at",
             "sync_status",
         ]
-        read_only_fields = ["publications", "last_synced_at", "sync_status"]
+        read_only_fields = [
+            "sections",
+            "publications",
+            "last_synced_at",
+            "sync_status",
+        ]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

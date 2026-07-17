@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import Role
+from apps.accounts.models import Role,ReviewerProfile
 from apps.journals.models import Section
 from apps.reviews.models import Review
 from apps.submissions.models import Submission, SubmissionVersion
@@ -210,6 +210,15 @@ class AssignedEditorAuthorizationTests(APITestCase):
         self.section = Section.objects.create(
             name="Review Authorization Tests"
         )
+        reviewer_profile = ReviewerProfile.objects.create(
+            user=self.reviewer,
+        )
+        reviewer_profile.sections.add(self.section)
+
+        replacement_profile = ReviewerProfile.objects.create(
+            user=self.replacement_reviewer,
+        )
+        replacement_profile.sections.add(self.section)
 
         self.submission = Submission.objects.create(
             title="Protected Review Submission",
@@ -706,6 +715,103 @@ class AssignedEditorAuthorizationTests(APITestCase):
             returned_ids,
         )
 
+        def test_candidate_search_only_returns_reviewers_for_submission_section(
+        self,
+    ):
+            user_model = get_user_model()
+
+            other_section = Section.objects.create(
+                name="Unrelated Medical Section",
+            )
+
+            unrelated_reviewer = self.create_user(
+                user_model,
+                "unrelated-section-reviewer",
+                self.reviewer_role,
+            )
+
+            unrelated_profile = ReviewerProfile.objects.create(
+                user=unrelated_reviewer,
+            )
+            unrelated_profile.sections.add(other_section)
+
+            self.client.force_authenticate(self.editor)
+
+            response = self.client.get(
+                reverse(
+                    "editor-reviews:reviewer-candidates",
+                    args=[self.submission.id],
+                )
+            )
+
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_200_OK,
+            )
+
+            returned_ids = {
+                candidate["id"]
+                for candidate in response.data["candidates"]
+            }
+
+            self.assertIn(str(self.reviewer.id), returned_ids)
+            self.assertNotIn(
+                str(unrelated_reviewer.id),
+                returned_ids,
+            )
+
+
+        def test_editor_cannot_invite_reviewer_from_another_section(
+            self,
+        ):
+            user_model = get_user_model()
+
+            other_section = Section.objects.create(
+                name="Other Reviewer Section",
+            )
+
+            unrelated_reviewer = self.create_user(
+                user_model,
+                "wrong-section-reviewer",
+                self.reviewer_role,
+            )
+
+            unrelated_profile = ReviewerProfile.objects.create(
+                user=unrelated_reviewer,
+            )
+            unrelated_profile.sections.add(other_section)
+
+            self.client.force_authenticate(self.editor)
+
+            response = self.client.post(
+                reverse(
+                    "editor-reviews:assign-reviewer",
+                    args=[self.submission.id],
+                ),
+                {
+                    "reviewer_id": str(unrelated_reviewer.id),
+                    "response_deadline": (
+                        timezone.now() + timedelta(days=3)
+                    ).isoformat(),
+                    "review_deadline": (
+                        timezone.now() + timedelta(days=14)
+                    ).isoformat(),
+                },
+                format="json",
+            )
+
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_400_BAD_REQUEST,
+            )
+            self.assertIn("reviewer_id", response.data)
+
+            self.assertFalse(
+                ReviewerAssignment.objects.filter(
+                    version=self.version,
+                    reviewer=unrelated_reviewer,
+                ).exists()
+            )
 class ReviewerInvitationResponseApiTests(APITestCase):
     def setUp(self):
         reviewer_role, _ = Role.objects.get_or_create(

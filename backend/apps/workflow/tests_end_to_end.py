@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import Role
+from apps.accounts.models import Role, ReviewerProfile
 from apps.journals.models import (
     Section,
     SectionEditorMembership,
@@ -74,6 +74,12 @@ class CompleteEditorialWorkflowApiTests(APITestCase):
             manager=self.manager,
             is_active=True,
         )
+
+        for reviewer in self.reviewers:
+            reviewer_profile = ReviewerProfile.objects.create(
+                user=reviewer,
+            )
+            reviewer_profile.sections.add(self.section)
 
         SectionEditorMembership.objects.create(
             section=self.section,

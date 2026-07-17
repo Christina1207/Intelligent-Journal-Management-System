@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils import timezone
-from apps.accounts.models import Role
+from apps.accounts.models import Role, ReviewerProfile
 from apps.submissions.models import Submission, SubmissionVersion
 from apps.submissions.policies import (
     validate_revision_round_available,
@@ -36,6 +36,25 @@ class ReviewService:
 
         if not reviewer.has_role(Role.RoleName.REVIEWER):
             raise ValidationError("The target user does not have the Reviewer role.")
+
+        is_approved_for_section = (
+            ReviewerProfile.objects.filter(
+                user=reviewer,
+                sections=submission.section,
+            )
+            .exists()
+        )
+
+        if not is_approved_for_section:
+            raise ValidationError(
+                {
+                    "reviewer_id": (
+                        "This reviewer is not approved to review "
+                        f"manuscripts in the '{submission.section}' "
+                        "section."
+                    )
+                }
+            )
 
         # --- domain checks ---
         if reviewer == submission.author:
