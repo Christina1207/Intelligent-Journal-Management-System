@@ -47,24 +47,50 @@ function isBodyInit(body: ApiRequestBody): body is BodyInit {
   );
 }
 
-function getErrorMessage(payload: unknown, fallback: string) {
-  if (typeof payload === "string" && payload.trim().length > 0) {
-    return payload;
+function extractErrorMessage(payload: unknown): string | null {
+  if (typeof payload === "string") {
+    const message = payload.trim();
+    return message.length > 0 ? message : null;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const message = extractErrorMessage(item);
+
+      if (message) {
+        return message;
+      }
+    }
+
+    return null;
   }
 
   if (typeof payload === "object" && payload !== null) {
     const record = payload as Record<string, unknown>;
+    const preferredKeys = ["detail", "message", "non_field_errors"];
 
-    if (typeof record.detail === "string") {
-      return record.detail;
+    for (const key of preferredKeys) {
+      const message = extractErrorMessage(record[key]);
+
+      if (message) {
+        return message;
+      }
     }
 
-    if (typeof record.message === "string") {
-      return record.message;
+    for (const value of Object.values(record)) {
+      const message = extractErrorMessage(value);
+
+      if (message) {
+        return message;
+      }
     }
   }
 
-  return fallback;
+  return null;
+}
+
+function getErrorMessage(payload: unknown, fallback: string) {
+  return extractErrorMessage(payload) ?? fallback;
 }
 
 async function parseResponseBody(response: Response) {

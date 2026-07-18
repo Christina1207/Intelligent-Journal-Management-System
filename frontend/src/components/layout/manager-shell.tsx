@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   ClipboardCheck,
+  FileOutput,
   LayoutDashboard,
   LogOut,
 } from "lucide-react";
@@ -37,6 +38,11 @@ const managerNavigation: ManagerNavigationItem[] = [
     href: "/manager/monitoring",
     icon: Activity,
   },
+  {
+    label: "Publishing",
+    href: "/manager/publishing",
+    icon: FileOutput,
+  },
 ];
 
 function getDisplayName(user: {
@@ -68,7 +74,10 @@ function ManagerNavigation({
   return (
     <nav
       aria-label="Section Manager navigation"
-      className={cn(mobile ? "grid grid-cols-3 gap-1" : "space-y-1", className)}
+      className={cn(
+        mobile ? "grid grid-cols-2 gap-1 sm:grid-cols-4" : "space-y-1",
+        className,
+      )}
     >
       {managerNavigation.map((item) => {
         const Icon = item.icon;
