@@ -1,4 +1,4 @@
-export type PublicationDraftStatus = "DRAFT" | "PUBLISHED" | "RETRACTED";
+export type PublicationDraftStatus = "draft" | "published" | "retracted";
 
 export type PublicationDraft = {
   id: string;

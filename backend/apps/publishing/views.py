@@ -24,7 +24,11 @@ from rest_framework.views import APIView
 
 from apps.submissions.permissions import filter_submissions_for_user
 
-from .permissions import CanPublishArticle, IsPublishingStaff
+from .permissions import (
+    CanCreatePublicationDraft,
+    CanPublishArticle,
+    IsPublishingStaff,
+)
 from .selectors import publishing_records_for
 from apps.submissions.models import Submission
 
@@ -167,7 +171,7 @@ class IgnoreFormatQueryContentNegotiation(BaseContentNegotiation):
 
 
 class CreateArticleDraftView(APIView):
-    permission_classes = [IsPublishingStaff]
+    permission_classes = [CanCreatePublicationDraft]
 
     @extend_schema(
         tags=["Publishing"],

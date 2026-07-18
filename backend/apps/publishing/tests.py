@@ -940,7 +940,7 @@ class PublishingApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertIn(
-            "You do not have permission to access publishing management.",
+            "Only authorized editorial users can create publication drafts.",
             str(response.data),
         )
 
@@ -1504,22 +1504,93 @@ class PublishingApiTests(TestCase):
         self.assertEqual(article.issue, issue.number)
 
     def test_patch_cannot_change_article_status_directly(self):
-        self.client.force_authenticate(self.user)
         article = PublishingService.create_draft_from_submission(
-            actor=self.user,
+            actor=self.manager,
             submission=self.submission,
         )
+        self.client.force_authenticate(self.manager)
 
         response = self.client.patch(
-            f"/api/v1/publishing/articles/{article.id}/",
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
             {"status": PublishedArticle.Status.PUBLISHED},
             format="json",
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
         article.refresh_from_db()
         self.assertEqual(article.status, PublishedArticle.Status.DRAFT)
-        self.assertEqual(response.data["status"], PublishedArticle.Status.DRAFT)
+        self.assertEqual(
+            response.data["status"],
+            PublishedArticle.Status.DRAFT,
+        )
+
+    def test_section_editor_cannot_list_publication_records(self):
+        PublishingService.create_draft_from_submission(
+            actor=self.user,
+            submission=self.submission,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            reverse("publishing-article-list")
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+    def test_section_editor_cannot_retrieve_publication_record(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.user,
+            submission=self.submission,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+    def test_section_editor_cannot_update_publication_record(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.user,
+            submission=self.submission,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
+            {"title": "Unauthorized metadata change"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        article.refresh_from_db()
+        self.assertNotEqual(
+            article.title,
+            "Unauthorized metadata change",
+        )
 
     def test_publish_endpoint_rejects_already_published_article(self):
         self.client.force_authenticate(self.manager)
