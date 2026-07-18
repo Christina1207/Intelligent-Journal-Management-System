@@ -22,6 +22,7 @@ import type {
   SectionEditorQueueSubmission,
 } from "@/features/reviews/types";
 
+import { ReviewerRecommendationCard } from "@/features/reviews/components/reviewer-recommendation-card";
 interface ReviewerDiscoveryPanelProps {
   submission: SectionEditorQueueSubmission;
 }
@@ -48,16 +49,14 @@ function candidateSelection(reviewer: ReviewerCandidate): ReviewerSelection {
   };
 }
 
-function similarityPercentage(score: number) {
-  const normalizedScore = Math.max(0, Math.min(1, score));
-  return Math.round(normalizedScore * 100);
-}
-
 export function ReviewerDiscoveryPanel({
   submission,
 }: ReviewerDiscoveryPanelProps) {
   return (
-    <ReviewerDiscoveryPanelContent key={submission.id} submission={submission} />
+    <ReviewerDiscoveryPanelContent
+      key={submission.id}
+      submission={submission}
+    />
   );
 }
 
@@ -156,12 +155,19 @@ function ReviewerDiscoveryPanelContent({
           <div>
             <h3 className="font-medium">Recommended reviewers</h3>
             <p className="text-sm text-muted-foreground">
-              Eligible reviewers from {submission.section.name}, ranked by
-              manuscript and expertise similarity.
+              Eligible reviewers from {submission.section.name}, ranked using
+              semantic similarity and explainable keyword evidence.
             </p>
           </div>
         </div>
-
+        <Alert>
+          <Sparkles aria-hidden="true" />
+          <AlertTitle>Decision-support suggestions</AlertTitle>
+          <AlertDescription>
+            Recommendations support editorial judgment. Verify expertise,
+            availability, and conflicts before sending an invitation.
+          </AlertDescription>
+        </Alert>
         {recommendationsQuery.isPending ? (
           <p className="text-sm text-muted-foreground">
             Calculating recommendations…
@@ -180,57 +186,16 @@ function ReviewerDiscoveryPanelContent({
           </p>
         ) : (
           <div className="grid gap-3 xl:grid-cols-2">
-            {recommendations.map((reviewer) => {
-              const selected = isSelected(reviewer.reviewer_id);
-
-              return (
-                <button
-                  key={reviewer.reviewer_id}
-                  type="button"
-                  aria-pressed={selected}
-                  className={`rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
-                    selected
-                      ? "border-primary bg-primary/5"
-                      : "hover:border-primary hover:bg-muted/30"
-                  }`}
-                  onClick={() =>
-                    toggleReviewer(recommendationSelection(reviewer))
-                  }
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{reviewer.full_name}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {reviewer.affiliation || reviewer.email}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">
-                        {similarityPercentage(reviewer.similarity_score)}% match
-                      </Badge>
-
-                      {selected ? (
-                        <Check
-                          className="size-4 text-primary"
-                          aria-label="Selected"
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {reviewer.keywords.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {reviewer.keywords.slice(0, 4).map((keyword) => (
-                        <Badge key={keyword} variant="outline">
-                          {keyword}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </button>
-              );
-            })}
+            {recommendations.map((reviewer) => (
+              <ReviewerRecommendationCard
+                key={reviewer.reviewer_id}
+                reviewer={reviewer}
+                selected={isSelected(reviewer.reviewer_id)}
+                onSelect={(selectedReviewer) =>
+                  toggleReviewer(recommendationSelection(selectedReviewer))
+                }
+              />
+            ))}
           </div>
         )}
       </section>

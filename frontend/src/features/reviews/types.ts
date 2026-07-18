@@ -130,7 +130,14 @@ export type ReviewerRecommendation = {
   keywords: string[];
   biography_excerpt: string;
   similarity_score: number;
+  keyword_overlap_score: number;
+  recommendation_score: number;
+  matched_keywords: string[];
+  matched_author_keywords: string[];
+  matched_topic_keywords: string[];
+  active_assignment_count: number;
   has_reviewed_before: boolean;
+  explanation: string;
 };
 
 export type ReviewerRecommendationResponse = {
