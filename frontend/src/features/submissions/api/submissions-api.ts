@@ -59,12 +59,10 @@ export function uploadRevisedManuscript(
   formData.append("file", payload.file);
   formData.append("blinded_file", payload.blinded_file);
 
-  if (payload.response_to_reviewers?.trim()) {
-    formData.append(
-      "response_to_reviewers",
-      payload.response_to_reviewers.trim(),
-    );
-  }
+  formData.append(
+    "response_to_reviewers",
+    payload.response_to_reviewers.trim(),
+  );
 
   return apiClient.post<UploadRevisedManuscriptResponse>(
     `/submissions/${submissionId}/versions/upload/`,

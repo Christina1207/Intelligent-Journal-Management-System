@@ -85,7 +85,7 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
       return uploadRevisedManuscript(submissionId, {
         file,
         blinded_file: blindedFile,
-        response_to_reviewers: responseToReviewers,
+        response_to_reviewers: responseToReviewers.trim(),
       });
     },
     onSuccess: async () => {
@@ -169,6 +169,14 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
       errors.blinded_file = "The blinded manuscript must be 50MB or smaller.";
     }
 
+    if (!responseToReviewers.trim()) {
+      errors.response_to_reviewers =
+        "Provide a point-by-point response to the reviewer comments.";
+    } else if (responseToReviewers.trim().length < 20) {
+      errors.response_to_reviewers =
+        "The response must contain at least 20 characters.";
+    }
+
     setFormError(null);
     setSuccessMessage(null);
     setFieldErrors(errors);
@@ -189,8 +197,8 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
         Revision required
       </h2>
       <p className="mt-1 text-sm leading-6 text-slate-700">
-        The editor has requested a revised manuscript. Upload a new PDF and
-        optionally explain how you addressed the reviewer comments.
+        The editor has requested a revised manuscript. Upload updated full and
+        blinded PDFs and explain how you addressed the reviewer comments.
       </p>
 
       {formError ? (
@@ -211,7 +219,8 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
             htmlFor="revision-file"
             className="block text-sm font-medium text-slate-700"
           >
-            Full manuscript PDF - may contain author names, affiliations and acknowledgements.
+            Full manuscript PDF - may contain author names, affiliations and
+            acknowledgements.
           </label>
           <input
             id="revision-file"
@@ -235,7 +244,8 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
             htmlFor="revision-blinded-file"
             className="block text-sm font-medium text-slate-700"
           >
-            Blinded manuscript PDF - must remove author names, affiliations, acknowledgements and identifying metadata.
+            Blinded manuscript PDF - must remove author names, affiliations,
+            acknowledgements and identifying metadata.
           </label>
           <input
             id="revision-blinded-file"
@@ -284,11 +294,30 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
           <textarea
             id="response-to-reviewers"
             name="response_to_reviewers"
-            rows={6}
+            rows={8}
+            required
             value={responseToReviewers}
-            onChange={(event) => setResponseToReviewers(event.target.value)}
-            placeholder="Briefly explain what changed in the revised manuscript."
-            className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
+            disabled={isSubmitting}
+            onChange={(event) => {
+              setResponseToReviewers(event.target.value);
+              setSuccessMessage(null);
+
+              setFieldErrors((currentErrors) => {
+                const nextErrors = { ...currentErrors };
+                delete nextErrors.response_to_reviewers;
+                return nextErrors;
+              });
+            }}
+            placeholder={`Provide a point-by-point response, for example:
+
+          Reviewer 1, Comment 1:
+          Response:
+          Change made in manuscript:
+
+          Reviewer 2, Comment 1:
+          Response:
+          Change made in manuscript:`}
+            className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-60"
           />
           {fieldErrors.response_to_reviewers ? (
             <p className="mt-1 text-sm text-red-600">
@@ -296,7 +325,8 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
             </p>
           ) : (
             <p className="mt-1 text-xs text-slate-600">
-              Optional, but recommended for a clear revision trail.
+              Required. Respond to each reviewer separately without including
+              confidential or identifying information.
             </p>
           )}
         </div>

@@ -93,6 +93,8 @@ export type SubmissionVersion = {
   submitted_at: string;
   decision: SubmissionDecision;
   decision_letter: string;
+  response_to_reviewers: string;
+  reviewer_feedback: AuthorReviewerFeedback[];
   decided_at: string | null;
   decided_by: string | null;
 };
@@ -111,7 +113,11 @@ export type CreateSubmissionResponse = AuthorSubmissionListItem;
 export type UploadRevisedManuscriptPayload = {
   file: File;
   blinded_file: File;
-  response_to_reviewers?: string;
+  response_to_reviewers: string;
 };
 
 export type UploadRevisedManuscriptResponse = SubmissionVersion;
+export type AuthorReviewerFeedback = {
+  reviewer_label: string;
+  comments_for_author: string;
+};

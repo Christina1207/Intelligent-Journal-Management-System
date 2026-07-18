@@ -782,22 +782,17 @@ class RevisionUploadApiTests(APITestCase):
         )
 
     @patch("apps.submissions.services.StorageService")
-    def test_author_can_upload_revision_without_response_to_reviewers(
+    def test_author_cannot_upload_revision_without_response_to_reviewers(
         self,
         storage_class,
     ):
-        full_object_name = f"submissions/{self.submission.id}/v2/revision.pdf"
-        blinded_object_name = (
-            f"submissions/{self.submission.id}/v2/revision-blinded.pdf"
-        )
-        storage_class.return_value.upload.side_effect = [
-            full_object_name,
-            blinded_object_name,
-        ]
         self.client.force_authenticate(self.author)
 
         response = self.client.post(
-            self.url,
+            reverse(
+                "submission-revision-upload",
+                args=[self.submission.id],
+            ),
             {
                 "file": self._pdf_upload(),
                 "blinded_file": self._pdf_upload("revision-blinded.pdf"),
@@ -805,13 +800,18 @@ class RevisionUploadApiTests(APITestCase):
             format="multipart",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["response_to_reviewers"], "")
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("response_to_reviewers", response.data)
 
-        new_version = self.submission.versions.get(version_number=2)
-        self.assertEqual(new_version.file, full_object_name)
-        self.assertEqual(new_version.blinded_file, blinded_object_name)
-        self.assertEqual(new_version.response_to_reviewers, "")
+        self.assertFalse(
+            SubmissionVersion.objects.filter(
+                submission=self.submission,
+                version_number=2,
+            ).exists()
+        )
 
     @patch("apps.submissions.services.StorageService")
     def test_revision_upload_rejects_author_supplied_review_deadline(
