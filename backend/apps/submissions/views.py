@@ -38,7 +38,10 @@ class SubmissionCreateView(APIView):
             from django.core.exceptions import PermissionDenied
             raise PermissionDenied("Only authors can create submissions.")
 
-        serializer = SubmissionCreateSerializer(data=request.data)
+        serializer = SubmissionCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
         if serializer.is_valid():
             data = serializer.validated_data
             file = data.pop("file")
@@ -90,6 +93,7 @@ class SubmissionDetailView(generics.RetrieveAPIView):
         queryset = (
             Submission.objects.select_related("section", "topic")
             .prefetch_related(
+                "coauthors",
                 Prefetch(
                     "versions",
                     queryset=SubmissionVersion.objects.order_by("-version_number"),

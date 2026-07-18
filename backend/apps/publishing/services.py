@@ -185,6 +185,11 @@ class PublishingService:
 
     @staticmethod
     def _extract_keywords(submission: Submission) -> list:
+        author_keywords = list(submission.keywords or [])
+
+        if author_keywords:
+            return author_keywords
+
         try:
             return list(submission.topic.keywords or [])
         except ObjectDoesNotExist:
@@ -214,6 +219,20 @@ class PublishingService:
                 "is_corresponding": True,
             },
         )
+        for coauthor in submission.coauthors.all():
+            PublishedArticleAuthor.objects.update_or_create(
+                article=article,
+                order=coauthor.order,
+                defaults={
+                    "full_name": coauthor.full_name,
+                    "email": coauthor.email,
+                    "orcid": coauthor.orcid,
+                    "affiliation": coauthor.affiliation,
+                    "country": coauthor.country,
+                    "is_corresponding": False,
+                },
+            )
+        
 
     @staticmethod
     def _generate_unique_slug(base_slug: str) -> str:

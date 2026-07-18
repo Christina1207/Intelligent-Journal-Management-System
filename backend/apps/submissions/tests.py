@@ -1,6 +1,6 @@
 from datetime import timedelta
 from unittest.mock import ANY, call, patch
-
+import json
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -220,6 +220,8 @@ class SubmissionDetailApiTests(APITestCase):
                 "id",
                 "title",
                 "abstract",
+                "keywords",
+                "coauthors",
                 "language",
                 "status",
                 "section",
@@ -794,8 +796,8 @@ class RevisionUploadApiTests(APITestCase):
                 args=[self.submission.id],
             ),
             {
-                "file": self.revised_file,
-                "blinded_file": self.revised_blinded_file,
+                "file": self._pdf_upload(),
+                "blinded_file": self._pdf_upload("revision-blinded.pdf"),
             },
             format="multipart",
         )
@@ -825,6 +827,10 @@ class RevisionUploadApiTests(APITestCase):
             {
                 "file": self._pdf_upload(),
                 "blinded_file": self._pdf_upload("revision-blinded.pdf"),
+                "response_to_reviewers": (
+                    "We revised the manuscript to address the editorial "
+                    "and reviewer feedback."
+                ),
                 "review_deadline": timezone.now().isoformat(),
             },
             format="multipart",
@@ -917,6 +923,20 @@ class SubmissionCreateApiTests(APITestCase):
             {
                 "title": "Submission with blinded manuscript",
                 "abstract": "A detailed research abstract.",
+                "keywords": json.dumps([
+                    "reviewer recommendation",
+                    "semantic similarity",
+                    "scientific publishing",
+                ]),
+                "coauthors": json.dumps([
+                    {
+                        "full_name": "Grace Hopper",
+                        "email": "grace@example.com",
+                        "affiliation": "Computing Research Institute",
+                        "orcid": "0000-0000-0000-0002",
+                        "country": "United States",
+                    }
+                ]),
                 "language": "en",
                 "section": str(self.section.id),
                 "file": pdf_upload("full.pdf"),
@@ -928,7 +948,19 @@ class SubmissionCreateApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         submission = Submission.objects.get(title="Submission with blinded manuscript")
         self.assertEqual(submission.versions.count(), 1)
+        self.assertEqual(
+            submission.keywords,
+            [
+                "reviewer recommendation",
+                "semantic similarity",
+                "scientific publishing",
+            ],
+        )
 
+        coauthor = submission.coauthors.get()
+        self.assertEqual(coauthor.order, 2)
+        self.assertEqual(coauthor.full_name, "Grace Hopper")
+        self.assertEqual(coauthor.email, "grace@example.com")
         version = submission.versions.get(version_number=1)
         self.assertEqual(version.file, full_object_name)
         self.assertEqual(version.blinded_file, blinded_object_name)

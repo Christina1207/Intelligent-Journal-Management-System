@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.workflow.models import ReviewerAssignment
 from apps.core.storage import StorageService
 from config.constants import  REVISION_REVIEW_DEADLINE_DAYS
-from .models import Submission, SubmissionVersion
+from .models import Submission, SubmissionVersion,SubmissionCoAuthor
 from .policies import validate_revision_round_available
 
 logger = logging.getLogger(__name__)
@@ -92,10 +92,20 @@ class SubmissionService:
         # TODO Phase 7: implement MinIO cleanup on DB failure via
         # post-transaction hook or a periodic orphan cleanup task.
         """
+        coauthors_data = validated_data.pop("coauthors", [])
         submission = Submission.objects.create(
             author=author,
             status=Submission.Status.SUBMITTED,
             **validated_data,
+        )
+        SubmissionCoAuthor.objects.bulk_create(
+            [
+                SubmissionCoAuthor(
+                    submission=submission,
+                    **coauthor,
+                )
+                for coauthor in coauthors_data
+            ]
         )
 
         # Upload PDF to MinIO

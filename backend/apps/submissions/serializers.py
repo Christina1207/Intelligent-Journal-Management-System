@@ -1,14 +1,19 @@
-from curses import version
-
+import json
+import re
 from rest_framework import serializers
-from .models import Submission, SubmissionTopic, SubmissionVersion
+from .models import (
+    Submission,
+    SubmissionCoAuthor,
+    SubmissionTopic,
+    SubmissionVersion,
+)
 from apps.journals.models import Section
 from apps.journals.serializers import SectionSerializer
 
 #TODO: move this to constants
 MAX_MANUSCRIPT_SIZE = 50 * 1024 * 1024
 
-
+#TODO: move this to policies.py
 def validate_pdf_file(uploaded_file):
     if uploaded_file.content_type != "application/pdf":
         raise serializers.ValidationError("Only PDF files are accepted.")
@@ -20,6 +25,77 @@ def validate_pdf_file(uploaded_file):
 
     return uploaded_file
 
+class MultipartJSONField(serializers.JSONField):
+    default_error_messages = {
+        "invalid": "Enter valid JSON.",
+    }
+
+    def to_internal_value(self, data):
+        if isinstance(data, (str, bytes, bytearray)):
+            try:
+                if isinstance(data, (bytes, bytearray)):
+                    data = data.decode("utf-8")
+
+                data = json.loads(data)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self.fail("invalid")
+
+        return super().to_internal_value(data)
+
+
+class SubmissionCoAuthorInputSerializer(serializers.Serializer):
+    full_name = serializers.CharField(
+        max_length=255,
+        trim_whitespace=True,
+    )
+    email = serializers.EmailField()
+    affiliation = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    orcid = serializers.CharField(
+        max_length=19,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    country = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+
+    def validate_orcid(self, value):
+        normalized = value.strip().upper()
+
+        if normalized and not re.fullmatch(
+            r"\d{4}-\d{4}-\d{4}-\d{3}[\dX]",
+            normalized,
+        ):
+            raise serializers.ValidationError(
+                "Enter an ORCID in the format 0000-0000-0000-0000."
+            )
+
+        return normalized
+
+
+class SubmissionCoAuthorReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubmissionCoAuthor
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "affiliation",
+            "orcid",
+            "country",
+            "order",
+        ]
+        read_only_fields = fields
+
 class SubmissionCreateSerializer(serializers.Serializer):
     """
     Used for initial submission creation only.
@@ -28,6 +104,15 @@ class SubmissionCreateSerializer(serializers.Serializer):
     """
     title = serializers.CharField(max_length=500)
     abstract = serializers.CharField()
+    keywords = MultipartJSONField(
+        help_text='JSON array containing 3 to 8 keywords.',
+    )
+    coauthors = MultipartJSONField(
+        required=False,
+        default=list,
+        write_only=True,
+        help_text="JSON array containing ordered coauthor metadata.",
+    )
     language = serializers.ChoiceField(choices=Submission._meta.get_field("language").choices)
     cover_letter = serializers.CharField(required=False, allow_blank=True, default="")
     section = serializers.PrimaryKeyRelatedField(
@@ -62,6 +147,86 @@ class SubmissionCreateSerializer(serializers.Serializer):
                 "File size exceeds the 50MB limit."
             )
         return file
+    def validate_keywords(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                "Keywords must be provided as a JSON array."
+            )
+
+        normalized = []
+        seen = set()
+
+        for raw_keyword in value:
+            if not isinstance(raw_keyword, str):
+                raise serializers.ValidationError(
+                    "Every keyword must be a string."
+                )
+
+            keyword = " ".join(raw_keyword.split())
+
+            if not keyword:
+                continue
+
+            if len(keyword) > 100:
+                raise serializers.ValidationError(
+                    "Each keyword must contain at most 100 characters."
+                )
+
+            key = keyword.casefold()
+
+            if key not in seen:
+                seen.add(key)
+                normalized.append(keyword)
+
+        if not 3 <= len(normalized) <= 8:
+            raise serializers.ValidationError(
+                "Provide between 3 and 8 distinct keywords."
+            )
+
+        return normalized
+
+    def validate_coauthors(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                "Coauthors must be provided as a JSON array."
+            )
+
+        if len(value) > 20:
+            raise serializers.ValidationError(
+                "A submission cannot contain more than 20 coauthors."
+            )
+
+        serializer = SubmissionCoAuthorInputSerializer(
+            data=value,
+            many=True,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        coauthors = serializer.validated_data
+        seen_emails = set()
+
+        request = self.context.get("request")
+        primary_email = (
+            getattr(getattr(request, "user", None), "email", "") or ""
+        ).casefold()
+
+        for position, coauthor in enumerate(coauthors, start=2):
+            email_key = coauthor["email"].casefold()
+
+            if email_key == primary_email:
+                raise serializers.ValidationError(
+                    "The submitting author must not also be listed as a coauthor."
+                )
+
+            if email_key in seen_emails:
+                raise serializers.ValidationError(
+                    f"Duplicate coauthor email: {coauthor['email']}."
+                )
+
+            seen_emails.add(email_key)
+            coauthor["order"] = position
+
+        return coauthors
 
 class AuthorReviewFeedbackSerializer(serializers.Serializer):
     reviewer_label = serializers.CharField()
@@ -178,6 +343,7 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "abstract",
+            "keywords",
             "language",
             "status",
             "section",
@@ -233,19 +399,24 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
     section = SubmissionDetailSectionSerializer(read_only=True)
     topic = SubmissionTopicSerializer(read_only=True)
     latest_version = serializers.SerializerMethodField()
-
+    coauthors = SubmissionCoAuthorReadSerializer(
+        many=True,
+        read_only=True,
+    )
     class Meta:
         model = Submission
         fields = [
             "id",
             "title",
             "abstract",
+            "keywords",
             "language",
             "status",
             "section",
             "topic",
             "submitted_at",
             "latest_version",
+            "coauthors",
         ]
         read_only_fields = fields
 

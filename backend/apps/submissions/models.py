@@ -6,7 +6,6 @@ from pgvector.django import VectorField
 # ISO 639-1 language codes
 # Format: ("code", "Display Name") — e.g. ("en", "English")
 LANGUAGE_CHOICES = [
-    # Top 20 Most Used Languages First
     ("en", "English"),
     ("ar", "Arabic"),
     ("fr", "French"),
@@ -29,6 +28,11 @@ class Submission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=500)
     abstract = models.TextField()
+    keywords = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Author-supplied scholarly keywords.",
+    )
     language = models.CharField(
         max_length=10,
         choices=LANGUAGE_CHOICES,
@@ -82,6 +86,36 @@ class Submission(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['author']),
             models.Index(fields=['assigned_editor']),
+        ]
+
+class SubmissionCoAuthor(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        related_name="coauthors",
+    )
+    full_name = models.CharField(max_length=255)
+    email = models.EmailField()
+    orcid = models.CharField(max_length=19, blank=True, default="")
+    affiliation = models.CharField(max_length=255, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="")
+    order = models.PositiveSmallIntegerField()
+
+    def __str__(self):
+        return f"{self.full_name} — {self.submission.title}"
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["submission", "order"],
+                name="unique_submission_coauthor_order",
+            ),
         ]
 
 class SubmissionVersion(models.Model):
