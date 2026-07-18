@@ -794,8 +794,8 @@ class RevisionUploadApiTests(APITestCase):
                 args=[self.submission.id],
             ),
             {
-                "file": self._pdf_upload(),
-                "blinded_file": self._pdf_upload("revision-blinded.pdf"),
+                "file": self.revised_file,
+                "blinded_file": self.revised_blinded_file,
             },
             format="multipart",
         )
