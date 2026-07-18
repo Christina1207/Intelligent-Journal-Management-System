@@ -10,10 +10,13 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import Role,ReviewerProfile
 from apps.journals.models import Section
 from apps.reviews.models import Review
-from apps.submissions.models import Submission, SubmissionVersion
+from apps.submissions.models import Submission, SubmissionVersion,SubmissionCoAuthor
 from apps.workflow.models import ReviewerAssignment
 
-from config.constants import REQUIRED_REVIEWS_COUNT
+from config.constants import (
+    MAX_ACTIVE_REVIEWER_ASSIGNMENTS,
+    REQUIRED_REVIEWS_COUNT,
+)
 
 class ReviewerManuscriptDownloadApiTests(APITestCase):
     def setUp(self):
@@ -997,6 +1000,76 @@ class AssignedEditorAuthorizationTests(APITestCase):
                 version=self.version,
             ).exists()
         )
+
+    def test_candidate_search_excludes_reviewer_at_workload_capacity(self):
+        for index in range(MAX_ACTIVE_REVIEWER_ASSIGNMENTS):
+            other_submission = Submission.objects.create(
+                title=f"Reviewer workload {index}",
+                abstract="Another manuscript requiring peer review.",
+                language="en",
+                author=self.author,
+                section=self.section,
+                assigned_editor=self.editor,
+                status=Submission.Status.UNDER_REVIEW,
+            )
+            other_version = SubmissionVersion.objects.create(
+                submission=other_submission,
+                version_number=1,
+                file=f"submissions/workload/{index}/manuscript.pdf",
+            )
+            ReviewerAssignment.objects.create(
+                version=other_version,
+                reviewer=self.reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=timezone.now() + timedelta(days=3),
+                review_deadline=timezone.now() + timedelta(days=14),
+            )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        candidate_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(str(self.reviewer.id), candidate_ids)
+
+
+    def test_candidate_search_excludes_registered_coauthor(self):
+        SubmissionCoAuthor.objects.create(
+            submission=self.submission,
+            full_name="Candidate Reviewer",
+            email=self.reviewer.email,
+            order=2,
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        candidate_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(str(self.reviewer.id), candidate_ids)
 class ReviewerInvitationResponseApiTests(APITestCase):
     def setUp(self):
         reviewer_role, _ = Role.objects.get_or_create(

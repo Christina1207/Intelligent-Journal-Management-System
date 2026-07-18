@@ -461,7 +461,10 @@ class ReviewerRecommendationsView(APIView):
         except (ValueError, TypeError):
             requested_limit = REVIEWER_RECOMMENDATION_COUNT
 
-        limit = min(requested_limit, REVIEWER_RECOMMENDATION_COUNT)
+        limit = max(
+            1,
+            min(requested_limit, REVIEWER_RECOMMENDATION_COUNT),
+        )
 
         recommendations = RecommendationService.get_recommendations(
             submission=submission,

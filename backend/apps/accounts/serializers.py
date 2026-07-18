@@ -99,6 +99,38 @@ class ReviewerProfileSerializer(serializers.ModelSerializer):
             "last_synced_at",
             "sync_status",
         ]
+    def validate_keywords(self, value):
+        normalized = []
+        seen = set()
+
+        for raw_keyword in value:
+            keyword = " ".join(raw_keyword.split())
+
+            if not keyword:
+                continue
+
+            normalized_key = keyword.casefold()
+
+            if normalized_key not in seen:
+                seen.add(normalized_key)
+                normalized.append(keyword)
+
+        if not 3 <= len(normalized) <= 20:
+            raise serializers.ValidationError(
+                "Provide between 3 and 20 distinct expertise keywords."
+            )
+
+        return normalized
+
+    def validate_biography(self, value):
+        biography = value.strip()
+
+        if len(biography) > 5000:
+            raise serializers.ValidationError(
+                "Biography must contain at most 5000 characters."
+            )
+
+        return biography
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

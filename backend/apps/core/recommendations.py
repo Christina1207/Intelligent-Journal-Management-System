@@ -1,10 +1,15 @@
 import logging
 from pgvector.django import CosineDistance
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Count, Q
 
 from apps.accounts.models import Role, User, ReviewerProfile
 from apps.reviews.models import Review
 from apps.workflow.models import ReviewerAssignment
+from config.constants import MAX_ACTIVE_REVIEWER_ASSIGNMENTS
+from apps.reviews.eligibility import (
+    ACTIVE_REVIEWER_ASSIGNMENT_STATUSES,
+    reviewer_identity_conflict_q,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +63,7 @@ class RecommendationService:
             ReviewerAssignment.objects.filter(
                 reviewer=OuterRef("user_id"),
                 version__submission=submission,
-                status__in=[
-                    ReviewerAssignment.Status.PENDING,
-                    ReviewerAssignment.Status.ACCEPTED,
-                ],
+                status__in=ACTIVE_REVIEWER_ASSIGNMENT_STATUSES,
             )
         )
 
@@ -85,6 +87,15 @@ class RecommendationService:
                 already_invited_current_round=Exists(
                     current_round_invitation_exists
                 ),
+                active_assignment_count=Count(
+                    "user__reviewer_assignments",
+                    filter=Q(
+                        user__reviewer_assignments__status__in=(
+                            ACTIVE_REVIEWER_ASSIGNMENT_STATUSES
+                        )
+                    ),
+                    distinct=True,
+                ),
             )
             .filter(
                 sections=submission.section,
@@ -93,10 +104,26 @@ class RecommendationService:
                 expertise_embedding__isnull=False,
                 has_active_assignment=False,
                 already_invited_current_round=False,
+                active_assignment_count__lt=MAX_ACTIVE_REVIEWER_ASSIGNMENTS,
             )
             .exclude(user=submission.author)
             .select_related("user")
-            .order_by("-similarity")
+        )
+        conflict_query = reviewer_identity_conflict_q(
+            submission=submission,
+            email_field="user__email",
+        )
+
+        if conflict_query.children:
+            profiles = profiles.exclude(conflict_query)
+
+        profiles = (
+            profiles
+            .order_by(
+                "-similarity",
+                "active_assignment_count",
+                "user__last_name",
+            )
             .distinct()[:limit]
         )
 
@@ -125,4 +152,5 @@ class RecommendationService:
             "biography_excerpt": biography_excerpt,
             "similarity_score": round(float(profile.similarity), 4),
             "has_reviewed_before": profile.has_reviewed_before,
+            "active_assignment_count": profile.active_assignment_count,
         }

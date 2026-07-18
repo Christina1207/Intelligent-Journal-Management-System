@@ -7,6 +7,12 @@ from apps.accounts.models import Role, User
 from apps.submissions.models import Submission
 from apps.workflow.models import ReviewerAssignment
 
+from config.constants import MAX_ACTIVE_REVIEWER_ASSIGNMENTS
+
+from .eligibility import (
+    ACTIVE_REVIEWER_ASSIGNMENT_STATUSES,
+    reviewer_identity_conflict_q,
+)
 
 def require_section_editor(user):
     if not user.has_role(Role.RoleName.SECTION_EDITOR):
@@ -92,11 +98,6 @@ def assigned_editor_reviewer_assignment_or_404(
         version__submission__assigned_editor=editor,
     )
 
-ACTIVE_REVIEWER_ASSIGNMENT_STATUSES = (
-    ReviewerAssignment.Status.PENDING,
-    ReviewerAssignment.Status.ACCEPTED,
-)
-
 
 def reviewer_candidates_for(
     *,
@@ -104,20 +105,23 @@ def reviewer_candidates_for(
     search="",
 ):
     """
-    Return active reviewer candidates for manual editor selection.
+    Return eligible reviewer candidates for manual editor selection.
 
     Excludes:
-    - the submission author;
+    - primary author and coauthors;
     - inactive users;
     - users without the Reviewer role;
-    - reviewers already holding a pending or accepted assignment for
-      any version of this submission.
+    - reviewers outside the submission section;
+    - reviewers already invited for the current round;
+    - reviewers already active on another version of this submission;
+    - reviewers at the configured active-workload capacity.
     """
     current_version = (
         submission.versions
         .order_by("-version_number")
         .first()
     )
+
     candidates = (
         User.objects.filter(
             status=User.Status.ACTIVE,
@@ -143,7 +147,21 @@ def reviewer_candidates_for(
                 distinct=True,
             )
         )
+        .filter(
+            active_assignment_count__lt=(
+                MAX_ACTIVE_REVIEWER_ASSIGNMENTS
+            )
+        )
     )
+
+    conflict_query = reviewer_identity_conflict_q(
+        submission=submission,
+        email_field="email",
+    )
+
+    if conflict_query.children:
+        candidates = candidates.exclude(conflict_query)
+
     if current_version is not None:
         candidates = candidates.exclude(
             reviewer_assignments__version=current_version,

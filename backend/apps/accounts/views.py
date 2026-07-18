@@ -3,8 +3,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 
-from .models import Role
+from .models import Role,ReviewerProfile
 from .tasks import generate_reviewer_expertise_embedding
 from .serializers import (
     CurrentUserProfileUpdateSerializer,
@@ -12,6 +13,7 @@ from .serializers import (
     ReviewerProfileSerializer,
     UserProfileSerializer,
 )
+from .services import ReviewerProfileService
 
 
 def get_tokens_for_user(user):
@@ -57,6 +59,17 @@ def me_view(request):
     return Response(UserProfileSerializer(user).data)
 
 
+@extend_schema(
+    tags=["Auth"],
+    request=ReviewerProfileSerializer,
+    responses={
+        200: ReviewerProfileSerializer,
+        400: OpenApiResponse(description="Invalid reviewer profile data."),
+        401: OpenApiResponse(description="Authentication credentials were not provided."),
+        403: OpenApiResponse(description="Only reviewers can update a reviewer profile."),
+    },
+    description="Update the authenticated reviewer's expertise profile.",
+)
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def reviewer_profile_update_view(request):
@@ -68,14 +81,26 @@ def reviewer_profile_update_view(request):
         from django.core.exceptions import PermissionDenied
         raise PermissionDenied("Only reviewers can update a reviewer profile.")
 
-    profile, _ = request.user.reviewer_profile.__class__.objects.get_or_create(
-        user=request.user
+    profile = ReviewerProfileService.get_or_create_profile(
+        request.user
     )
-    serializer = ReviewerProfileSerializer(profile, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    serializer = ReviewerProfileSerializer(
+        profile,
+        data=request.data,
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+
+    profile = serializer.save(
+        expertise_embedding=None,
+        sync_status=ReviewerProfile.SyncStatus.PENDING,
+        last_synced_at=None,
+    )
+
+    return Response(
+        ReviewerProfileSerializer(profile).data,
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])

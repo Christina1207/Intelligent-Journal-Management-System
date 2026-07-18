@@ -3,8 +3,9 @@ from django.urls import reverse
 from rest_framework import status
 from django.test import TestCase
 from rest_framework.test import APITestCase
+from drf_spectacular.generators import SchemaGenerator
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Role, User,ReviewerProfile
 
 class DefaultRoleBootstrapTests(TestCase):
     def test_migrations_create_all_default_roles(self):
@@ -120,3 +121,108 @@ class CurrentUserProfileApiTests(APITestCase):
                 self.assertFalse(self.user.is_superuser)
                 self.assertEqual(self.user.password, original_password_hash)
                 self.assertFalse(self.user.roles.filter(id=reviewer_role.id).exists())
+
+class ReviewerProfileApiTests(APITestCase):
+    def setUp(self):
+        self.reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+
+        self.reviewer = get_user_model().objects.create_user(
+            username="profile-reviewer",
+            email="profile-reviewer@example.com",
+            password="testpass123",
+        )
+        self.reviewer.roles.add(self.reviewer_role)
+
+        self.url = reverse("reviewer-profile-update")
+
+    def test_profile_patch_creates_missing_reviewer_profile(self):
+        self.assertFalse(
+            ReviewerProfile.objects.filter(
+                user=self.reviewer,
+            ).exists()
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.patch(
+            self.url,
+            {
+                "keywords": [
+                    "Machine Learning",
+                    "machine learning",
+                    "Scientific Publishing",
+                    "Reviewer Recommendation",
+                ],
+                "biography": (
+                    "Researcher in explainable editorial intelligence."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        profile = ReviewerProfile.objects.get(
+            user=self.reviewer,
+        )
+
+        self.assertEqual(
+            profile.keywords,
+            [
+                "Machine Learning",
+                "Scientific Publishing",
+                "Reviewer Recommendation",
+            ],
+        )
+        self.assertEqual(
+            profile.sync_status,
+            ReviewerProfile.SyncStatus.PENDING,
+        )
+        self.assertIsNone(profile.expertise_embedding)
+        self.assertIsNone(profile.last_synced_at)
+
+    def test_non_reviewer_cannot_create_reviewer_profile(self):
+        author = get_user_model().objects.create_user(
+            username="profile-author",
+            email="profile-author@example.com",
+            password="testpass123",
+        )
+        author.roles.add(self.author_role)
+
+        self.client.force_authenticate(author)
+
+        response = self.client.patch(
+            self.url,
+            {
+                "keywords": [
+                    "Machine Learning",
+                    "Scientific Publishing",
+                    "Peer Review",
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertFalse(
+            ReviewerProfile.objects.filter(user=author).exists()
+        )
+
+    def test_reviewer_profile_patch_is_documented_in_openapi_schema(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        operation = schema["paths"]["/api/v1/auth/reviewer/profile/"]["patch"]
+
+        self.assertEqual(operation["tags"], ["Auth"])
+        self.assertIn("requestBody", operation)
+        self.assertIn("200", operation["responses"])

@@ -8,6 +8,12 @@ REVISION_REVIEW_DEADLINE_DAYS   = config('REVISION_REVIEW_DEADLINE_DAYS', defaul
 # Recommendations
 REVIEWER_RECOMMENDATION_COUNT   = config('REVIEWER_RECOMMENDATION_COUNT', default=5, cast=int)
 
+MAX_ACTIVE_REVIEWER_ASSIGNMENTS = config(
+    "MAX_ACTIVE_REVIEWER_ASSIGNMENTS",
+    default=3,
+    cast=int,
+)
+
 # Topic Modeling
 MIN_SUBMISSIONS_FOR_CLUSTERING  = config('MIN_SUBMISSIONS_FOR_CLUSTERING', default=3, cast=int) #TODO: change later
 
