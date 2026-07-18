@@ -33,6 +33,8 @@ export type SubmissionDetail = {
   id: string;
   title: string;
   abstract: string;
+  keywords: string[];
+  coauthors: SubmissionCoAuthor[];
   language: string;
   status: SubmissionStatus;
   section: SubmissionSectionSummary;
@@ -75,6 +77,7 @@ export type AuthorSubmissionListItem = {
   id: string;
   title: string;
   abstract: string;
+  keywords: string[];
   language: string;
   status: SubmissionStatus;
   section: SubmissionSectionSummary;
@@ -101,6 +104,8 @@ export type SubmissionVersion = {
 export type CreateSubmissionPayload = {
   title: string;
   abstract: string;
+  keywords: string[];
+  coauthors: SubmissionCoAuthorInput[];
   language: string;
   cover_letter?: string;
   section: string;
@@ -120,4 +125,17 @@ export type UploadRevisedManuscriptResponse = SubmissionVersion;
 export type AuthorReviewerFeedback = {
   reviewer_label: string;
   comments_for_author: string;
+};
+
+export type SubmissionCoAuthorInput = {
+  full_name: string;
+  email: string;
+  affiliation: string;
+  orcid: string;
+  country: string;
+};
+
+export type SubmissionCoAuthor = SubmissionCoAuthorInput & {
+  id: string;
+  order: number;
 };

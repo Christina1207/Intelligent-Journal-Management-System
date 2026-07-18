@@ -8,7 +8,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPublicSections } from "@/features/journals/api/journals-api";
 import { createSubmission } from "@/features/submissions/api/submissions-api";
 import { ApiError } from "@/lib/api/errors";
-
+import {
+  CoauthorFields,
+  type CoauthorDraft,
+} from "@/features/submissions/components/coauthor-fields";
+import { KeywordInput } from "@/features/submissions/components/keyword-input";
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 const languageOptions = [
@@ -71,7 +75,8 @@ export function NewSubmissionForm() {
   const [blindedFile, setBlindedFile] = React.useState<File | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<FormErrors>({});
-
+  const [keywords, setKeywords] = React.useState<string[]>([]);
+  const [coauthors, setCoauthors] = React.useState<CoauthorDraft[]>([]);
   const sectionsQuery = useQuery({
     queryKey: ["public-sections"],
     queryFn: getPublicSections,
@@ -115,6 +120,42 @@ export function NewSubmissionForm() {
 
     if (!section) {
       errors.section = "Section is required.";
+    }
+    if (keywords.length < 3 || keywords.length > 8) {
+      errors.keywords = "Provide between 3 and 8 distinct keywords.";
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
+    const seenEmails = new Set<string>();
+
+    for (const coauthor of coauthors) {
+      const fullName = coauthor.full_name.trim();
+      const email = coauthor.email.trim().toLocaleLowerCase();
+      const orcid = coauthor.orcid.trim();
+
+      if (!fullName || !email) {
+        errors.coauthors =
+          "Each coauthor must have a full name and email address.";
+        break;
+      }
+
+      if (!emailPattern.test(email)) {
+        errors.coauthors = `Enter a valid email address for ${fullName}.`;
+        break;
+      }
+
+      if (seenEmails.has(email)) {
+        errors.coauthors = `The email ${coauthor.email} is listed more than once.`;
+        break;
+      }
+
+      if (orcid && !orcidPattern.test(orcid)) {
+        errors.coauthors = `Enter a valid ORCID for ${fullName}.`;
+        break;
+      }
+
+      seenEmails.add(email);
     }
 
     if (!file) {
@@ -188,6 +229,14 @@ export function NewSubmissionForm() {
       language: String(formData.get("language") ?? "").trim(),
       section: String(formData.get("section") ?? "").trim(),
       cover_letter: String(formData.get("cover_letter") ?? "").trim(),
+      keywords,
+      coauthors: coauthors.map(({ clientId: _clientId, ...coauthor }) => ({
+        full_name: coauthor.full_name.trim(),
+        email: coauthor.email.trim(),
+        affiliation: coauthor.affiliation.trim(),
+        orcid: coauthor.orcid.trim(),
+        country: coauthor.country.trim(),
+      })),
       file: file as File,
       blinded_file: blindedFile as File,
     });
@@ -272,6 +321,20 @@ export function NewSubmissionForm() {
               </p>
             )}
           </div>
+          <KeywordInput
+            value={keywords}
+            disabled={isSubmitting}
+            error={fieldErrors.keywords}
+            onChange={(nextKeywords) => {
+              setKeywords(nextKeywords);
+
+              setFieldErrors((currentErrors) => {
+                const nextErrors = { ...currentErrors };
+                delete nextErrors.keywords;
+                return nextErrors;
+              });
+            }}
+          />
 
           <div className="grid gap-5 md:grid-cols-2">
             <div>
@@ -340,7 +403,20 @@ export function NewSubmissionForm() {
           </div>
         </div>
       </section>
+      <CoauthorFields
+        value={coauthors}
+        disabled={isSubmitting}
+        error={fieldErrors.coauthors}
+        onChange={(nextCoauthors) => {
+          setCoauthors(nextCoauthors);
 
+          setFieldErrors((currentErrors) => {
+            const nextErrors = { ...currentErrors };
+            delete nextErrors.coauthors;
+            return nextErrors;
+          });
+        }}
+      />
       <section className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-950">
           Manuscript file
@@ -351,7 +427,8 @@ export function NewSubmissionForm() {
             htmlFor="file"
             className="block text-sm font-medium text-slate-700"
           >
-            Full manuscript PDF - may contain author names, affiliations and acknowledgements.
+            Full manuscript PDF - may contain author names, affiliations and
+            acknowledgements.
           </label>
           <input
             id="file"
@@ -376,7 +453,8 @@ export function NewSubmissionForm() {
             htmlFor="blinded_file"
             className="block text-sm font-medium text-slate-700"
           >
-            Blinded manuscript PDF - must remove author names, affiliations, acknowledgements and identifying metadata.
+            Blinded manuscript PDF - must remove author names, affiliations,
+            acknowledgements and identifying metadata.
           </label>
           <input
             id="blinded_file"

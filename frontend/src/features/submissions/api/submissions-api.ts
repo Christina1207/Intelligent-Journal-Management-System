@@ -40,6 +40,8 @@ export function createSubmission(payload: CreateSubmissionPayload) {
   formData.append("abstract", payload.abstract);
   formData.append("language", payload.language);
   formData.append("section", payload.section);
+  formData.append("keywords", JSON.stringify(payload.keywords));
+  formData.append("coauthors", JSON.stringify(payload.coauthors));
   formData.append("file", payload.file);
   formData.append("blinded_file", payload.blinded_file);
 

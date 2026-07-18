@@ -160,7 +160,28 @@ export function SubmissionDetailPage({
           <p className="mt-4 whitespace-pre-line text-sm leading-7 text-slate-700">
             {submission.abstract}
           </p>
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-slate-950">
+              Author-provided keywords
+            </h3>
 
+            {submission.keywords.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {submission.keywords.map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700"
+                  >
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">
+                No author keywords were provided.
+              </p>
+            )}
+          </div>
           {submission.topic ? (
             <div className="mt-6 rounded-lg border bg-slate-50 p-4">
               <h3 className="text-sm font-semibold text-slate-950">
@@ -210,7 +231,48 @@ export function SubmissionDetailPage({
               </div>
             </dl>
           </section>
+          {submission.coauthors.length > 0 ? (
+            <section className="rounded-xl border bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-950">
+                Additional authors
+              </h2>
 
+              <div className="mt-5 space-y-4">
+                {submission.coauthors.map((coauthor) => (
+                  <article
+                    key={coauthor.id}
+                    className="rounded-lg border border-slate-200 p-4"
+                  >
+                    <p className="font-medium text-slate-950">
+                      {coauthor.order}. {coauthor.full_name}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      {coauthor.email}
+                    </p>
+
+                    {coauthor.affiliation ? (
+                      <p className="mt-1 text-sm text-slate-500">
+                        {coauthor.affiliation}
+                      </p>
+                    ) : null}
+
+                    {coauthor.orcid ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        ORCID: {coauthor.orcid}
+                      </p>
+                    ) : null}
+
+                    {coauthor.country ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {coauthor.country}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <section className="rounded-xl border bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">
               Latest decision
