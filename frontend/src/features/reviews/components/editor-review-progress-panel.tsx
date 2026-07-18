@@ -18,6 +18,7 @@ import type {
   ReviewerAssignment,
   ReviewerAssignmentStatus,
 } from "@/features/reviews/types";
+import { EditorDecisionForm } from "@/features/reviews/components/editor-decision-form";
 
 interface EditorReviewProgressPanelProps {
   submissionId: string;
@@ -394,14 +395,18 @@ export function EditorReviewProgressPanel({
       </section>
 
       {workspace.can_make_decision ? (
-        <Alert>
-          <CheckCircle2 aria-hidden="true" />
-          <AlertTitle>Ready for editorial decision</AlertTitle>
-          <AlertDescription>
-            The required reviews have been submitted. Review the reports before
-            recording the editorial decision.
-          </AlertDescription>
-        </Alert>
+        <>
+          <Alert>
+            <CheckCircle2 aria-hidden="true" />
+            <AlertTitle>Ready for editorial decision</AlertTitle>
+            <AlertDescription>
+              The required reviews have been submitted. Review the reports
+              before recording the editorial decision.
+            </AlertDescription>
+          </Alert>
+
+          <EditorDecisionForm submissionId={submissionId} />
+        </>
       ) : null}
     </section>
   );

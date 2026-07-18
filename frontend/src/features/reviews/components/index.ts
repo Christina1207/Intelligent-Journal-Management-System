@@ -6,3 +6,4 @@ export {
 } from "./reviewer-invitation-batch-form";
 export { ReviewerDiscoveryPanel } from "./reviewer-discovery-panel";
 export { EditorReviewProgressPanel } from "./editor-review-progress-panel";
+export { EditorDecisionForm } from "./editor-decision-form";

@@ -73,3 +73,4 @@ export {
 } from "./use-reviewer-discovery";
 export { useSectionEditorQueue } from "./use-section-editor-queue";
 export { useEditorReviewWorkspace } from "./use-editor-review-workspace";
+export { useMakeEditorDecision } from "./use-make-editor-decision";

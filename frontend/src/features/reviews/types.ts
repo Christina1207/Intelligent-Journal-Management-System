@@ -186,3 +186,31 @@ export type EditorReviewWorkspaceResponse = {
   reviews: EditorReview[];
   can_make_decision: boolean;
 };
+
+export type EditorDecision =
+  | "ACCEPTED"
+  | "REJECTED"
+  | "MINOR_REVISION"
+  | "MAJOR_REVISION";
+
+export type MakeEditorDecisionPayload = {
+  decision: EditorDecision;
+  decision_letter: string;
+};
+
+export type EditorDecisionResponse = {
+  submission_id: string;
+  submission_status: SubmissionStatus;
+  version: {
+    id: string;
+    version_number: number;
+    decision: string;
+    decision_letter: string;
+    decided_at: string;
+    decided_by: {
+      id: string;
+      email: string;
+      full_name: string;
+    };
+  };
+};

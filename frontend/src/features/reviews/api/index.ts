@@ -12,6 +12,8 @@ import type {
   AssignReviewersPayload,
   AssignReviewersResponse,
   EditorReviewWorkspaceResponse,
+  EditorDecisionResponse,
+  MakeEditorDecisionPayload,
 } from "@/features/reviews/types";
 
 export function getReviewerAssignments() {
@@ -97,5 +99,15 @@ export function assignReviewers(
 export function getEditorReviewWorkspace(submissionId: string) {
   return apiClient.get<EditorReviewWorkspaceResponse>(
     `/editor/submissions/${submissionId}/reviews/`,
+  );
+}
+
+export function makeEditorDecision(
+  submissionId: string,
+  payload: MakeEditorDecisionPayload,
+) {
+  return apiClient.post<EditorDecisionResponse>(
+    `/editor/submissions/${submissionId}/decision/`,
+    payload,
   );
 }
