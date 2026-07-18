@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useMakeEditorDecision } from "@/features/reviews/hooks";
 import type { EditorDecision } from "@/features/reviews/types";
-
+import { useRouter } from "next/navigation";
 interface EditorDecisionFormProps {
   submissionId: string;
 }
@@ -59,12 +59,13 @@ export function EditorDecisionForm({ submissionId }: EditorDecisionFormProps) {
   const [decision, setDecision] = useState<EditorDecision | "">("");
   const [decisionLetter, setDecisionLetter] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const router = useRouter();
 
   const selectedOption = DECISION_OPTIONS.find(
     (option) => option.value === decision,
   );
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationError(null);
 
@@ -88,13 +89,23 @@ export function EditorDecisionForm({ submissionId }: EditorDecisionFormProps) {
       return;
     }
 
-    makeDecision.mutate({
-      submissionId,
-      payload: {
-        decision,
-        decision_letter: decisionLetter.trim(),
-      },
-    });
+    try {
+      const response = await makeDecision.mutateAsync({
+        submissionId,
+        payload: {
+          decision,
+          decision_letter: decisionLetter.trim(),
+        },
+      });
+
+      if (response.submission_status === "ACCEPTED") {
+        router.replace(
+          `/section-editor/submissions/${submissionId}/publishing`,
+        );
+      }
+    } catch {
+      // The mutation exposes the normalized error through makeDecision.error.
+    }
   };
 
   const error = validationError
@@ -187,8 +198,9 @@ export function EditorDecisionForm({ submissionId }: EditorDecisionFormProps) {
         <Alert>
           <AlertTitle>Publishing handoff</AlertTitle>
           <AlertDescription>
-            Acceptance does not publish the article automatically. A separate
-            publication draft must be created after this decision succeeds.
+            After acceptance succeeds, you will be redirected to create a
+            publication draft from the accepted manuscript version. Draft
+            creation does not publish the article.
           </AlertDescription>
         </Alert>
       ) : null}

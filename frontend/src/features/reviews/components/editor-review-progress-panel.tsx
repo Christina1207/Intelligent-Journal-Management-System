@@ -197,10 +197,58 @@ export function EditorReviewProgressPanel({
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-semibold">Peer-review progress</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold">Peer-review progress</h2>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold">Peer-review progress</h2>
+
+                {workspace.current_version ? (
+                  <>
+                    <Badge variant="outline">
+                      Version {workspace.current_version.version_number}
+                    </Badge>
+
+                    <Badge variant="secondary">
+                      {workspace.current_version.version_number === 1
+                        ? "Initial submission"
+                        : `Revision round ${
+                            workspace.current_version.version_number - 1
+                          }`}
+                    </Badge>
+                  </>
+                ) : null}
+              </div>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Monitor invitations, deadlines, and submitted reports for
+                {workspace.current_version
+                  ? ` version ${workspace.current_version.version_number}.`
+                  : " the current review round."}
+              </p>
+            </div>
+            {workspace.current_version ? (
+              <>
+                <Badge variant="outline">
+                  Version {workspace.current_version.version_number}
+                </Badge>
+
+                <Badge variant="secondary">
+                  {workspace.current_version.version_number === 1
+                    ? "Initial submission"
+                    : `Revision round ${
+                        workspace.current_version.version_number - 1
+                      }`}
+                </Badge>
+              </>
+            ) : null}
+          </div>
+
           <p className="mt-1 text-sm text-muted-foreground">
-            Monitor invitations, deadlines, and submitted reports for the
-            current review round.
+            Monitor invitations, deadlines, and submitted reports for
+            {workspace.current_version
+              ? ` version ${workspace.current_version.version_number}.`
+              : " the current review round."}
           </p>
         </div>
 
@@ -331,6 +379,14 @@ export function EditorReviewProgressPanel({
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {assignment.reviewer.email}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-muted-foreground">
+                      Version {assignment.version.version_number}
+                      {assignment.version.version_number === 1
+                        ? " · Initial review"
+                        : ` · Revision round ${
+                            assignment.version.version_number - 1
+                          }`}
                     </p>
 
                     <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
