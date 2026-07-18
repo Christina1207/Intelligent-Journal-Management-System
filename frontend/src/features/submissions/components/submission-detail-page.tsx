@@ -11,7 +11,7 @@ import { RevisionUploadForm } from "@/features/submissions/components/revision-u
 import { SubmissionDecisionBadge } from "@/features/submissions/components/submission-decision-badge";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
 import { VersionHistory } from "@/features/submissions/components/version-history";
-
+import { AuthorReviewerFeedbackPanel } from "@/features/submissions/components/author-reviewer-feedback-panel";
 type SubmissionDetailPageProps = {
   submissionId: string;
 };
@@ -88,6 +88,9 @@ export function SubmissionDetailPage({
   const versions = versionsQuery.data?.results ?? [];
   const latestVersion = submission.latest_version;
   const canUploadRevision = submission.status === "UNDER_REVISION";
+  const revisionFeedbackVersion = latestVersion
+    ? (versions.find((version) => version.id === latestVersion.id) ?? null)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -117,7 +120,38 @@ export function SubmissionDetailPage({
       </section>
 
       {canUploadRevision ? (
-        <RevisionUploadForm submissionId={submission.id} />
+        versionsQuery.isLoading ? (
+          <section
+            className="h-48 animate-pulse rounded-xl bg-slate-200"
+            aria-label="Loading reviewer feedback"
+          />
+        ) : versionsQuery.isError ? (
+          <section className="rounded-xl border border-red-200 bg-red-50 p-6">
+            <h2 className="text-lg font-semibold text-red-900">
+              Reviewer feedback unavailable
+            </h2>
+            <p className="mt-2 text-sm text-red-700">
+              The revision form is temporarily unavailable because the reviewer
+              feedback could not be loaded. Refresh the page before preparing
+              the revision.
+            </p>
+          </section>
+        ) : revisionFeedbackVersion ? (
+          <>
+            <AuthorReviewerFeedbackPanel version={revisionFeedbackVersion} />
+            <RevisionUploadForm submissionId={submission.id} />
+          </>
+        ) : (
+          <section className="rounded-xl border border-red-200 bg-red-50 p-6">
+            <h2 className="text-lg font-semibold text-red-900">
+              Revision version unavailable
+            </h2>
+            <p className="mt-2 text-sm text-red-700">
+              The decided manuscript version could not be identified. Refresh
+              the page before uploading a revision.
+            </p>
+          </section>
+        )
       ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[1fr_320px]">

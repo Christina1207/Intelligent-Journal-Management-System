@@ -277,8 +277,14 @@ class RevisionUploadSerializer(serializers.Serializer):
     )
     response_to_reviewers = serializers.CharField(
         required=False,
-        allow_blank=True,
-        default="",
+        allow_blank=False,
+        trim_whitespace=True,
+        min_length=20,
+        max_length=20000,
+        help_text=(
+            "Point-by-point response explaining how the author "
+            "addressed the editor and reviewer comments."
+        ),
     )
 
     def validate(self, attrs):
