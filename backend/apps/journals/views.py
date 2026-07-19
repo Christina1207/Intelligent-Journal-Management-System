@@ -10,9 +10,10 @@ from .services import SectionManagementService
 from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 
-from .permissions import CanViewTopicAnalytics
-from .serializers import TopicAnalyticsDashboardSerializer
+from .permissions import CanViewTopicAnalytics,CanViewJournalAnalytics
+from .serializers import TopicAnalyticsDashboardSerializer, EditorialAnalyticsDashboardSerializer
 from .topic_analytics import TopicAnalyticsService
+from .editorial_analytics import EditorialAnalyticsService
 
 class SectionListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
@@ -111,6 +112,37 @@ class SectionTopicAnalyticsView(APIView):
         )
 
         serializer = TopicAnalyticsDashboardSerializer(
+            dashboard
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+    
+class EditorialAnalyticsDashboardView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        CanViewJournalAnalytics,
+    ]
+
+    @extend_schema(
+        responses={
+            200: EditorialAnalyticsDashboardSerializer,
+        },
+        summary="Get journal-wide editorial analytics",
+        description=(
+            "Return operational and publishing analytics for the "
+            "Editor-in-Chief dashboard, including an explainable "
+            "priority queue."
+        ),
+    )
+    def get(self, request):
+        dashboard = (
+            EditorialAnalyticsService.get_dashboard()
+        )
+
+        serializer = EditorialAnalyticsDashboardSerializer(
             dashboard
         )
 

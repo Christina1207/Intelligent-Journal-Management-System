@@ -140,3 +140,51 @@ def monitored_submissions_for_manager(user):
         )
         .order_by("-submitted_at")
     )
+
+PRIORITIZABLE_STATUSES = (
+    Submission.Status.SUBMITTED,
+    Submission.Status.ASSIGNED,
+    Submission.Status.UNDER_REVIEW,
+    Submission.Status.SUSPENDED,
+    Submission.Status.REVIEWED,
+    Submission.Status.UNDER_REVISION,
+    Submission.Status.REVISED,
+)
+
+
+def prioritizable_submissions():
+    """
+    Return all active journal submissions with the data required by
+    SubmissionPriorityService already loaded.
+
+    Authorization is enforced by the EIC analytics endpoint.
+    """
+    return (
+        Submission.objects
+        .filter(status__in=PRIORITIZABLE_STATUSES)
+        .select_related(
+            "section",
+            "assigned_editor",
+        )
+        .prefetch_related(
+            Prefetch(
+                "versions",
+                queryset=(
+                    SubmissionVersion.objects
+                    .order_by("-version_number")
+                    .prefetch_related(
+                        Prefetch(
+                            "reviewer_assignments",
+                            queryset=(
+                                ReviewerAssignment.objects
+                                .select_related("review")
+                                .order_by("assigned_at")
+                            ),
+                            to_attr="priority_assignments",
+                        )
+                    )
+                ),
+                to_attr="priority_versions",
+            )
+        )
+    )

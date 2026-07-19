@@ -1,6 +1,9 @@
 from django.urls import path
 
-from .views import SectionTopicAnalyticsView
+from .views import (
+    EditorialAnalyticsDashboardView,
+    SectionTopicAnalyticsView,
+)
 
 
 urlpatterns = [
@@ -8,5 +11,10 @@ urlpatterns = [
         "topics/sections/",
         SectionTopicAnalyticsView.as_view(),
         name="section-topic-analytics",
+    ),
+    path(
+        "editorial-dashboard/",
+        EditorialAnalyticsDashboardView.as_view(),
+        name="editorial-analytics-dashboard",
     ),
 ]
