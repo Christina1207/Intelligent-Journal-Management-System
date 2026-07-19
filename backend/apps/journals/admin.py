@@ -65,11 +65,25 @@ class JournalMetadataSettingsAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "journal_title",
+                    "short_name",
+                    "description",
                     "publisher_name",
+                    "logo",
+                    "primary_color",
                     "print_issn",
                     "online_issn",
                     "base_url",
                     "default_language",
+                ]
+            },
+        ),
+        (
+            "Editorial and Access Policies",
+            {
+                "fields": [
+                    "access_policy",
+                    "peer_review_policy",
+                    "publication_frequency",
                 ]
             },
         ),
@@ -83,7 +97,24 @@ class JournalMetadataSettingsAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Future OAI Metadata",
+            "Priority Ranking",
+            {
+                "description": (
+                    "Weights are normalized automatically. They do not "
+                    "need to total 100, but at least one must be positive."
+                ),
+                "fields": [
+                    "priority_waiting_age_cap_days",
+                    "priority_waiting_age_weight",
+                    "priority_action_urgency_weight",
+                    "priority_reviewer_shortage_weight",
+                    "priority_overdue_work_weight",
+                    "priority_revision_round_weight",
+                ],
+            },
+        ),
+        (
+            "OAI-PMH Metadata",
             {
                 "fields": [
                     "oai_repository_name",

@@ -50,4 +50,6 @@ desktop.ini
 *.safetensors
 models/
 
+mediafiles/
+
 !frontend/src/features/public/data/

@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.core.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -32,6 +33,18 @@ class JournalMetadataSettingsTests(TestCase):
                 JournalMetadataSettings.objects.create(journal_title="Second Journal")
 
         self.assertEqual(JournalMetadataSettings.objects.count(), 1)
+    
+    def test_priority_weights_cannot_all_be_zero(self):
+        settings = JournalMetadataSettings(
+            priority_waiting_age_weight=0,
+            priority_action_urgency_weight=0,
+            priority_reviewer_shortage_weight=0,
+            priority_overdue_work_weight=0,
+            priority_revision_round_weight=0,
+        )
+
+        with self.assertRaises(ValidationError):
+            settings.full_clean()
 
 # TODO: there are tests that have to do with section manager that need checking out
 class SectionApiTests(APITestCase):

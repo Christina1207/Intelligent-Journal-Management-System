@@ -1,7 +1,11 @@
 import uuid
 
 from django.conf import settings
-from django.core.validators import RegexValidator
+from django.core.validators import (
+    MaxValueValidator,
+    MinValueValidator,
+    RegexValidator,
+)
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -12,6 +16,16 @@ issn_validator = RegexValidator(
     regex=r"^\d{4}-\d{4}$",
     message="ISSN must be in the format XXXX-XXXX (e.g. 1234-5678).",
 )
+
+hex_color_validator = RegexValidator(
+    regex=r"^#[0-9A-Fa-f]{6}$",
+    message="Enter a hexadecimal color in #RRGGBB format.",
+)
+
+priority_weight_validators = [
+    MinValueValidator(0),
+    MaxValueValidator(100),
+]
 
 
 class Section(models.Model):
@@ -258,6 +272,18 @@ class JournalMetadataSettings(models.Model):
     )
     journal_title = models.CharField(max_length=255, default="Untitled Journal")
     short_name = models.CharField(max_length=100, blank=True, default="")
+    logo = models.ImageField(
+        upload_to="journal/branding/",
+        blank=True,
+        null=True,
+        help_text="Journal logo displayed on the public portal.",
+    )
+    primary_color = models.CharField(
+        max_length=7,
+        default="#0F172A",
+        validators=[hex_color_validator],
+        help_text="Primary journal color in #RRGGBB format.",
+    )
     description = models.TextField(blank=True, default="")
     publisher_name = models.CharField(max_length=255, blank=True, default="")
     print_issn = models.CharField(
@@ -280,7 +306,37 @@ class JournalMetadataSettings(models.Model):
     access_policy = models.TextField(blank=True, default="")
     peer_review_policy = models.TextField(blank=True, default="")
     publication_frequency = models.CharField(max_length=255, blank=True, default="")
-
+    priority_waiting_age_cap_days = models.PositiveSmallIntegerField(
+        default=30,
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(3650),
+        ],
+        help_text=(
+            "Waiting age reaches its maximum ranking contribution "
+            "after this many days."
+        ),
+    )
+    priority_waiting_age_weight = models.PositiveSmallIntegerField(
+        default=25,
+        validators=priority_weight_validators,
+    )
+    priority_action_urgency_weight = models.PositiveSmallIntegerField(
+        default=25,
+        validators=priority_weight_validators,
+    )
+    priority_reviewer_shortage_weight = models.PositiveSmallIntegerField(
+        default=20,
+        validators=priority_weight_validators,
+    )
+    priority_overdue_work_weight = models.PositiveSmallIntegerField(
+        default=20,
+        validators=priority_weight_validators,
+    )
+    priority_revision_round_weight = models.PositiveSmallIntegerField(
+        default=10,
+        validators=priority_weight_validators,
+    )
     oai_repository_name = models.CharField(max_length=255, blank=True, default="")
     oai_admin_email = models.EmailField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -290,6 +346,22 @@ class JournalMetadataSettings(models.Model):
     def get_current(cls):
         settings, _ = cls.objects.get_or_create(pk=cls.SINGLETON_PK)
         return settings
+
+    def clean(self):
+        super().clean()
+
+        weights = (
+            self.priority_waiting_age_weight,
+            self.priority_action_urgency_weight,
+            self.priority_reviewer_shortage_weight,
+            self.priority_overdue_work_weight,
+            self.priority_revision_round_weight,
+        )
+
+        if sum(weights) <= 0:
+            raise ValidationError(
+                "At least one priority-ranking weight must be greater than zero."
+            )
 
     def save(self, *args, **kwargs):
         self.pk = self.SINGLETON_PK
@@ -301,3 +373,15 @@ class JournalMetadataSettings(models.Model):
     class Meta:
         verbose_name = "Journal metadata settings"
         verbose_name_plural = "Journal metadata settings"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(priority_waiting_age_weight__gt=0)
+                    | Q(priority_action_urgency_weight__gt=0)
+                    | Q(priority_reviewer_shortage_weight__gt=0)
+                    | Q(priority_overdue_work_weight__gt=0)
+                    | Q(priority_revision_round_weight__gt=0)
+                ),
+                name="priority_weights_not_all_zero",
+            ),
+        ]
