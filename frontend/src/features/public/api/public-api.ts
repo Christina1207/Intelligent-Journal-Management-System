@@ -28,6 +28,12 @@ if (!API_BASE_URL) {
 type RequestOptions = {
   revalidate?: number;
 };
+export type PublicArticleExportFormat = "bibtex" | "ris" | "dc";
+
+export type PublicArticleDownloadResponse = {
+  download_url: string;
+  expires_in: number;
+};
 
 class PublicApiError extends Error {
   status: number;
@@ -142,6 +148,47 @@ export async function getPublicArticles(query: PublicArticleListQuery = {}) {
     previous: response.previous,
     results: response.results.map(mapArticle),
   };
+}
+
+export function getPublicArticleExportUrl(
+  slug: string,
+  format: PublicArticleExportFormat,
+) {
+  return buildUrl(`/public/articles/${encodeURIComponent(slug)}/export/`, {
+    format,
+  });
+}
+
+export async function requestPublicArticleDownload(slug: string) {
+  const response = await fetch(
+    buildUrl(`/public/articles/${encodeURIComponent(slug)}/download/`),
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new PublicApiError(
+      "The article PDF is currently unavailable.",
+      response.status,
+    );
+  }
+
+  const payload =
+    (await response.json()) as Partial<PublicArticleDownloadResponse>;
+
+  if (typeof payload.download_url !== "string" || !payload.download_url) {
+    throw new PublicApiError(
+      "The download service returned an invalid response.",
+      502,
+    );
+  }
+
+  return payload as PublicArticleDownloadResponse;
 }
 
 export async function getLatestPublicArticles(limit = 3) {
