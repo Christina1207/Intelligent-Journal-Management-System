@@ -252,13 +252,14 @@ class PublishedArticlePublicListSerializer(serializers.ModelSerializer):
         return value.isoformat() if value else None
 
 
-class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerializer):
+class PublishedArticlePublicDetailSerializer(
+    PublishedArticlePublicListSerializer
+):
     author_details = PublishedArticleAuthorPublicSerializer(
         source="authors",
         many=True,
         read_only=True,
     )
-    pdf_file = serializers.SerializerMethodField()
 
     class Meta(PublishedArticlePublicListSerializer.Meta):
         fields = [
@@ -266,12 +267,8 @@ class PublishedArticlePublicDetailSerializer(PublishedArticlePublicListSerialize
             "author_details",
             "first_page",
             "last_page",
-            "pdf_file",
         ]
         read_only_fields = fields
-
-    def get_pdf_file(self, obj) -> Optional[str]:
-        return obj.pdf_file.name if obj.pdf_file else None
 
 
 class PublishedArticleManagementReadSerializer(PublishedArticlePublicDetailSerializer):
