@@ -1,6 +1,14 @@
 import logging
 from pgvector.django import CosineDistance
-from django.db.models import Exists, OuterRef, Count, Q
+from django.db.models import (
+    Count,
+    Exists,
+    F,
+    FloatField,
+    OuterRef,
+    Q,
+    Value,
+)
 from django.core.exceptions import ObjectDoesNotExist
 
 from apps.accounts.models import Role, User, ReviewerProfile
@@ -25,39 +33,32 @@ class RecommendationService:
     using cosine similarity between submission abstract_embedding
     and reviewer expertise_embedding.
 
-    Lives in apps/core to avoid circular dependencies — touches
-    accounts, submissions, and reviews apps.
     """
 
     @staticmethod
-    def get_recommendations(submission, limit: int) -> list[dict]:
-        """
-        Return ranked reviewer recommendations for the given submission.
+    def get_recommendations(
+        submission,
+        limit: int,
+    ) -> list[dict]:
+        limit = max(1, limit)
 
-        Exclusion rules applied:
-        - Submission author excluded
-        - Only REVIEWER role users
-        - Only users with a computed expertise_embedding
+        semantic_available = (
+            submission.abstract_embedding is not None
+        )
 
-        # TODO Sprint 4: exclude reviewers with active assignments on
-        # the current version once reviewer application workflow is built.
-        # TODO Sprint 4: exclude reviewers who have a conflict of interest
-        # declaration against this submission.
-        """
-        if submission.abstract_embedding is None:
-            logger.warning(
-                "RecommendationService: submission %s has no abstract_embedding. "
-                "Returning empty recommendations.",
+        if not semantic_available:
+            logger.info(
+                "RecommendationService: submission %s has no "
+                "abstract embedding; using keyword-only fallback.",
                 submission.id,
             )
-            return []
 
-        # Subquery: has this reviewer ever submitted a review for this journal?
         has_reviewed_before = Exists(
             Review.objects.filter(
-                assignment__reviewer=OuterRef("user"),
+                assignment__reviewer=OuterRef("user_id"),
             )
         )
+
         current_version = (
             submission.versions
             .order_by("-version_number")
@@ -68,7 +69,9 @@ class RecommendationService:
             ReviewerAssignment.objects.filter(
                 reviewer=OuterRef("user_id"),
                 version__submission=submission,
-                status__in=ACTIVE_REVIEWER_ASSIGNMENT_STATUSES,
+                status__in=(
+                    ACTIVE_REVIEWER_ASSIGNMENT_STATUSES
+                ),
             )
         )
 
@@ -78,13 +81,9 @@ class RecommendationService:
                 version=current_version,
             )
         )
-        
+
         profiles = (
             ReviewerProfile.objects.annotate(
-                similarity=1 - CosineDistance(
-                    "expertise_embedding",
-                    submission.abstract_embedding,
-                ),
                 has_reviewed_before=has_reviewed_before,
                 has_active_assignment=Exists(
                     active_assignment_exists
@@ -106,14 +105,16 @@ class RecommendationService:
                 sections=submission.section,
                 user__status=User.Status.ACTIVE,
                 user__roles__name=Role.RoleName.REVIEWER,
-                expertise_embedding__isnull=False,
                 has_active_assignment=False,
                 already_invited_current_round=False,
-                active_assignment_count__lt=MAX_ACTIVE_REVIEWER_ASSIGNMENTS,
+                active_assignment_count__lt=(
+                    MAX_ACTIVE_REVIEWER_ASSIGNMENTS
+                ),
             )
             .exclude(user=submission.author)
             .select_related("user")
         )
+
         conflict_query = reviewer_identity_conflict_q(
             submission=submission,
             email_field="user__email",
@@ -122,12 +123,34 @@ class RecommendationService:
         if conflict_query.children:
             profiles = profiles.exclude(conflict_query)
 
-       
-        candidate_pool_limit = max(limit * 3, limit)
+        if semantic_available:
+            profiles = profiles.annotate(
+                similarity=(
+                    1
+                    - CosineDistance(
+                        "expertise_embedding",
+                        submission.abstract_embedding,
+                    )
+                )
+            )
+        else:
+            profiles = profiles.annotate(
+                similarity=Value(
+                    0.0,
+                    output_field=FloatField(),
+                )
+            )
+
+        candidate_pool_limit = (
+            max(limit * 3, 15)
+            if semantic_available
+            else max(limit * 10, 50)
+        )
+
         profiles = list(
             profiles
             .order_by(
-                "-similarity",
+                F("similarity").desc(nulls_last=True),
                 "active_assignment_count",
                 "user__last_name",
             )
@@ -135,9 +158,8 @@ class RecommendationService:
         )
 
         author_keywords, topic_keywords = (
-            RecommendationService._submission_keyword_sources(
-                submission
-            )
+            RecommendationService
+            ._submission_keyword_sources(submission)
         )
 
         recommendations = [
@@ -147,6 +169,14 @@ class RecommendationService:
                 topic_keywords=topic_keywords,
             )
             for profile in profiles
+        ]
+
+        # Do not display candidates for whom the system has no supporting
+        # semantic or keyword evidence.
+        recommendations = [
+            recommendation
+            for recommendation in recommendations
+            if recommendation["recommendation_score"] > 0
         ]
 
         return RecommendationService._rank_recommendations(
@@ -222,9 +252,17 @@ class RecommendationService:
     ) -> dict:
         user = profile.user
 
-        semantic_score = max(
-            0.0,
-            min(1.0, float(profile.similarity)),
+        has_semantic_evidence = (
+            profile.similarity is not None
+        )
+
+        semantic_score = (
+            max(
+                0.0,
+                min(1.0, float(profile.similarity)),
+            )
+            if has_semantic_evidence
+            else 0.0
         )
 
         author_keyword_map = (
@@ -283,13 +321,35 @@ class RecommendationService:
             else 0.0
         )
 
-        semantic_weight, keyword_weight = (
-            RecommendationService._normalized_weights()
+        has_keyword_evidence = bool(
+            manuscript_keyword_map
+            and reviewer_keyword_map
         )
+
+        semantic_weight, keyword_weight = (
+            RecommendationService._effective_weights(
+                has_semantic_evidence=(
+                    has_semantic_evidence
+                ),
+                has_keyword_evidence=(
+                    has_keyword_evidence
+                ),
+            )
+        )
+
         recommendation_score = (
             semantic_weight * semantic_score
             + keyword_weight * keyword_overlap_score
         )
+
+        if semantic_weight > 0 and keyword_weight > 0:
+            scoring_mode = "hybrid"
+        elif semantic_weight > 0:
+            scoring_mode = "semantic_only"
+        elif keyword_weight > 0:
+            scoring_mode = "keyword_only"
+        else:
+            scoring_mode = "unavailable"
 
         biography_excerpt = ""
 
@@ -306,14 +366,34 @@ class RecommendationService:
 
                 biography_excerpt += "..."
 
-        explanation_parts = [
-            (
-                f"Score uses {semantic_weight:.0%} semantic similarity "
-                f"and {keyword_weight:.0%} keyword coverage."
-            ),
-            f"Semantic similarity: {semantic_score:.0%}.",
-            f"Keyword coverage: {keyword_overlap_score:.0%}.",
-        ]
+        explanation_parts = []
+
+        if scoring_mode == "keyword_only":
+            explanation_parts.append(
+                "Semantic embedding unavailable; "
+                "keyword-only fallback used."
+            )
+        elif scoring_mode == "semantic_only":
+            explanation_parts.append(
+                "Reviewer keyword evidence unavailable; "
+                "semantic-only scoring used."
+            )
+        elif scoring_mode == "hybrid":
+            explanation_parts.append(
+                f"Score uses {semantic_weight:.0%} semantic "
+                f"similarity and {keyword_weight:.0%} "
+                f"keyword coverage."
+            )
+
+        explanation_parts.extend(
+            [
+                f"Semantic similarity: {semantic_score:.0%}.",
+                (
+                    "Keyword coverage: "
+                    f"{keyword_overlap_score:.0%}."
+                ),
+            ]
+    )
 
         if matched_author_keywords:
             explanation_parts.append(
@@ -361,6 +441,7 @@ class RecommendationService:
                 recommendation_score,
                 4,
             ),
+            "scoring_mode": scoring_mode,
             "matched_keywords": matched_keywords,
             "matched_author_keywords": (
                 matched_author_keywords
@@ -392,3 +473,20 @@ class RecommendationService:
                 recommendation["full_name"].casefold(),
             ),
         )[:limit]
+    
+    @staticmethod
+    def _effective_weights(
+        *,
+        has_semantic_evidence: bool,
+        has_keyword_evidence: bool,
+    ) -> tuple[float, float]:
+        if has_semantic_evidence and has_keyword_evidence:
+            return RecommendationService._normalized_weights()
+
+        if has_semantic_evidence:
+            return 1.0, 0.0
+
+        if has_keyword_evidence:
+            return 0.0, 1.0
+
+        return 0.0, 0.0

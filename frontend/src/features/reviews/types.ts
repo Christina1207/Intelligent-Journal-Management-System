@@ -138,6 +138,7 @@ export type ReviewerRecommendation = {
   active_assignment_count: number;
   has_reviewed_before: boolean;
   explanation: string;
+  scoring_mode: "hybrid" | "semantic_only" | "keyword_only" | "unavailable";
 };
 
 export type ReviewerRecommendationResponse = {

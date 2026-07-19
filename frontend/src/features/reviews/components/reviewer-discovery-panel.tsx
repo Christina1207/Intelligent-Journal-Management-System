@@ -181,8 +181,9 @@ function ReviewerDiscoveryPanelContent({
           </Alert>
         ) : recommendations.length === 0 ? (
           <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            No semantic recommendations are currently available for this
-            section. Use manual search below.
+            No eligible reviewers currently have sufficient semantic or keyword
+            evidence. Check reviewer expertise profiles and section approval, or
+            use manual search below.
           </p>
         ) : (
           <div className="grid gap-3 xl:grid-cols-2">
