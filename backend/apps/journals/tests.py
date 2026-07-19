@@ -9,7 +9,10 @@ from apps.accounts.models import Role, User
 from apps.journals.models import JournalMetadataSettings, Section
 from apps.journals.serializers import AssignSectionManagerSerializer
 from apps.journals.views import SectionManagementViewSet
-from apps.submissions.models import Submission
+from apps.submissions.models import (
+    Submission,
+    SubmissionTopic,
+)
 
 # TODO: is this a joke?
 class JournalMetadataSettingsTests(TestCase):
@@ -359,3 +362,263 @@ class SectionApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self._response_section_names(response), [owned_section.name])
+
+class SectionTopicAnalyticsApiTests(APITestCase):
+    def setUp(self):
+        self.roles = {}
+
+        for role_name, _label in Role.RoleName.choices:
+            role, _ = Role.objects.get_or_create(
+                name=role_name
+            )
+            self.roles[role_name] = role
+
+        self.eic = self._create_user(
+            "analytics-eic",
+            Role.RoleName.EDITOR_IN_CHIEF,
+        )
+        self.manager = self._create_user(
+            "analytics-manager",
+            Role.RoleName.SECTION_MANAGER,
+        )
+        self.other_manager = self._create_user(
+            "other-analytics-manager",
+            Role.RoleName.SECTION_MANAGER,
+        )
+        self.author = self._create_user(
+            "analytics-author",
+            Role.RoleName.AUTHOR,
+        )
+
+        self.section = Section.objects.create(
+            name="Medical Analytics",
+            manager=self.manager,
+        )
+        self.other_section = Section.objects.create(
+            name="Engineering Analytics",
+            manager=self.other_manager,
+        )
+
+        self.url = reverse(
+            "section-topic-analytics"
+        )
+
+    def _create_user(self, username, role_name):
+        user = get_user_model().objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        user.roles.add(self.roles[role_name])
+        return user
+
+    def _create_submission(
+        self,
+        *,
+        title,
+        keywords,
+        topic_label="",
+        topic_keywords=None,
+        create_topic=True,
+    ):
+        submission = Submission.objects.create(
+            title=title,
+            abstract=(
+                "A sufficiently detailed scientific abstract."
+            ),
+            keywords=keywords,
+            language="en",
+            author=self.author,
+            section=self.section,
+        )
+
+        if create_topic:
+            SubmissionTopic.objects.create(
+                submission=submission,
+                label=topic_label or None,
+                keywords=topic_keywords or [],
+            )
+
+        return submission
+
+    def _section_result(self, response, section_id):
+        return next(
+            item
+            for item in response.data["sections"]
+            if item["section"]["id"] == str(section_id)
+        )
+
+    def test_manager_sees_only_managed_sections(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            [
+                section["section"]["id"]
+                for section in response.data["sections"]
+            ],
+            [str(self.section.id)],
+        )
+
+    def test_eic_sees_all_active_sections(self):
+        self.client.force_authenticate(self.eic)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertSetEqual(
+            {
+                section["section"]["id"]
+                for section in response.data["sections"]
+            },
+            {
+                str(self.section.id),
+                str(self.other_section.id),
+            },
+        )
+
+    def test_author_cannot_view_topic_analytics(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_topic_aggregates_are_counted_without_private_data(self):
+        self._create_submission(
+            title="Prevention A",
+            keywords=[
+                "Prevention",
+                "Public Health",
+            ],
+            topic_label="Drug Prevention",
+            topic_keywords=[
+                "prevention",
+                "medicine",
+            ],
+        )
+        self._create_submission(
+            title="Prevention B",
+            keywords=[
+                "prevention",
+                "Pediatrics",
+            ],
+            topic_label="Drug Prevention",
+            topic_keywords=[
+                "prevention",
+                "medicine",
+            ],
+        )
+        self._create_submission(
+            title="Clinical Study",
+            keywords=[
+                "Clinical Research",
+            ],
+            topic_label="Clinical Research",
+            topic_keywords=[
+                "clinical",
+                "research",
+            ],
+        )
+        self._create_submission(
+            title="Topic Outlier",
+            keywords=["Rare Disease"],
+            topic_label="",
+            topic_keywords=[],
+        )
+        self._create_submission(
+            title="Pending Analysis",
+            keywords=["Epidemiology"],
+            create_topic=False,
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        section = self._section_result(
+            response,
+            self.section.id,
+        )
+
+        self.assertEqual(
+            section["total_submissions"],
+            5,
+        )
+        self.assertEqual(
+            section["analyzed_submissions"],
+            4,
+        )
+        self.assertEqual(
+            section["clustered_submissions"],
+            3,
+        )
+        self.assertEqual(
+            section["outlier_submissions"],
+            1,
+        )
+        self.assertEqual(
+            section["pending_analysis"],
+            1,
+        )
+
+        drug_topic = next(
+            topic
+            for topic in section["topics"]
+            if topic["label"] == "Drug Prevention"
+        )
+
+        self.assertEqual(
+            drug_topic["submission_count"],
+            2,
+        )
+        self.assertEqual(
+            drug_topic["percentage_of_clustered"],
+            66.7,
+        )
+        self.assertIn(
+            "prevention",
+            [
+                keyword.casefold()
+                for keyword in drug_topic["keywords"]
+            ],
+        )
+
+        prevention_keyword = next(
+            keyword
+            for keyword in section[
+                "top_author_keywords"
+            ]
+            if keyword["keyword"].casefold()
+            == "prevention"
+        )
+
+        self.assertEqual(
+            prevention_keyword["submission_count"],
+            2,
+        )
+
+        serialized = str(response.data)
+
+        self.assertNotIn("Prevention A", serialized)
+        self.assertNotIn("analytics-author", serialized)
+        self.assertNotIn(
+            "A sufficiently detailed scientific abstract",
+            serialized,
+        )

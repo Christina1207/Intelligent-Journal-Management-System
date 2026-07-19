@@ -89,3 +89,75 @@ class AssignSectionManagerSerializer(serializers.Serializer):
             )
 
         return manager
+
+class TopicKeywordCountSerializer(serializers.Serializer):
+    keyword = serializers.CharField()
+    submission_count = serializers.IntegerField(
+        min_value=0,
+    )
+
+
+class TopicAggregateSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    submission_count = serializers.IntegerField(
+        min_value=0,
+    )
+    percentage_of_clustered = serializers.FloatField(
+        min_value=0,
+        max_value=100,
+    )
+    keywords = serializers.ListField(
+        child=serializers.CharField(),
+    )
+
+
+class TopicAnalyticsSectionSummarySerializer(
+    serializers.Serializer
+):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+
+
+class SectionTopicAnalyticsSerializer(
+    serializers.Serializer
+):
+    section = TopicAnalyticsSectionSummarySerializer()
+    analysis_status = serializers.ChoiceField(
+        choices=[
+            "not_started",
+            "partial",
+            "complete",
+        ]
+    )
+    last_clustered_at = serializers.DateTimeField(
+        allow_null=True,
+    )
+    total_submissions = serializers.IntegerField(
+        min_value=0,
+    )
+    analyzed_submissions = serializers.IntegerField(
+        min_value=0,
+    )
+    clustered_submissions = serializers.IntegerField(
+        min_value=0,
+    )
+    outlier_submissions = serializers.IntegerField(
+        min_value=0,
+    )
+    pending_analysis = serializers.IntegerField(
+        min_value=0,
+    )
+    topics = TopicAggregateSerializer(many=True)
+    top_author_keywords = (
+        TopicKeywordCountSerializer(many=True)
+    )
+
+
+class TopicAnalyticsDashboardSerializer(
+    serializers.Serializer
+):
+    generated_at = serializers.DateTimeField()
+    sections = SectionTopicAnalyticsSerializer(
+        many=True,
+    )

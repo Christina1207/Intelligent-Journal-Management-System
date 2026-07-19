@@ -14,4 +14,8 @@ router.register(
 urlpatterns = [
     path("sections/", SectionListView.as_view(), name="section-list"),
     path("", include(router.urls)),
+    path(
+        "intelligence/",
+        include("apps.journals.intelligence_urls"),
+    ),
 ]
