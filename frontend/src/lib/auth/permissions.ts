@@ -5,7 +5,8 @@ export type NavigationIcon =
   | "submissions"
   | "assignments"
   | "invitations"
-  | "publishing";
+  | "publishing"
+  | "intelligence";
 
 export interface NavigationItem {
   title: string;
@@ -39,6 +40,16 @@ export const DASHBOARD_NAVIGATION_ITEMS: readonly NavigationItem[] = [
     title: "Managed Submissions",
     href: "/manager/submissions",
     icon: "submissions",
+    roles: [
+      USER_ROLE.SECTION_MANAGER,
+      USER_ROLE.EDITOR_IN_CHIEF,
+      USER_ROLE.ADMIN,
+    ],
+  },
+  {
+    title: "Section Intelligence",
+    href: "/manager/intelligence",
+    icon: "intelligence",
     roles: [
       USER_ROLE.SECTION_MANAGER,
       USER_ROLE.EDITOR_IN_CHIEF,
