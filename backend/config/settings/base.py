@@ -112,7 +112,25 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 
     "COMPONENT_SPLIT_REQUEST": True,
-
+    "ENUM_NAME_OVERRIDES": {
+        "RoleNameEnum": "apps.accounts.models.Role.RoleName",
+        "ReviewerSyncStatusEnum": (
+            "apps.accounts.models.ReviewerProfile.SyncStatus"
+        ),
+        "IssueStatusEnum": "apps.journals.models.Issue.Status",
+        "PublishedArticleStatusEnum": (
+            "apps.publishing.models.PublishedArticle.Status"
+        ),
+        "SubmissionStatusEnum": (
+            "apps.submissions.models.Submission.Status"
+        ),
+        "ReviewerAssignmentStatusEnum": (
+            "apps.workflow.models.ReviewerAssignment.Status"
+        ),
+        "TriageStatusEnum": (
+            "apps.workflow.models.TriageAssessment.Status"
+        ),
+    },
     "SECURITY": [
         {
             "BearerAuth": [],

@@ -195,3 +195,15 @@ class CurrentUserProfileUpdateSerializer(serializers.ModelSerializer):
                 "ORCID must use the format 0000-0000-0000-0000."
             )
         return normalized_value
+class TokenPairSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+    access = serializers.CharField()
+
+
+class RegistrationResponseSerializer(serializers.Serializer):
+    user = UserProfileSerializer()
+    tokens = TokenPairSerializer()
+
+
+class DetailMessageSerializer(serializers.Serializer):
+    detail = serializers.CharField()

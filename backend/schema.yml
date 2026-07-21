@@ -1,0 +1,5168 @@
+openapi: 3.0.3
+info:
+  title: Journal Management API
+  version: 1.0.0
+  description: API documentation for the Journal Management System
+paths:
+  /api/v1/auth/login/:
+    post:
+      operationId: api_v1_auth_login_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/v1/auth/me/:
+    get:
+      operationId: api_v1_auth_me_retrieve
+      tags:
+      - Auth
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    patch:
+      operationId: api_v1_auth_me_partial_update
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCurrentUserProfileUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCurrentUserProfileUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCurrentUserProfileUpdateRequest'
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+  /api/v1/auth/register/:
+    post:
+      operationId: api_v1_auth_register_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationResponse'
+          description: ''
+  /api/v1/auth/reviewer/profile/:
+    patch:
+      operationId: api_v1_auth_reviewer_profile_partial_update
+      description: Update the authenticated reviewer's expertise profile.
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedReviewerProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedReviewerProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedReviewerProfileRequest'
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerProfile'
+          description: ''
+        '400':
+          description: Invalid reviewer profile data.
+        '401':
+          description: Authentication credentials were not provided.
+        '403':
+          description: Only reviewers can update a reviewer profile.
+  /api/v1/auth/reviewer/profile/sync-orcid/:
+    post:
+      operationId: api_v1_auth_reviewer_profile_sync_orcid_create
+      description: |-
+        Manually trigger ORCID sync and embedding regeneration
+        for the authenticated reviewer.
+        Returns 202 Accepted immediately — task runs async.
+        Poll GET /api/v1/auth/me/ to check sync_status and last_synced_at.
+      tags:
+      - Auth
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailMessage'
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: api_v1_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/editor/assignments/{assignment_id}/cancel/:
+    post:
+      operationId: api_v1_editor_assignments_cancel_create
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentCancelRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentCancelRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentCancelRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerAssignment'
+          description: ''
+  /api/v1/editor/assignments/{assignment_id}/expire/:
+    post:
+      operationId: api_v1_editor_assignments_expire_create
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerAssignment'
+          description: ''
+  /api/v1/editor/assignments/{assignment_id}/replace/:
+    post:
+      operationId: api_v1_editor_assignments_replace_create
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentReplaceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentReplaceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentReplaceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerAssignment'
+          description: ''
+  /api/v1/editor/queue/:
+    get:
+      operationId: api_v1_editor_queue_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubmissionListList'
+          description: ''
+  /api/v1/editor/submissions/{submission_id}/assign-reviewer/:
+    post:
+      operationId: api_v1_editor_submissions_assign_reviewer_create
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerAssignment'
+          description: ''
+  /api/v1/editor/submissions/{submission_id}/assign-reviewers/:
+    post:
+      operationId: api_v1_editor_submissions_assign_reviewers_create
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentsBulkCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentsBulkCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentsBulkCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerAssignmentsBulkResponse'
+          description: ''
+  /api/v1/editor/submissions/{submission_id}/decision/:
+    post:
+      operationId: api_v1_editor_submissions_decision_create
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorDecisionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EditorDecisionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EditorDecisionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionVersionDecision'
+          description: ''
+  /api/v1/editor/submissions/{submission_id}/reviewer-candidates/:
+    get:
+      operationId: api_v1_editor_submissions_reviewer_candidates_retrieve
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+      - in: query
+        name: search
+        schema:
+          type: string
+          default: ''
+          maxLength: 100
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerCandidateSearchResponse'
+          description: ''
+  /api/v1/editor/submissions/{submission_id}/reviewer-recommendations/:
+    get:
+      operationId: api_v1_editor_submissions_reviewer_recommendations_retrieve
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum number of recommendations. The server caps this at REVIEWER_RECOMMENDATION_COUNT.
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerRecommendationsResponse'
+          description: ''
+  /api/v1/editor/submissions/{submission_id}/reviews/:
+    get:
+      operationId: api_v1_editor_submissions_reviews_retrieve
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Editorial Reviews
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorReviewWorkspace'
+          description: ''
+  /api/v1/manager/monitoring/:
+    get:
+      operationId: api_v1_manager_monitoring_list
+      description: List active manuscripts in sections managed by the authenticated
+        Section Manager, including reviewer progress and attention flags.
+      summary: Monitor active manuscripts
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ASSIGNED
+          - REVIEWED
+          - REVISED
+          - SUSPENDED
+          - UNDER_REVIEW
+          - UNDER_REVISION
+        description: Optionally filter manuscripts by workflow status.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedManagerMonitoringSubmissionList'
+          description: ''
+  /api/v1/manager/queue/:
+    get:
+      operationId: api_v1_manager_queue_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubmissionListList'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/:
+    get:
+      operationId: api_v1_manager_submissions_retrieve
+      description: Return the manuscript metadata required by a Section Manager during
+        initial triage. The private storage object path is never exposed.
+      summary: Get a managed manuscript for initial triage
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagerSubmissionDetail'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/assign-editor/:
+    post:
+      operationId: api_v1_manager_submissions_assign_editor_create
+      description: Assign an eligible Section Editor to a submitted manuscript belonging
+        to a section managed by the authenticated user.
+      summary: Assign a Section Editor
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignEditorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignEditorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignEditorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionAssignment'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/desk-reject/:
+    post:
+      operationId: api_v1_manager_submissions_desk_reject_create
+      summary: Desk reject a submitted manuscript
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeskRejectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeskRejectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeskRejectRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageAssessmentDetail'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/eligible-editors/:
+    get:
+      operationId: api_v1_manager_submissions_eligible_editors_list
+      description: List active Section Editors eligible for this manuscript's section,
+        ordered by active assignment workload.
+      summary: List eligible Section Editors
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EligibleSectionEditor'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/manuscript/:
+    get:
+      operationId: api_v1_manager_submissions_manuscript_retrieve
+      description: Generate a short-lived presigned URL for the latest manuscript
+        version. The MinIO object path is not returned.
+      summary: Get a temporary manuscript download URL
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagerManuscriptDownload'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/reassign-editor/:
+    post:
+      operationId: api_v1_manager_submissions_reassign_editor_create
+      description: Replace the current Section Editor while preserving the previous
+        assignment as history.
+      summary: Reassign a Section Editor
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignEditorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReassignEditorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReassignEditorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionAssignment'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/triage/:
+    get:
+      operationId: api_v1_manager_submissions_triage_retrieve
+      summary: Get initial triage assessment
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageAssessmentDetail'
+          description: ''
+    patch:
+      operationId: api_v1_manager_submissions_triage_partial_update
+      summary: Save initial triage draft
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTriageUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTriageUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTriageUpdateRequest'
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageAssessmentDetail'
+          description: ''
+  /api/v1/manager/submissions/{submission_id}/triage/complete/:
+    post:
+      operationId: api_v1_manager_submissions_triage_complete_create
+      summary: Complete triage for editor assignment
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageAssessmentDetail'
+          description: ''
+  /api/v1/public/articles/:
+    get:
+      operationId: api_v1_public_articles_list
+      description: List publicly published articles. Draft and retracted articles
+        are never included.
+      parameters:
+      - in: query
+        name: issue
+        schema:
+          type: string
+        description: Filter published articles by issue slug.
+      - in: query
+        name: language
+        schema:
+          type: string
+        description: Filter published articles by language code.
+      - in: query
+        name: ordering
+        schema:
+          type: string
+          enum:
+          - -download_count
+          - -downloads
+          - -published_at
+          - -title
+          - -view_count
+          - -views
+          - download_count
+          - downloads
+          - published_at
+          - title
+          - view_count
+          - views
+        description: Order published articles by a supported public field.
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: 'Number of results per page. Maximum: 50.'
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search published article titles, abstracts, DOI, and author names.
+      - in: query
+        name: section
+        schema:
+          type: string
+        description: Filter published articles by section slug or section UUID.
+      - in: query
+        name: year
+        schema:
+          type: integer
+        description: Filter published articles by publication year.
+      tags:
+      - Public Articles
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublishedArticlePublicListList'
+          description: ''
+  /api/v1/public/articles/{slug}/:
+    get:
+      operationId: api_v1_public_articles_retrieve
+      description: Retrieve one publicly published article by slug and increment its
+        view count.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Public Articles
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArticlePublicDetail'
+          description: ''
+        '404':
+          description: Published article was not found.
+  /api/v1/public/articles/{slug}/download/:
+    get:
+      operationId: api_v1_public_articles_download_retrieve
+      description: Generate a temporary public download URL for a published article
+        PDF. Draft and retracted articles return 404.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Public Articles
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArticleDownload'
+              examples:
+                MinIOPresignedURL:
+                  value:
+                    download_url: https://minio.example.com/ijms/submissions/article/v1/manuscript.pdf?X-Amz-Signature=...
+                    expires_in: 3600
+                  summary: MinIO presigned URL
+          description: Temporary download URL for the published article PDF.
+        '404':
+          description: Published article or downloadable PDF was not found.
+        '503':
+          description: The article download URL could not be generated.
+  /api/v1/public/articles/{slug}/export/:
+    get:
+      operationId: api_v1_public_articles_export_retrieve
+      description: Export citation-manager-compatible metadata for a published article.
+        Draft and retracted articles return 404.
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - bib
+          - bibtex
+          - dc
+          - dublin-core
+          - dublin_core
+          - ris
+          - xml
+        description: 'Metadata export format. Supported aliases: bibtex, bib, ris,
+          dc, dublin-core, dublin_core, xml.'
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Public Articles
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Published article metadata file. Content type depends on the
+            requested format.
+        '400':
+          description: Missing or unsupported export format.
+        '404':
+          description: Published article was not found.
+  /api/v1/public/issues/:
+    get:
+      operationId: api_v1_public_issues_list
+      description: List published journal issues for the public archive.
+      tags:
+      - Public Issues
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicIssue'
+          description: ''
+  /api/v1/public/issues/{slug}/:
+    get:
+      operationId: api_v1_public_issues_retrieve
+      description: Retrieve one published issue by slug.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Public Issues
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicIssue'
+          description: ''
+        '404':
+          description: Issue was not found.
+  /api/v1/public/issues/current/:
+    get:
+      operationId: api_v1_public_issues_current_retrieve
+      description: Retrieve the current public issue.
+      tags:
+      - Public Issues
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicIssue'
+          description: ''
+        '404':
+          description: No current issue is available.
+  /api/v1/public/journal/:
+    get:
+      operationId: api_v1_public_journal_retrieve
+      description: Retrieve public journal metadata for the reader portal.
+      tags:
+      - Public Journal
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicJournal'
+          description: ''
+  /api/v1/public/sections/:
+    get:
+      operationId: api_v1_public_sections_list
+      description: List active journal sections visible to public readers.
+      tags:
+      - Public Sections
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicSection'
+          description: ''
+  /api/v1/public/sections/{section_id}/articles/:
+    get:
+      operationId: api_v1_public_sections_articles_list
+      description: List publicly published articles for a specific section.
+      parameters:
+      - in: query
+        name: issue
+        schema:
+          type: string
+        description: Filter published articles by issue slug.
+      - in: query
+        name: language
+        schema:
+          type: string
+        description: Filter published articles by language code.
+      - in: query
+        name: ordering
+        schema:
+          type: string
+          enum:
+          - -download_count
+          - -downloads
+          - -published_at
+          - -title
+          - -view_count
+          - -views
+          - download_count
+          - downloads
+          - published_at
+          - title
+          - view_count
+          - views
+        description: Order published articles by a supported public field.
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: 'Number of results per page. Maximum: 50.'
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search published article titles and abstracts.
+      - in: query
+        name: section
+        schema:
+          type: string
+        description: Filter published articles by section slug or section UUID.
+      - in: path
+        name: section_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: year
+        schema:
+          type: integer
+        description: Filter published articles by publication year.
+      tags:
+      - Public Articles
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublishedArticlePublicListList'
+          description: ''
+  /api/v1/public/sections/{slug}/:
+    get:
+      operationId: api_v1_public_sections_retrieve
+      description: Retrieve one public section by slug.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Public Sections
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSection'
+          description: ''
+        '404':
+          description: Section was not found.
+  /api/v1/publishing/articles/:
+    get:
+      operationId: api_v1_publishing_articles_list
+      description: List publication drafts and published article records for publishing
+        staff.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Publishing
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublishedArticleManagementReadList'
+          description: ''
+  /api/v1/publishing/articles/{article_id}/:
+    get:
+      operationId: api_v1_publishing_articles_retrieve
+      description: Retrieve one publication record for publishing staff.
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Publishing
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArticleManagementRead'
+          description: ''
+    patch:
+      operationId: api_v1_publishing_articles_partial_update
+      description: Update editable publication metadata. Article status is workflow-managed
+        and cannot be changed through this endpoint.
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Publishing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublishedArticleWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPublishedArticleWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPublishedArticleWriteRequest'
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArticleManagementRead'
+          description: ''
+  /api/v1/publishing/articles/{article_id}/publish/:
+    post:
+      operationId: api_v1_publishing_articles_publish_create
+      description: Publish a draft article and set its publication timestamp.
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Publishing
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArticleManagementRead'
+          description: ''
+        '400':
+          description: The article is not publishable, or no valid published issue
+            is available.
+        '401':
+          description: Authentication credentials were not provided.
+        '404':
+          description: Publication record was not found.
+  /api/v1/publishing/submissions/{submission_id}/create-draft/:
+    post:
+      operationId: api_v1_publishing_submissions_create_draft_create
+      description: Create a publication draft from an accepted submission.
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Publishing
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArticleManagementRead'
+          description: ''
+        '400':
+          description: The submission is not accepted, already has a publication record,
+            or has no publishable accepted version/file.
+        '401':
+          description: Authentication credentials were not provided.
+        '404':
+          description: Submission was not found.
+  /api/v1/reviewer/assignments/:
+    get:
+      operationId: api_v1_reviewer_assignments_list
+      tags:
+      - Reviewer
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewerAssignment'
+          description: ''
+  /api/v1/reviewer/assignments/{assignment_id}/manuscript/:
+    get:
+      operationId: api_v1_reviewer_assignments_manuscript_retrieve
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Reviewer
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerManuscriptDownload'
+          description: ''
+  /api/v1/reviewer/assignments/{assignment_id}/respond/:
+    post:
+      operationId: api_v1_reviewer_assignments_respond_create
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Reviewer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentResponseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentResponseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewerAssignmentResponseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewerAssignment'
+          description: ''
+  /api/v1/reviewer/assignments/{assignment_id}/submit-review/:
+    post:
+      operationId: api_v1_reviewer_assignments_submit_review_create
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Reviewer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmitRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmitRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmitRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+          description: ''
+  /api/v1/sections/intelligence/editorial-dashboard/:
+    get:
+      operationId: api_v1_sections_intelligence_editorial_dashboard_retrieve
+      description: Return operational and publishing analytics for the Editor-in-Chief
+        dashboard, including an explainable priority queue.
+      summary: Get journal-wide editorial analytics
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorialAnalyticsDashboard'
+          description: ''
+  /api/v1/sections/intelligence/topics/sections/:
+    get:
+      operationId: api_v1_sections_intelligence_topics_sections_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicAnalyticsDashboard'
+          description: ''
+  /api/v1/sections/manage/sections/:
+    get:
+      operationId: api_v1_sections_manage_sections_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSectionManagementList'
+          description: ''
+    post:
+      operationId: api_v1_sections_manage_sections_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+  /api/v1/sections/manage/sections/{id}/:
+    get:
+      operationId: api_v1_sections_manage_sections_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+    put:
+      operationId: api_v1_sections_manage_sections_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+    patch:
+      operationId: api_v1_sections_manage_sections_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSectionManagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSectionManagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSectionManagementRequest'
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+    delete:
+      operationId: api_v1_sections_manage_sections_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/sections/manage/sections/{id}/activate/:
+    post:
+      operationId: api_v1_sections_manage_sections_activate_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+  /api/v1/sections/manage/sections/{id}/deactivate/:
+    post:
+      operationId: api_v1_sections_manage_sections_deactivate_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SectionManagementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+  /api/v1/sections/manage/sections/{id}/manager/:
+    post:
+      operationId: api_v1_sections_manage_sections_manager_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this section.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignSectionManagerRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignSectionManagerRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignSectionManagerRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionManagement'
+          description: ''
+  /api/v1/sections/sections/:
+    get:
+      operationId: api_v1_sections_sections_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSectionList'
+          description: ''
+  /api/v1/submissions/:
+    post:
+      operationId: api_v1_submissions_create
+      tags:
+      - api
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubmissionCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionList'
+          description: ''
+  /api/v1/submissions/{submission_id}/:
+    get:
+      operationId: api_v1_submissions_retrieve
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionDetail'
+          description: ''
+  /api/v1/submissions/{submission_id}/versions/:
+    get:
+      operationId: api_v1_submissions_versions_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubmissionVersionList'
+          description: ''
+  /api/v1/submissions/{submission_id}/versions/upload/:
+    post:
+      operationId: api_v1_submissions_versions_upload_create
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RevisionUploadRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionVersion'
+          description: ''
+  /api/v1/submissions/author-dashboard/:
+    get:
+      operationId: api_v1_submissions_author_dashboard_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorDashboard'
+          description: ''
+  /api/v1/submissions/my/:
+    get:
+      operationId: api_v1_submissions_my_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubmissionListList'
+          description: ''
+components:
+  schemas:
+    AnalysisStatusEnum:
+      enum:
+      - not_started
+      - partial
+      - complete
+      type: string
+      description: |-
+        * `not_started` - not_started
+        * `partial` - partial
+        * `complete` - complete
+    AnalyticsOverdueWork:
+      type: object
+      properties:
+        overdue_invitations:
+          type: integer
+        overdue_reviews:
+          type: integer
+        total:
+          type: integer
+      required:
+      - overdue_invitations
+      - overdue_reviews
+      - total
+    AnalyticsSectionCount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        submission_count:
+          type: integer
+      required:
+      - id
+      - name
+      - submission_count
+    AnalyticsStatusCount:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+      required:
+      - code
+      - count
+      - label
+    AnalyticsTimePoint:
+      type: object
+      properties:
+        month:
+          type: string
+          format: date
+        count:
+          type: integer
+      required:
+      - count
+      - month
+    AnalyticsTopicCount:
+      type: object
+      properties:
+        label:
+          type: string
+        submission_count:
+          type: integer
+      required:
+      - label
+      - submission_count
+    AnalyticsTopicDistribution:
+      type: object
+      properties:
+        topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsTopicCount'
+        unclassified_count:
+          type: integer
+      required:
+      - topics
+      - unclassified_count
+    AssignEditorRequest:
+      type: object
+      properties:
+        editor_id:
+          type: string
+          format: uuid
+          writeOnly: true
+      required:
+      - editor_id
+    AssignSectionManagerRequest:
+      type: object
+      properties:
+        manager_id:
+          type: string
+          format: uuid
+          writeOnly: true
+      required:
+      - manager_id
+    AssignmentReasonEnum:
+      enum:
+      - INITIAL
+      - WORKLOAD
+      - CONFLICT
+      - INACTIVITY
+      - UNAVAILABLE
+      - ADMINISTRATIVE
+      type: string
+      description: |-
+        * `INITIAL` - Initial assignment
+        * `WORKLOAD` - Workload
+        * `CONFLICT` - Conflict of interest
+        * `INACTIVITY` - Editor inactivity
+        * `UNAVAILABLE` - Editor unavailable
+        * `ADMINISTRATIVE` - Administrative correction
+    AuthorDashboard:
+      type: object
+      properties:
+        summary:
+          allOf:
+          - $ref: '#/components/schemas/AuthorDashboardSummary'
+          readOnly: true
+        action_required:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorDashboardAction'
+          readOnly: true
+        recent_submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorDashboardSubmission'
+          readOnly: true
+      required:
+      - action_required
+      - recent_submissions
+      - summary
+    AuthorDashboardAction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionStatusEnum'
+          readOnly: true
+        section:
+          type: string
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        action:
+          type: string
+          readOnly: true
+      required:
+      - action
+      - id
+      - section
+      - status
+      - submitted_at
+      - title
+    AuthorDashboardSubmission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionStatusEnum'
+          readOnly: true
+        section:
+          type: string
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - section
+      - status
+      - submitted_at
+      - title
+    AuthorDashboardSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+          readOnly: true
+        active:
+          type: integer
+          readOnly: true
+        needs_revision:
+          type: integer
+          readOnly: true
+        accepted:
+          type: integer
+          readOnly: true
+        rejected:
+          type: integer
+          readOnly: true
+      required:
+      - accepted
+      - active
+      - needs_revision
+      - rejected
+      - total
+    AuthorReviewFeedback:
+      type: object
+      properties:
+        reviewer_label:
+          type: string
+        comments_for_author:
+          type: string
+      required:
+      - comments_for_author
+      - reviewer_label
+    DecisionEnum:
+      enum:
+      - PENDING
+      - ACCEPTED
+      - REJECTED
+      - MAJOR_REVISION
+      - MINOR_REVISION
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `ACCEPTED` - Accepted
+        * `REJECTED` - Rejected
+        * `MAJOR_REVISION` - Major Revision
+        * `MINOR_REVISION` - Minor Revision
+    DeskRejectRequest:
+      type: object
+      properties:
+        reason_code:
+          $ref: '#/components/schemas/ReasonCodeEnum'
+        author_message:
+          type: string
+          minLength: 20
+          maxLength: 5000
+      required:
+      - author_message
+      - reason_code
+    DetailMessage:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DurationDefinitions:
+      type: object
+      properties:
+        decision_duration:
+          type: string
+        review_duration:
+          type: string
+      required:
+      - decision_duration
+      - review_duration
+    EditorDecisionRequest:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        decision_letter:
+          type: string
+          default: ''
+      required:
+      - decision
+    EditorReviewProgress:
+      type: object
+      properties:
+        total_invitations:
+          type: integer
+        pending:
+          type: integer
+        accepted:
+          type: integer
+        declined:
+          type: integer
+        expired:
+          type: integer
+        cancelled:
+          type: integer
+        submitted:
+          type: integer
+        overdue:
+          type: integer
+      required:
+      - accepted
+      - cancelled
+      - declined
+      - expired
+      - overdue
+      - pending
+      - submitted
+      - total_invitations
+    EditorReviewVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+        decision:
+          allOf:
+          - $ref: '#/components/schemas/DecisionEnum'
+          readOnly: true
+        decision_letter:
+          type: string
+          readOnly: true
+        response_to_reviewers:
+          type: string
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        decided_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - decided_at
+      - decision
+      - decision_letter
+      - id
+      - response_to_reviewers
+      - submitted_at
+      - version_number
+    EditorReviewWorkspace:
+      type: object
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        submission_status:
+          type: string
+        current_version:
+          allOf:
+          - $ref: '#/components/schemas/EditorReviewVersion'
+          nullable: true
+        required_reviews:
+          type: integer
+        progress:
+          $ref: '#/components/schemas/EditorReviewProgress'
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewerAssignment'
+        reviews_available:
+          type: boolean
+        reviews_unavailable_reason:
+          type: string
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        can_make_decision:
+          type: boolean
+      required:
+      - assignments
+      - can_make_decision
+      - current_version
+      - progress
+      - required_reviews
+      - reviews
+      - reviews_available
+      - reviews_unavailable_reason
+      - submission_id
+      - submission_status
+    EditorialAnalyticsDashboard:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        period_months:
+          type: integer
+        summary:
+          $ref: '#/components/schemas/EditorialAnalyticsSummary'
+        status_distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsStatusCount'
+        submissions_over_time:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsTimePoint'
+        publications_over_time:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsTimePoint'
+        section_distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSectionCount'
+        topic_distribution:
+          $ref: '#/components/schemas/AnalyticsTopicDistribution'
+        overdue_work:
+          $ref: '#/components/schemas/AnalyticsOverdueWork'
+        priority_queue:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriorityQueueItem'
+        duration_definitions:
+          $ref: '#/components/schemas/DurationDefinitions'
+      required:
+      - duration_definitions
+      - generated_at
+      - overdue_work
+      - period_months
+      - priority_queue
+      - publications_over_time
+      - section_distribution
+      - status_distribution
+      - submissions_over_time
+      - summary
+      - topic_distribution
+    EditorialAnalyticsSummary:
+      type: object
+      properties:
+        total_submissions:
+          type: integer
+        total_publications:
+          type: integer
+        accepted_count:
+          type: integer
+        rejected_count:
+          type: integer
+        acceptance_rate:
+          type: number
+          format: double
+        rejection_rate:
+          type: number
+          format: double
+        median_decision_duration_days:
+          type: number
+          format: double
+          nullable: true
+        median_review_duration_days:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - acceptance_rate
+      - accepted_count
+      - median_decision_duration_days
+      - median_review_duration_days
+      - rejected_count
+      - rejection_rate
+      - total_publications
+      - total_submissions
+    EligibleSectionEditor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        affiliation:
+          type: string
+          readOnly: true
+        active_assignment_count:
+          type: integer
+          readOnly: true
+        is_current_editor:
+          type: boolean
+          readOnly: true
+      required:
+      - active_assignment_count
+      - affiliation
+      - email
+      - full_name
+      - id
+      - is_current_editor
+    LanguageEnum:
+      enum:
+      - en
+      - ar
+      - fr
+      type: string
+      description: |-
+        * `en` - English
+        * `ar` - Arabic
+        * `fr` - French
+    ManagerManuscriptDownload:
+      type: object
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+        expires_in_seconds:
+          type: integer
+          readOnly: true
+        manuscript_url:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - expires_in_seconds
+      - manuscript_url
+      - submission_id
+      - version_id
+      - version_number
+    ManagerMonitoringEditor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        affiliation:
+          type: string
+          readOnly: true
+      required:
+      - affiliation
+      - email
+      - full_name
+      - id
+    ManagerMonitoringSubmission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionStatusEnum'
+          readOnly: true
+        section:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionDetailSection'
+          readOnly: true
+        assigned_editor:
+          allOf:
+          - $ref: '#/components/schemas/ManagerMonitoringEditor'
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        latest_version_number:
+          type: integer
+          nullable: true
+          readOnly: true
+        revision_round_count:
+          type: integer
+          readOnly: true
+        review_progress:
+          allOf:
+          - $ref: '#/components/schemas/ManagerReviewProgress'
+          readOnly: true
+        attention_flags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - assigned_editor
+      - attention_flags
+      - id
+      - latest_version_number
+      - review_progress
+      - revision_round_count
+      - section
+      - status
+      - submitted_at
+      - title
+    ManagerReviewProgress:
+      type: object
+      properties:
+        invitations_total:
+          type: integer
+        invitations_pending:
+          type: integer
+        invitations_accepted:
+          type: integer
+        invitations_declined:
+          type: integer
+        invitations_expired:
+          type: integer
+        reviews_submitted:
+          type: integer
+        overdue_invitations:
+          type: integer
+        overdue_reviews:
+          type: integer
+        invitations_cancelled:
+          type: integer
+      required:
+      - invitations_accepted
+      - invitations_cancelled
+      - invitations_declined
+      - invitations_expired
+      - invitations_pending
+      - invitations_total
+      - overdue_invitations
+      - overdue_reviews
+      - reviews_submitted
+    ManagerSubmissionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        abstract:
+          type: string
+          readOnly: true
+        language:
+          allOf:
+          - $ref: '#/components/schemas/LanguageEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionStatusEnum'
+          readOnly: true
+        section:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionDetailSection'
+          readOnly: true
+        cover_letter:
+          type: string
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        latest_version:
+          allOf:
+          - $ref: '#/components/schemas/ManagerSubmissionVersion'
+          nullable: true
+          readOnly: true
+      required:
+      - abstract
+      - cover_letter
+      - id
+      - language
+      - latest_version
+      - section
+      - status
+      - submitted_at
+      - title
+    ManagerSubmissionVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        manuscript_available:
+          type: boolean
+          readOnly: true
+        blinded_manuscript_available:
+          type: boolean
+          readOnly: true
+      required:
+      - blinded_manuscript_available
+      - id
+      - manuscript_available
+      - submitted_at
+      - version_number
+    PaginatedManagerMonitoringSubmissionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerMonitoringSubmission'
+    PaginatedPublishedArticleManagementReadList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishedArticleManagementRead'
+    PaginatedPublishedArticlePublicListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishedArticlePublicList'
+    PaginatedSectionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Section'
+    PaginatedSectionManagementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionManagement'
+    PaginatedSubmissionListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionList'
+    PaginatedSubmissionVersionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionVersion'
+    PatchedCurrentUserProfileUpdateRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        orcid:
+          type: string
+          maxLength: 19
+        affiliation:
+          type: string
+          maxLength: 255
+        country:
+          type: string
+          maxLength: 100
+    PatchedPublishedArticleWriteRequest:
+      type: object
+      properties:
+        publication_issue:
+          type: string
+          format: uuid
+          nullable: true
+          description: Structured journal issue this article belongs to.
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        abstract:
+          type: string
+        language:
+          type: string
+          maxLength: 10
+        keywords: {}
+        doi:
+          type: string
+          nullable: true
+          maxLength: 255
+        license_name:
+          type: string
+          maxLength: 255
+        license_url:
+          type: string
+          format: uri
+          maxLength: 500
+        volume:
+          type: string
+          maxLength: 50
+        issue:
+          type: string
+          maxLength: 100
+        first_page:
+          type: string
+          maxLength: 50
+        last_page:
+          type: string
+          maxLength: 50
+    PatchedReviewerProfileRequest:
+      type: object
+      description: |-
+        Exposes reviewer expertise data.
+
+        Sections are assigned by journal staff and are read-only to the
+        reviewer. Reviewers must not be able to approve themselves for a
+        journal section.
+      properties:
+        keywords:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+        biography:
+          type: string
+    PatchedSectionManagementRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        issn:
+          type: string
+          pattern: ^\d{4}-\d{4}$
+          maxLength: 9
+        is_active:
+          type: boolean
+          description: Inactive sections do not accept new submissions.
+    PatchedTriageUpdateRequest:
+      type: object
+      properties:
+        internal_notes:
+          type: string
+          maxLength: 10000
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriageCheckInputRequest'
+    PlagiarismPlaceholder:
+      type: object
+      properties:
+        status:
+          type: string
+        report:
+          nullable: true
+      required:
+      - report
+      - status
+    PriorityEditor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+      required:
+      - full_name
+      - id
+    PriorityFactor:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        score:
+          type: number
+          format: double
+        weight:
+          type: integer
+        contribution:
+          type: number
+          format: double
+        details: {}
+        explanation:
+          type: string
+      required:
+      - contribution
+      - details
+      - explanation
+      - key
+      - label
+      - score
+      - weight
+    PriorityQueueItem:
+      type: object
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+        section:
+          $ref: '#/components/schemas/PrioritySection'
+        assigned_editor:
+          allOf:
+          - $ref: '#/components/schemas/PriorityEditor'
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+        latest_version_number:
+          type: integer
+          nullable: true
+        method:
+          type: string
+        score:
+          type: number
+          format: double
+        factors:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriorityFactor'
+      required:
+      - assigned_editor
+      - factors
+      - latest_version_number
+      - method
+      - score
+      - section
+      - status
+      - submission_id
+      - submitted_at
+      - title
+    PrioritySection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
+    PublicIssue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          description: Stable public URL slug for this issue.
+          pattern: ^[-a-zA-Z0-9_]+$
+        title:
+          type: string
+          readOnly: true
+        volume:
+          type: string
+          readOnly: true
+        issue:
+          type: string
+          readOnly: true
+        year:
+          type: string
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        description:
+          type: string
+          readOnly: true
+        is_current:
+          type: boolean
+          readOnly: true
+          description: Marks the currently featured public issue.
+      required:
+      - description
+      - id
+      - is_current
+      - issue
+      - published_at
+      - slug
+      - title
+      - volume
+      - year
+    PublicJournal:
+      type: object
+      properties:
+        name:
+          type: string
+          readOnly: true
+        short_name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        issn:
+          type: string
+          readOnly: true
+        publisher:
+          type: string
+          readOnly: true
+        access_policy:
+          type: string
+          readOnly: true
+        peer_review_policy:
+          type: string
+          readOnly: true
+        publication_frequency:
+          type: string
+          readOnly: true
+        license:
+          type: string
+          readOnly: true
+      required:
+      - access_policy
+      - description
+      - issn
+      - license
+      - name
+      - peer_review_policy
+      - publication_frequency
+      - publisher
+      - short_name
+    PublicSection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          description: Stable public URL slug for this section.
+          pattern: ^[-a-zA-Z0-9_]+$
+        description:
+          type: string
+          readOnly: true
+        article_count:
+          type: integer
+          readOnly: true
+        topics:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - article_count
+      - description
+      - id
+      - name
+      - slug
+      - topics
+    PublishedArticleAuthorManagement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        orcid:
+          type: string
+          readOnly: true
+        affiliation:
+          type: string
+          readOnly: true
+        country:
+          type: string
+          readOnly: true
+        order:
+          type: integer
+          readOnly: true
+        is_corresponding:
+          type: boolean
+          readOnly: true
+      required:
+      - affiliation
+      - country
+      - email
+      - full_name
+      - id
+      - is_corresponding
+      - orcid
+      - order
+    PublishedArticleAuthorPublic:
+      type: object
+      properties:
+        full_name:
+          type: string
+          readOnly: true
+        orcid:
+          type: string
+          readOnly: true
+        affiliation:
+          type: string
+          readOnly: true
+        country:
+          type: string
+          readOnly: true
+        order:
+          type: integer
+          readOnly: true
+        is_corresponding:
+          type: boolean
+          readOnly: true
+      required:
+      - affiliation
+      - country
+      - full_name
+      - is_corresponding
+      - orcid
+      - order
+    PublishedArticleDownload:
+      type: object
+      properties:
+        download_url:
+          type: string
+          format: uri
+          readOnly: true
+        expires_in:
+          type: integer
+          readOnly: true
+      required:
+      - download_url
+      - expires_in
+    PublishedArticleManagementRead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        submission_id:
+          type: string
+          format: uuid
+          readOnly: true
+        source_version:
+          type: string
+          format: uuid
+          readOnly: true
+        publication_issue:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        abstract:
+          type: string
+          readOnly: true
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishedArticleAuthorManagement'
+          readOnly: true
+        author_details:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishedArticleAuthorPublic'
+          readOnly: true
+        language:
+          type: string
+          readOnly: true
+        keywords:
+          readOnly: true
+        doi:
+          type: string
+          readOnly: true
+          nullable: true
+        license:
+          type: string
+          readOnly: true
+        license_name:
+          type: string
+          readOnly: true
+        license_url:
+          type: string
+          format: uri
+          readOnly: true
+        volume:
+          type: string
+          nullable: true
+          readOnly: true
+        issue:
+          type: string
+          nullable: true
+          readOnly: true
+        issue_slug:
+          type: string
+          nullable: true
+          readOnly: true
+        first_page:
+          type: string
+          readOnly: true
+        last_page:
+          type: string
+          readOnly: true
+        pages:
+          type: string
+          nullable: true
+          readOnly: true
+        section:
+          type: string
+          readOnly: true
+        section_slug:
+          type: string
+          readOnly: true
+        section_id:
+          type: string
+          format: uuid
+          readOnly: true
+        section_name:
+          type: string
+          readOnly: true
+        pdf_file:
+          type: string
+          readOnly: true
+          description: Private MinIO object key for the published PDF.
+        pdf_url:
+          type: string
+          readOnly: true
+        download_url:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PublishedArticleStatusEnum'
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        views:
+          type: integer
+          readOnly: true
+        downloads:
+          type: integer
+          readOnly: true
+        view_count:
+          type: integer
+          readOnly: true
+        download_count:
+          type: integer
+          readOnly: true
+        received_at:
+          type: string
+          nullable: true
+          readOnly: true
+        accepted_at:
+          type: string
+          nullable: true
+          readOnly: true
+        affiliations:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        metadata_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - abstract
+      - accepted_at
+      - affiliations
+      - author_details
+      - authors
+      - created_at
+      - doi
+      - download_count
+      - download_url
+      - downloads
+      - first_page
+      - id
+      - issue
+      - issue_slug
+      - keywords
+      - language
+      - last_page
+      - license
+      - license_name
+      - license_url
+      - metadata_updated_at
+      - pages
+      - pdf_file
+      - pdf_url
+      - publication_issue
+      - published_at
+      - received_at
+      - section
+      - section_id
+      - section_name
+      - section_slug
+      - slug
+      - source_version
+      - status
+      - submission_id
+      - title
+      - updated_at
+      - view_count
+      - views
+      - volume
+    PublishedArticlePublicDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        authors:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        section:
+          type: string
+          readOnly: true
+        section_slug:
+          type: string
+          readOnly: true
+        section_id:
+          type: string
+          format: uuid
+          readOnly: true
+        section_name:
+          type: string
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        abstract:
+          type: string
+          readOnly: true
+        keywords:
+          readOnly: true
+        doi:
+          type: string
+          readOnly: true
+          nullable: true
+        language:
+          type: string
+          readOnly: true
+        pdf_url:
+          type: string
+          readOnly: true
+        download_url:
+          type: string
+          readOnly: true
+        views:
+          type: integer
+          readOnly: true
+        downloads:
+          type: integer
+          readOnly: true
+        view_count:
+          type: integer
+          readOnly: true
+        download_count:
+          type: integer
+          readOnly: true
+        license:
+          type: string
+          readOnly: true
+        license_name:
+          type: string
+          readOnly: true
+        license_url:
+          type: string
+          format: uri
+          readOnly: true
+        volume:
+          type: string
+          nullable: true
+          readOnly: true
+        issue:
+          type: string
+          nullable: true
+          readOnly: true
+        issue_slug:
+          type: string
+          nullable: true
+          readOnly: true
+        pages:
+          type: string
+          nullable: true
+          readOnly: true
+        received_at:
+          type: string
+          nullable: true
+          readOnly: true
+        accepted_at:
+          type: string
+          nullable: true
+          readOnly: true
+        affiliations:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        author_details:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishedArticleAuthorPublic'
+          readOnly: true
+        first_page:
+          type: string
+          readOnly: true
+        last_page:
+          type: string
+          readOnly: true
+      required:
+      - abstract
+      - accepted_at
+      - affiliations
+      - author_details
+      - authors
+      - doi
+      - download_count
+      - download_url
+      - downloads
+      - first_page
+      - id
+      - issue
+      - issue_slug
+      - keywords
+      - language
+      - last_page
+      - license
+      - license_name
+      - license_url
+      - pages
+      - pdf_url
+      - published_at
+      - received_at
+      - section
+      - section_id
+      - section_name
+      - section_slug
+      - slug
+      - title
+      - view_count
+      - views
+      - volume
+    PublishedArticlePublicList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        authors:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        section:
+          type: string
+          readOnly: true
+        section_slug:
+          type: string
+          readOnly: true
+        section_id:
+          type: string
+          format: uuid
+          readOnly: true
+        section_name:
+          type: string
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        abstract:
+          type: string
+          readOnly: true
+        keywords:
+          readOnly: true
+        doi:
+          type: string
+          readOnly: true
+          nullable: true
+        language:
+          type: string
+          readOnly: true
+        pdf_url:
+          type: string
+          readOnly: true
+        download_url:
+          type: string
+          readOnly: true
+        views:
+          type: integer
+          readOnly: true
+        downloads:
+          type: integer
+          readOnly: true
+        view_count:
+          type: integer
+          readOnly: true
+        download_count:
+          type: integer
+          readOnly: true
+        license:
+          type: string
+          readOnly: true
+        license_name:
+          type: string
+          readOnly: true
+        license_url:
+          type: string
+          format: uri
+          readOnly: true
+        volume:
+          type: string
+          nullable: true
+          readOnly: true
+        issue:
+          type: string
+          nullable: true
+          readOnly: true
+        issue_slug:
+          type: string
+          nullable: true
+          readOnly: true
+        pages:
+          type: string
+          nullable: true
+          readOnly: true
+        received_at:
+          type: string
+          nullable: true
+          readOnly: true
+        accepted_at:
+          type: string
+          nullable: true
+          readOnly: true
+        affiliations:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - abstract
+      - accepted_at
+      - affiliations
+      - authors
+      - doi
+      - download_count
+      - download_url
+      - downloads
+      - id
+      - issue
+      - issue_slug
+      - keywords
+      - language
+      - license
+      - license_name
+      - license_url
+      - pages
+      - pdf_url
+      - published_at
+      - received_at
+      - section
+      - section_id
+      - section_name
+      - section_slug
+      - slug
+      - title
+      - view_count
+      - views
+      - volume
+    PublishedArticleStatusEnum:
+      enum:
+      - draft
+      - published
+      - retracted
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `published` - Published
+        * `retracted` - Retracted
+    ReasonCodeEnum:
+      enum:
+      - OUT_OF_SCOPE
+      - INCOMPLETE
+      - QUALITY
+      - GUIDELINES
+      - ETHICS
+      - OTHER
+      type: string
+      description: |-
+        * `OUT_OF_SCOPE` - Outside journal or section scope
+        * `INCOMPLETE` - Incomplete submission
+        * `QUALITY` - Insufficient submission quality
+        * `GUIDELINES` - Submission guidelines not followed
+        * `ETHICS` - Ethics or research-integrity concern
+        * `OTHER` - Other
+    ReasonEnum:
+      enum:
+      - WORKLOAD
+      - CONFLICT
+      - INACTIVITY
+      - UNAVAILABLE
+      - ADMINISTRATIVE
+      type: string
+      description: |-
+        * `WORKLOAD` - Workload
+        * `CONFLICT` - Conflict of interest
+        * `INACTIVITY` - Editor inactivity
+        * `UNAVAILABLE` - Editor unavailable
+        * `ADMINISTRATIVE` - Administrative correction
+    ReassignEditorRequest:
+      type: object
+      properties:
+        editor_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        reason:
+          $ref: '#/components/schemas/ReasonEnum'
+      required:
+      - editor_id
+      - reason
+    RecommendationEnum:
+      enum:
+      - ACCEPT
+      - MINOR_REVISION
+      - MAJOR_REVISION
+      - REJECT
+      type: string
+      description: |-
+        * `ACCEPT` - Accept
+        * `MINOR_REVISION` - Minor Revision
+        * `MAJOR_REVISION` - Major Revision
+        * `REJECT` - Reject
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password_confirm:
+          type: string
+          writeOnly: true
+          minLength: 1
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        orcid:
+          type: string
+          maxLength: 19
+        affiliation:
+          type: string
+          maxLength: 255
+        country:
+          type: string
+          maxLength: 100
+      required:
+      - email
+      - first_name
+      - last_name
+      - password
+      - password_confirm
+      - username
+    RegistrationResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserProfile'
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+      required:
+      - tokens
+      - user
+    ResultEnum:
+      enum:
+      - PASS
+      - CONCERN
+      - NOT_APPLICABLE
+      type: string
+      description: |-
+        * `PASS` - Pass
+        * `CONCERN` - Concern
+        * `NOT_APPLICABLE` - Not applicable
+    Review:
+      type: object
+      description: |-
+        Editor-facing full review detail.
+        Includes reviewer identity for editorial decision-making.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        reviewer:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        recommendation:
+          type: string
+        comments_for_author:
+          type: string
+        comments_for_editor:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - comments_for_author
+      - id
+      - recommendation
+      - reviewer
+      - submitted_at
+    ReviewSubmitRequest:
+      type: object
+      properties:
+        recommendation:
+          $ref: '#/components/schemas/RecommendationEnum'
+        comments_for_author:
+          type: string
+          minLength: 1
+        comments_for_editor:
+          type: string
+          default: ''
+      required:
+      - comments_for_author
+      - recommendation
+    ReviewerAssignment:
+      type: object
+      description: |-
+        Full assignment detail.
+        Pass context={'is_editor': True} to expose assigned_by.
+        Reviewer-facing: assigned_by is hidden.
+
+        `submission` is derived from version.submission — the model FK is
+        `version` (SubmissionVersion), not submission directly.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        submission:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionBrief'
+          readOnly: true
+        version:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionVersionBrief'
+          readOnly: true
+        reviewer:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        assigned_by:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/ReviewerAssignmentStatusEnum'
+        response_deadline:
+          type: string
+          format: date-time
+        review_deadline:
+          type: string
+          format: date-time
+        assigned_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_overdue:
+          type: boolean
+          readOnly: true
+        review_submitted:
+          type: boolean
+          readOnly: true
+        can_respond:
+          type: boolean
+          readOnly: true
+        can_download_manuscript:
+          type: boolean
+          readOnly: true
+        can_submit_review:
+          type: boolean
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_by:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+        cancellation_reason:
+          type: string
+        replaces:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+      required:
+      - assigned_at
+      - assigned_by
+      - can_download_manuscript
+      - can_respond
+      - can_submit_review
+      - cancelled_by
+      - id
+      - is_overdue
+      - replaces
+      - response_deadline
+      - review_deadline
+      - review_submitted
+      - reviewer
+      - submission
+      - version
+    ReviewerAssignmentCancelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 2000
+      required:
+      - reason
+    ReviewerAssignmentCreateRequest:
+      type: object
+      description: |-
+        Editor assigns a reviewer to a submission.
+        submission is taken from the URL — not from request body.
+      properties:
+        reviewer_id:
+          type: string
+          format: uuid
+        response_deadline:
+          type: string
+          format: date-time
+        review_deadline:
+          type: string
+          format: date-time
+      required:
+      - response_deadline
+      - review_deadline
+      - reviewer_id
+    ReviewerAssignmentReplaceRequest:
+      type: object
+      description: |-
+        Editor assigns a reviewer to a submission.
+        submission is taken from the URL — not from request body.
+      properties:
+        reviewer_id:
+          type: string
+          format: uuid
+        response_deadline:
+          type: string
+          format: date-time
+        review_deadline:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 2000
+      required:
+      - reason
+      - response_deadline
+      - review_deadline
+      - reviewer_id
+    ReviewerAssignmentResponseRequest:
+      type: object
+      description: Reviewer accepts or declines an assignment.
+      properties:
+        accept:
+          type: boolean
+      required:
+      - accept
+    ReviewerAssignmentStatusEnum:
+      enum:
+      - PENDING
+      - ACCEPTED
+      - DECLINED
+      - EXPIRED
+      - CANCELLED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `ACCEPTED` - Accepted
+        * `DECLINED` - Declined
+        * `EXPIRED` - Expired
+        * `CANCELLED` - Cancelled
+    ReviewerAssignmentsBulkCreateRequest:
+      type: object
+      properties:
+        reviewer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 10
+          minItems: 1
+        response_deadline:
+          type: string
+          format: date-time
+        review_deadline:
+          type: string
+          format: date-time
+      required:
+      - response_deadline
+      - review_deadline
+      - reviewer_ids
+    ReviewerAssignmentsBulkResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewerAssignment'
+      required:
+      - assignments
+      - count
+    ReviewerCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        orcid:
+          type: string
+          readOnly: true
+        affiliation:
+          type: string
+          readOnly: true
+        country:
+          type: string
+          readOnly: true
+        keywords:
+          type: array
+          items: {}
+          readOnly: true
+        active_assignment_count:
+          type: integer
+          readOnly: true
+      required:
+      - active_assignment_count
+      - affiliation
+      - country
+      - email
+      - full_name
+      - id
+      - keywords
+      - orcid
+      - username
+    ReviewerCandidateSearchResponse:
+      type: object
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        count:
+          type: integer
+          minimum: 0
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewerCandidate'
+      required:
+      - candidates
+      - count
+      - submission_id
+    ReviewerManuscriptDownload:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        submission_id:
+          type: string
+          format: uuid
+        version_id:
+          type: string
+          format: uuid
+        version_number:
+          type: integer
+          minimum: 1
+        expires_in_seconds:
+          type: integer
+          minimum: 1
+        manuscript_url:
+          type: string
+          format: uri
+      required:
+      - assignment_id
+      - expires_in_seconds
+      - manuscript_url
+      - submission_id
+      - version_id
+      - version_number
+    ReviewerProfile:
+      type: object
+      description: |-
+        Exposes reviewer expertise data.
+
+        Sections are assigned by journal staff and are read-only to the
+        reviewer. Reviewers must not be able to approve themselves for a
+        journal section.
+      properties:
+        sections:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        keywords:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+        biography:
+          type: string
+        publications:
+          readOnly: true
+        last_synced_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        sync_status:
+          allOf:
+          - $ref: '#/components/schemas/ReviewerSyncStatusEnum'
+          readOnly: true
+      required:
+      - last_synced_at
+      - publications
+      - sections
+      - sync_status
+    ReviewerRecommendation:
+      type: object
+      properties:
+        reviewer_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        affiliation:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        biography_excerpt:
+          type: string
+        similarity_score:
+          type: number
+          format: double
+          maximum: 1
+          minimum: 0
+        keyword_overlap_score:
+          type: number
+          format: double
+          maximum: 1
+          minimum: 0
+        recommendation_score:
+          type: number
+          format: double
+          maximum: 1
+          minimum: 0
+        scoring_mode:
+          $ref: '#/components/schemas/ScoringModeEnum'
+        matched_keywords:
+          type: array
+          items:
+            type: string
+        matched_author_keywords:
+          type: array
+          items:
+            type: string
+        matched_topic_keywords:
+          type: array
+          items:
+            type: string
+        active_assignment_count:
+          type: integer
+          minimum: 0
+        has_reviewed_before:
+          type: boolean
+        explanation:
+          type: string
+      required:
+      - active_assignment_count
+      - affiliation
+      - biography_excerpt
+      - email
+      - explanation
+      - full_name
+      - has_reviewed_before
+      - keyword_overlap_score
+      - keywords
+      - matched_author_keywords
+      - matched_keywords
+      - matched_topic_keywords
+      - recommendation_score
+      - reviewer_id
+      - scoring_mode
+      - similarity_score
+    ReviewerRecommendationsResponse:
+      type: object
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        count:
+          type: integer
+          minimum: 0
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewerRecommendation'
+      required:
+      - count
+      - recommendations
+      - submission_id
+    ReviewerSyncStatusEnum:
+      enum:
+      - PENDING
+      - COMPLETED
+      - FAILED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `COMPLETED` - Completed
+        * `FAILED` - Failed
+    RevisionUploadRequest:
+      type: object
+      description: |-
+        Used for revision upload only. File validation mirrors
+        SubmissionCreateSerializer.
+      properties:
+        file:
+          type: string
+          format: binary
+          description: Full manuscript PDF containing author information.
+        blinded_file:
+          type: string
+          format: binary
+          description: Anonymized manuscript PDF for peer reviewers.
+        response_to_reviewers:
+          type: string
+          minLength: 20
+          description: Point-by-point response explaining how the author addressed
+            the editor and reviewer comments.
+          maxLength: 20000
+      required:
+      - blinded_file
+      - file
+      - response_to_reviewers
+    Role:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          $ref: '#/components/schemas/RoleNameEnum'
+      required:
+      - id
+      - name
+    RoleNameEnum:
+      enum:
+      - AUTHOR
+      - REVIEWER
+      - SECTION_MANAGER
+      - SECTION_EDITOR
+      - EDITOR_IN_CHIEF
+      - ADMIN
+      - READER
+      type: string
+      description: |-
+        * `AUTHOR` - Author
+        * `REVIEWER` - Reviewer
+        * `SECTION_MANAGER` - Section Manager
+        * `SECTION_EDITOR` - Section Editor
+        * `EDITOR_IN_CHIEF` - Editor in Chief
+        * `ADMIN` - Admin
+        * `READER` - Reader
+    ScoringModeEnum:
+      enum:
+      - hybrid
+      - semantic_only
+      - keyword_only
+      - unavailable
+      type: string
+      description: |-
+        * `hybrid` - hybrid
+        * `semantic_only` - semantic_only
+        * `keyword_only` - keyword_only
+        * `unavailable` - unavailable
+    Section:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          readOnly: true
+          description: Stable public URL slug for this section.
+          pattern: ^[-a-zA-Z0-9_]+$
+        description:
+          type: string
+        issn:
+          type: string
+          pattern: ^\d{4}-\d{4}$
+          maxLength: 9
+        is_active:
+          type: boolean
+          description: Inactive sections do not accept new submissions.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - slug
+    SectionManagement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          readOnly: true
+          description: Stable public URL slug for this section.
+          pattern: ^[-a-zA-Z0-9_]+$
+        description:
+          type: string
+        issn:
+          type: string
+          pattern: ^\d{4}-\d{4}$
+          maxLength: 9
+        manager:
+          allOf:
+          - $ref: '#/components/schemas/SectionManagerBrief'
+          nullable: true
+          readOnly: true
+        is_active:
+          type: boolean
+          description: Inactive sections do not accept new submissions.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_clustered_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Timestamp of the last successful BERTopic clustering run for
+            this section.
+      required:
+      - created_at
+      - id
+      - last_clustered_at
+      - manager
+      - name
+      - slug
+    SectionManagementRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        issn:
+          type: string
+          pattern: ^\d{4}-\d{4}$
+          maxLength: 9
+        is_active:
+          type: boolean
+          description: Inactive sections do not accept new submissions.
+      required:
+      - name
+    SectionManagerBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+      required:
+      - email
+      - full_name
+      - id
+      - username
+    SectionTopicAnalytics:
+      type: object
+      properties:
+        section:
+          $ref: '#/components/schemas/TopicAnalyticsSectionSummary'
+        analysis_status:
+          $ref: '#/components/schemas/AnalysisStatusEnum'
+        last_clustered_at:
+          type: string
+          format: date-time
+          nullable: true
+        total_submissions:
+          type: integer
+          minimum: 0
+        analyzed_submissions:
+          type: integer
+          minimum: 0
+        clustered_submissions:
+          type: integer
+          minimum: 0
+        outlier_submissions:
+          type: integer
+          minimum: 0
+        pending_analysis:
+          type: integer
+          minimum: 0
+        topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicAggregate'
+        top_author_keywords:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicKeywordCount'
+      required:
+      - analysis_status
+      - analyzed_submissions
+      - clustered_submissions
+      - last_clustered_at
+      - outlier_submissions
+      - pending_analysis
+      - section
+      - top_author_keywords
+      - topics
+      - total_submissions
+    SubmissionAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        submission:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionList'
+          readOnly: true
+        assigned_to:
+          allOf:
+          - $ref: '#/components/schemas/UserProfile'
+          readOnly: true
+        assigned_by:
+          allOf:
+          - $ref: '#/components/schemas/UserProfile'
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleNameEnum'
+          readOnly: true
+        assignment_reason:
+          allOf:
+          - $ref: '#/components/schemas/AssignmentReasonEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - assigned_by
+      - assigned_to
+      - assignment_reason
+      - created_at
+      - id
+      - role
+      - submission
+    SubmissionBrief:
+      type: object
+      description: |-
+        Minimal submission detail exposed to reviewers.
+        Read-only. No cover letter.
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        abstract:
+          type: string
+        language:
+          type: string
+        section:
+          type: string
+          readOnly: true
+      required:
+      - abstract
+      - id
+      - language
+      - section
+      - title
+    SubmissionCoAuthorRead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        affiliation:
+          type: string
+          readOnly: true
+        orcid:
+          type: string
+          readOnly: true
+        country:
+          type: string
+          readOnly: true
+        order:
+          type: integer
+          readOnly: true
+      required:
+      - affiliation
+      - country
+      - email
+      - full_name
+      - id
+      - orcid
+      - order
+    SubmissionCreateRequest:
+      type: object
+      description: |-
+        Used for initial submission creation only.
+        Inherits from Serializer (not ModelSerializer) because
+        file handling requires explicit control.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        abstract:
+          type: string
+          minLength: 1
+        keywords:
+          description: JSON array containing 3 to 8 keywords.
+        coauthors:
+          writeOnly: true
+          description: JSON array containing ordered coauthor metadata.
+        language:
+          $ref: '#/components/schemas/LanguageEnum'
+        cover_letter:
+          type: string
+          default: ''
+        section:
+          type: string
+          format: uuid
+        file:
+          type: string
+          format: binary
+          description: Full manuscript PDF containing author information.
+        blinded_file:
+          type: string
+          format: binary
+          description: Anonymized manuscript PDF for peer reviewers.
+      required:
+      - abstract
+      - blinded_file
+      - file
+      - keywords
+      - language
+      - section
+      - title
+    SubmissionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        abstract:
+          type: string
+          readOnly: true
+        keywords:
+          readOnly: true
+          description: Author-supplied scholarly keywords.
+        language:
+          allOf:
+          - $ref: '#/components/schemas/LanguageEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionStatusEnum'
+          readOnly: true
+        section:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionDetailSection'
+          readOnly: true
+        topic:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionTopic'
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        latest_version:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionLatestVersion'
+          nullable: true
+          readOnly: true
+        coauthors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionCoAuthorRead'
+          readOnly: true
+      required:
+      - abstract
+      - coauthors
+      - id
+      - keywords
+      - language
+      - latest_version
+      - section
+      - status
+      - submitted_at
+      - title
+      - topic
+    SubmissionDetailSection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          description: Stable public URL slug for this section.
+          pattern: ^[-a-zA-Z0-9_]+$
+      required:
+      - id
+      - name
+      - slug
+    SubmissionLatestVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+        decision:
+          allOf:
+          - $ref: '#/components/schemas/DecisionEnum'
+          readOnly: true
+        decision_letter:
+          type: string
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - decision
+      - decision_letter
+      - id
+      - submitted_at
+      - version_number
+    SubmissionList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        abstract:
+          type: string
+          readOnly: true
+        keywords:
+          readOnly: true
+          description: Author-supplied scholarly keywords.
+        language:
+          allOf:
+          - $ref: '#/components/schemas/LanguageEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionStatusEnum'
+          readOnly: true
+        section:
+          allOf:
+          - $ref: '#/components/schemas/Section'
+          readOnly: true
+        topic:
+          allOf:
+          - $ref: '#/components/schemas/SubmissionTopic'
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - abstract
+      - id
+      - keywords
+      - language
+      - section
+      - status
+      - submitted_at
+      - title
+      - topic
+    SubmissionStatusEnum:
+      enum:
+      - SUBMITTED
+      - ASSIGNED
+      - UNDER_REVIEW
+      - SUSPENDED
+      - REVIEWED
+      - UNDER_REVISION
+      - REVISED
+      - ACCEPTED
+      - REJECTED
+      type: string
+      description: |-
+        * `SUBMITTED` - Submitted
+        * `ASSIGNED` - Assigned
+        * `UNDER_REVIEW` - Under Review
+        * `SUSPENDED` - Suspended
+        * `REVIEWED` - Reviewed
+        * `UNDER_REVISION` - Under Revision
+        * `REVISED` - Revised
+        * `ACCEPTED` - Accepted
+        * `REJECTED` - Rejected
+    SubmissionTopic:
+      type: object
+      properties:
+        label:
+          type: string
+          readOnly: true
+          nullable: true
+        keywords:
+          readOnly: true
+      required:
+      - keywords
+      - label
+    SubmissionVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+        full_manuscript_available:
+          type: boolean
+          readOnly: true
+        blinded_manuscript_available:
+          type: boolean
+          readOnly: true
+        submitted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        decision:
+          allOf:
+          - $ref: '#/components/schemas/DecisionEnum'
+          readOnly: true
+        decision_letter:
+          type: string
+          readOnly: true
+        response_to_reviewers:
+          type: string
+          readOnly: true
+        reviewer_feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorReviewFeedback'
+          readOnly: true
+        decided_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        decided_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+      required:
+      - blinded_manuscript_available
+      - decided_at
+      - decided_by
+      - decision
+      - decision_letter
+      - full_manuscript_available
+      - id
+      - response_to_reviewers
+      - reviewer_feedback
+      - submitted_at
+      - version_number
+    SubmissionVersionBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version_number:
+          type: integer
+        submitted_at:
+          type: string
+          format: date-time
+        decision:
+          type: string
+        response_to_reviewers:
+          type: string
+      required:
+      - decision
+      - id
+      - response_to_reviewers
+      - submitted_at
+      - version_number
+    SubmissionVersionDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        decision:
+          type: string
+        decision_letter:
+          type: string
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        decided_by:
+          allOf:
+          - $ref: '#/components/schemas/UserBrief'
+          readOnly: true
+      required:
+      - decided_by
+      - decision
+      - id
+      - version_number
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    TokenPair:
+      type: object
+      properties:
+        refresh:
+          type: string
+        access:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TopicAggregate:
+      type: object
+      properties:
+        label:
+          type: string
+        submission_count:
+          type: integer
+          minimum: 0
+        percentage_of_clustered:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+        keywords:
+          type: array
+          items:
+            type: string
+      required:
+      - keywords
+      - label
+      - percentage_of_clustered
+      - submission_count
+    TopicAnalyticsDashboard:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionTopicAnalytics'
+      required:
+      - generated_at
+      - sections
+    TopicAnalyticsSectionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+      - id
+      - name
+      - slug
+    TopicKeywordCount:
+      type: object
+      properties:
+        keyword:
+          type: string
+        submission_count:
+          type: integer
+          minimum: 0
+      required:
+      - keyword
+      - submission_count
+    TriageAssessmentDetail:
+      type: object
+      properties:
+        assessment_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+        submission_id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_id:
+          type: string
+          format: uuid
+          readOnly: true
+        checklist_version:
+          type: integer
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        outcome:
+          type: string
+          nullable: true
+          readOnly: true
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriageCheckState'
+          readOnly: true
+        internal_notes:
+          type: string
+          readOnly: true
+        rejection_reason:
+          type: string
+          nullable: true
+          readOnly: true
+        author_message:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_by:
+          allOf:
+          - $ref: '#/components/schemas/TriageCompletedBy'
+          nullable: true
+          readOnly: true
+        plagiarism_screening:
+          allOf:
+          - $ref: '#/components/schemas/PlagiarismPlaceholder'
+          readOnly: true
+      required:
+      - assessment_id
+      - author_message
+      - checklist_version
+      - checks
+      - completed_at
+      - completed_by
+      - created_at
+      - internal_notes
+      - outcome
+      - plagiarism_screening
+      - rejection_reason
+      - status
+      - submission_id
+      - updated_at
+      - version_id
+    TriageCheckInputRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        result:
+          $ref: '#/components/schemas/ResultEnum'
+        note:
+          type: string
+          default: ''
+          maxLength: 2000
+      required:
+      - code
+      - result
+    TriageCheckState:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
+        allow_not_applicable:
+          type: boolean
+        result:
+          type: string
+          nullable: true
+        note:
+          type: string
+      required:
+      - allow_not_applicable
+      - code
+      - description
+      - label
+      - note
+      - required
+      - result
+    TriageCompletedBy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+      required:
+      - full_name
+      - id
+    UserBrief:
+      type: object
+      description: Minimal user detail for nested representation.
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+          readOnly: true
+      required:
+      - email
+      - full_name
+      - id
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        orcid:
+          type: string
+          maxLength: 19
+        affiliation:
+          type: string
+          maxLength: 255
+        country:
+          type: string
+          maxLength: 100
+        status:
+          type: string
+          readOnly: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+          readOnly: true
+        reviewer_profile:
+          allOf:
+          - $ref: '#/components/schemas/ReviewerProfile'
+          readOnly: true
+      required:
+      - email
+      - id
+      - reviewer_profile
+      - roles
+      - status
+      - username
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

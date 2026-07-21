@@ -22,6 +22,17 @@ from apps.reviews.serializers import (
     ReviewerCandidateSerializer,
     ReviewerAssignmentCancelSerializer,
     ReviewerAssignmentReplaceSerializer,
+    EditorDecisionResponseSerializer,
+    ReviewerAssignmentReplacementResponseSerializer,
+    ReviewerAssignmentsBulkResponseSerializer,
+    ReviewerCandidateSearchResponseSerializer,
+    ReviewerManuscriptDownloadSerializer,
+    ReviewerRecommendationsResponseSerializer,
+)
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    extend_schema,
 )
 
 from apps.reviews.selectors import (
@@ -44,6 +55,12 @@ from apps.core.storage import StorageService
 class AssignReviewerView(APIView):
     permission_classes = [IsAuthenticated]
 
+
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentCreateSerializer,
+        responses={201: ReviewerAssignmentSerializer},
+    )
     def post(self, request, submission_id):
         submission = assigned_editor_submission_or_404(
             editor=request.user,
@@ -78,6 +95,13 @@ class AssignReviewerView(APIView):
 class AssignReviewersView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentsBulkCreateSerializer,
+        responses={
+            201: ReviewerAssignmentsBulkResponseSerializer,
+        },
+    )
     def post(self, request, submission_id):
         submission = assigned_editor_submission_or_404(
             editor=request.user,
@@ -156,6 +180,10 @@ class AssignReviewersView(APIView):
 class SubmissionReviewsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        responses={200: EditorReviewWorkspaceSerializer},
+    )
     def get(self, request, submission_id):
         submission = assigned_editor_submission_or_404(
             editor=request.user,
@@ -328,6 +356,11 @@ class SubmissionReviewsView(APIView):
 class ExpireAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=None,
+        responses={200: ReviewerAssignmentSerializer},
+    )
     def post(self, request, assignment_id):
         assignment = assigned_editor_reviewer_assignment_or_404(
             editor=request.user,
@@ -354,7 +387,13 @@ class ExpireAssignmentView(APIView):
 
 class MyAssignmentsView(APIView):
     permission_classes = [IsAuthenticated]
-
+    
+    @extend_schema(
+        tags=["Reviewer"],
+        responses={
+            200: ReviewerAssignmentSerializer(many=True),
+        },
+    )
     def get(self, request):
         assignments = (
             ReviewerAssignment.objects
@@ -388,6 +427,11 @@ class MyAssignmentsView(APIView):
 class RespondToAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Reviewer"],
+        request=ReviewerAssignmentResponseSerializer,
+        responses={200: ReviewerAssignmentSerializer},
+    )
     def post(self, request, assignment_id):
         assignment = reviewer_assignment_or_404(
             reviewer=request.user,
@@ -418,7 +462,11 @@ class RespondToAssignmentView(APIView):
 
 class SubmitReviewView(APIView):
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["Reviewer"],
+        request=ReviewSubmitSerializer,
+        responses={201: ReviewSerializer},
+    )
     def post(self, request, assignment_id):
         assignment = get_object_or_404(
             ReviewerAssignment.objects.select_related('version__submission__section', 'reviewer'),
@@ -448,6 +496,24 @@ class SubmitReviewView(APIView):
 class ReviewerRecommendationsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        parameters=[
+            OpenApiParameter(
+                name="limit",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Maximum number of recommendations. The server "
+                    "caps this at REVIEWER_RECOMMENDATION_COUNT."
+                ),
+            )
+        ],
+        responses={
+            200: ReviewerRecommendationsResponseSerializer,
+        },
+    )
     def get(self, request, submission_id):
 
         submission = assigned_editor_submission_or_404(
@@ -482,7 +548,11 @@ class ReviewerRecommendationsView(APIView):
     
 class MakeEditorDecisionView(APIView):
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=EditorDecisionSerializer,
+        responses={200: SubmissionVersionDecisionSerializer},
+    )
     def post(self, request, submission_id):
         submission = assigned_editor_submission_or_404(
             editor=request.user,
@@ -512,6 +582,13 @@ class MakeEditorDecisionView(APIView):
 class ReviewerCandidateSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        parameters=[ReviewerCandidateSearchQuerySerializer],
+        responses={
+            200: ReviewerCandidateSearchResponseSerializer,
+        },
+    )
     def get(self, request, submission_id):
         submission = assigned_editor_submission_or_404(
             editor=request.user,
@@ -550,6 +627,10 @@ class ReviewerCandidateSearchView(APIView):
 class ReviewerManuscriptDownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Reviewer"],
+        responses={200: ReviewerManuscriptDownloadSerializer},
+    )
     def get(self, request, assignment_id):
         assignment = get_object_or_404(
             ReviewerAssignment.objects.select_related(
@@ -598,7 +679,11 @@ class ReviewerManuscriptDownloadView(APIView):
 
 class CancelReviewerAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentCancelSerializer,
+        responses={200: ReviewerAssignmentSerializer},
+    )
     def post(self, request, assignment_id):
         assignment = (
             assigned_editor_reviewer_assignment_or_404(
@@ -633,6 +718,11 @@ class CancelReviewerAssignmentView(APIView):
 class ReplaceReviewerAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentReplaceSerializer,
+        responses={201: ReviewerAssignmentSerializer},
+    )
     def post(self, request, assignment_id):
         assignment = (
             assigned_editor_reviewer_assignment_or_404(

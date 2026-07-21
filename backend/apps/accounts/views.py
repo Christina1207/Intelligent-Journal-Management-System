@@ -3,7 +3,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import (
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 
 from .models import Role,ReviewerProfile
 from .tasks import generate_reviewer_expertise_embedding
@@ -12,6 +16,8 @@ from .serializers import (
     RegisterSerializer,
     ReviewerProfileSerializer,
     UserProfileSerializer,
+    RegistrationResponseSerializer,
+    DetailMessageSerializer,
 )
 from .services import ReviewerProfileService
 
@@ -23,7 +29,12 @@ def get_tokens_for_user(user):
         "access": str(refresh.access_token),
     }
 
-
+@extend_schema(
+    tags=["Auth"],
+    auth=[],
+    request=RegisterSerializer,
+    responses={201: RegistrationResponseSerializer},
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_view(request):
@@ -40,7 +51,17 @@ def register_view(request):
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Auth"],
+        responses={200: UserProfileSerializer},
+    ),
+    patch=extend_schema(
+        tags=["Auth"],
+        request=CurrentUserProfileUpdateSerializer,
+        responses={200: UserProfileSerializer},
+    ),
+)
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def me_view(request):
@@ -102,7 +123,11 @@ def reviewer_profile_update_view(request):
         status=status.HTTP_200_OK,
     )
 
-
+@extend_schema(
+    tags=["Auth"],
+    request=None,
+    responses={202: DetailMessageSerializer},
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def sync_orcid_view(request):

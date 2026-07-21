@@ -9,7 +9,7 @@ from .models import (
 )
 from apps.journals.models import Section
 from apps.journals.serializers import SectionSerializer
-
+from drf_spectacular.utils import extend_schema_field
 #TODO: move this to constants
 MAX_MANUSCRIPT_SIZE = 50 * 1024 * 1024
 
@@ -254,12 +254,15 @@ class SubmissionVersionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_full_manuscript_available(self, version):
+    def get_full_manuscript_available(self, version) -> bool:
         return bool(version.file)
 
-    def get_blinded_manuscript_available(self, version):
+    def get_blinded_manuscript_available(self, version)-> bool:
         return bool(version.blinded_file)
     
+    @extend_schema_field(
+        AuthorReviewFeedbackSerializer(many=True)
+    )
     def get_reviewer_feedback(self, version):
         """
         Release only author-directed comments after an editorial decision.
@@ -385,7 +388,7 @@ class AuthorDashboardActionSerializer(AuthorDashboardSubmissionSerializer):
         ]
         read_only_fields = fields
 
-    def get_action(self, obj):
+    def get_action(self, obj)-> str :
         return "UPLOAD_REVISION"
 
 
@@ -420,6 +423,9 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(
+        SubmissionLatestVersionSerializer(allow_null=True)
+    )
     def get_latest_version(self, obj):
         versions = getattr(obj, "prefetched_versions", None)
         if versions is not None:

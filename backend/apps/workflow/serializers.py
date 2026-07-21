@@ -157,6 +157,10 @@ class PlagiarismPlaceholderSerializer(serializers.Serializer):
     status = serializers.CharField()
     report = serializers.JSONField(allow_null=True)
 
+class TriageCompletedBySerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    full_name = serializers.CharField()
+
 class ManagerSubmissionVersionSerializer(
     serializers.ModelSerializer
 ):
@@ -178,6 +182,7 @@ class ManagerSubmissionVersionSerializer(
     def get_manuscript_available(self, version):
         return bool(version.file)
     
+    @extend_schema_field(serializers.BooleanField())
     def get_blinded_manuscript_available(self, version):
         return bool(version.blinded_file)
 
@@ -262,6 +267,9 @@ class TriageAssessmentDetailSerializer(serializers.Serializer):
     completed_by = serializers.SerializerMethodField()
     plagiarism_screening = serializers.SerializerMethodField()
 
+    @extend_schema_field(
+        serializers.UUIDField(allow_null=True)
+    )
     def get_assessment_id(self, assessment):
         if assessment.pk is None:
             return None
@@ -317,6 +325,9 @@ class TriageAssessmentDetailSerializer(serializers.Serializer):
             for definition in definitions
         ]
 
+    @extend_schema_field(
+        TriageCompletedBySerializer(allow_null=True)
+    )
     def get_completed_by(self, assessment):
         user = assessment.completed_by
 

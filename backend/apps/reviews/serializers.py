@@ -8,6 +8,8 @@ from apps.workflow.models import ReviewerAssignment
 from apps.reviews.models import Review
 from apps.submissions.models import SubmissionVersion
 
+from drf_spectacular.utils import extend_schema_field
+
 from config.constants import MAX_REVIEWER_INVITATIONS_PER_BATCH
 
 # ------------------------------------------------------------------ #
@@ -34,7 +36,7 @@ class UserBriefSerializer(serializers.Serializer):
     email = serializers.EmailField()
     full_name = serializers.SerializerMethodField()
 
-    def get_full_name(self, instance):
+    def get_full_name(self, instance)-> str:
         first_name = getattr(instance, "first_name", "") or ""
         last_name = getattr(instance, "last_name", "") or ""
         full_name = f"{first_name} {last_name}".strip()
@@ -87,14 +89,14 @@ class ReviewerCandidateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_full_name(self, reviewer):
+    def get_full_name(self, reviewer) -> str:
         full_name = (
             f"{reviewer.first_name} {reviewer.last_name}"
         ).strip()
 
         return full_name or reviewer.username
 
-    def get_keywords(self, reviewer):
+    def get_keywords(self, reviewer) -> list:
         try:
             return reviewer.reviewer_profile.keywords or []
         except ObjectDoesNotExist:
@@ -265,15 +267,16 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
             "cancellation_reason",
             "replaces",
         ]
-        
+
+    @extend_schema_field(SubmissionBriefSerializer)
     def get_submission(self, instance):
-        # version is select_related in every callsite — no extra query.
         return SubmissionBriefSerializer(instance.version.submission).data
     
+    @extend_schema_field(SubmissionVersionBriefSerializer)
     def get_version(self, instance):
         return SubmissionVersionBriefSerializer(instance.version).data
     
-    def get_review_submitted(self, instance):
+    def get_review_submitted(self, instance) -> bool:
         try:
             instance.review
         except ObjectDoesNotExist:
@@ -281,16 +284,16 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
 
         return True
 
-    def get_can_respond(self, instance):
+    def get_can_respond(self, instance) -> bool:
         return (
             instance.status == ReviewerAssignment.Status.PENDING
             and instance.response_deadline > timezone.now()
         )
 
-    def get_can_download_manuscript(self, instance):
+    def get_can_download_manuscript(self, instance) -> bool:
         return instance.status == ReviewerAssignment.Status.ACCEPTED
 
-    def get_can_submit_review(self, instance):
+    def get_can_submit_review(self, instance) -> bool:
         return (
             instance.status == ReviewerAssignment.Status.ACCEPTED
             and not self.get_review_submitted(instance)
@@ -343,6 +346,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             'comments_for_editor',
             'submitted_at',
         ]
+    @extend_schema_field(UserBriefSerializer)
     def get_reviewer(self, instance):
         return UserBriefSerializer(instance.assignment.reviewer).data
 
@@ -428,3 +432,90 @@ class EditorReviewWorkspaceSerializer(serializers.Serializer):
     )
     reviews = ReviewSerializer(many=True)
     can_make_decision = serializers.BooleanField()
+
+# ------------------------------------------------------------------ #
+#  API RESPONSE ENVELOPES                                             #
+# ------------------------------------------------------------------ #
+
+class ReviewerAssignmentsBulkResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField(min_value=0)
+    assignments = ReviewerAssignmentSerializer(many=True)
+
+
+class ReviewerRecommendationSerializer(serializers.Serializer):
+    reviewer_id = serializers.UUIDField()
+    full_name = serializers.CharField()
+    email = serializers.EmailField()
+    affiliation = serializers.CharField(allow_blank=True)
+    keywords = serializers.ListField(
+        child=serializers.CharField(),
+    )
+    biography_excerpt = serializers.CharField(allow_blank=True)
+    similarity_score = serializers.FloatField(
+        min_value=0,
+        max_value=1,
+    )
+    keyword_overlap_score = serializers.FloatField(
+        min_value=0,
+        max_value=1,
+    )
+    recommendation_score = serializers.FloatField(
+        min_value=0,
+        max_value=1,
+    )
+    scoring_mode = serializers.ChoiceField(
+        choices=[
+            "hybrid",
+            "semantic_only",
+            "keyword_only",
+            "unavailable",
+        ]
+    )
+    matched_keywords = serializers.ListField(
+        child=serializers.CharField(),
+    )
+    matched_author_keywords = serializers.ListField(
+        child=serializers.CharField(),
+    )
+    matched_topic_keywords = serializers.ListField(
+        child=serializers.CharField(),
+    )
+    active_assignment_count = serializers.IntegerField(
+        min_value=0,
+    )
+    has_reviewed_before = serializers.BooleanField()
+    explanation = serializers.CharField()
+
+
+class ReviewerRecommendationsResponseSerializer(serializers.Serializer):
+    submission_id = serializers.UUIDField()
+    count = serializers.IntegerField(min_value=0)
+    recommendations = ReviewerRecommendationSerializer(many=True)
+
+
+class ReviewerCandidateSearchResponseSerializer(serializers.Serializer):
+    submission_id = serializers.UUIDField()
+    count = serializers.IntegerField(min_value=0)
+    candidates = ReviewerCandidateSerializer(many=True)
+
+
+class EditorDecisionResponseSerializer(serializers.Serializer):
+    submission_id = serializers.UUIDField()
+    submission_status = serializers.CharField()
+    version = SubmissionVersionDecisionSerializer()
+
+
+class ReviewerManuscriptDownloadSerializer(serializers.Serializer):
+    assignment_id = serializers.UUIDField()
+    submission_id = serializers.UUIDField()
+    version_id = serializers.UUIDField()
+    version_number = serializers.IntegerField(min_value=1)
+    expires_in_seconds = serializers.IntegerField(min_value=1)
+    manuscript_url = serializers.URLField()
+
+
+class ReviewerAssignmentReplacementResponseSerializer(
+    serializers.Serializer
+):
+    cancelled_assignment = ReviewerAssignmentSerializer()
+    replacement_assignment = ReviewerAssignmentSerializer()

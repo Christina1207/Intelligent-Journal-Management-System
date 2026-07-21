@@ -2,13 +2,19 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from .models import Section
 from apps.accounts.models import Role, User
-
+from drf_spectacular.utils import extend_schema_field
 
 class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
         fields = ["id", "name", "slug", "description", "issn", "is_active", "created_at"]
         read_only_fields = ["id","slug", "created_at"]
+
+class SectionManagerBriefSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    full_name = serializers.CharField(allow_blank=True)
 
 class SectionManagementSerializer(serializers.ModelSerializer):
     manager = serializers.SerializerMethodField()
@@ -34,6 +40,7 @@ class SectionManagementSerializer(serializers.ModelSerializer):
             "last_clustered_at",
         ]
 
+    @extend_schema_field(SectionManagerBriefSerializer(allow_null=True))
     def get_manager(self, obj):
         if not obj.manager:
             return None
