@@ -1,6 +1,15 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+from django.core.exceptions import ValidationError
+from django.db import close_old_connections
+from django.test import TransactionTestCase, skipUnlessDBFeature
+
+from apps.reviews.services import ReviewService
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -1204,6 +1213,145 @@ class ReviewerInvitationResponseApiTests(APITestCase):
             ReviewerAssignment.Status.DECLINED,
         )
 
+    def test_late_invitation_is_expired_and_cannot_be_accepted(self):
+        self.assignment.response_deadline = (
+            timezone.now() - timedelta(minutes=1)
+        )
+        self.assignment.save(
+            update_fields=["response_deadline"]
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "response deadline has passed",
+            str(response.data),
+        )
+
+        self.assignment.refresh_from_db()
+
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+
+    def test_late_pending_invitation_is_not_respondable(self):
+        self.assignment.response_deadline = (
+            timezone.now() - timedelta(minutes=1)
+        )
+        self.assignment.save(
+            update_fields=["response_deadline"]
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(
+            reverse("reviewer:my-assignments")
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_assignment = next(
+            item
+            for item in response.data
+            if str(item["id"]) == str(self.assignment.id)
+        )
+
+        self.assertEqual(
+            returned_assignment["status"],
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertFalse(
+            returned_assignment["can_respond"]
+        )
+
+    @patch(
+        "apps.reviews.services.REQUIRED_REVIEWS_COUNT",
+        2,
+    )
+    def test_reaching_required_count_expires_pending_invitations(
+        self,
+    ):
+        self.other_assignment = ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=self.other_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=(
+                timezone.now() + timedelta(days=3)
+            ),
+            review_deadline=(
+                timezone.now() + timedelta(days=14)
+            ),
+        )
+
+        spare_reviewer = get_user_model().objects.create_user(
+            username="spare-response-reviewer",
+            email="spare-response-reviewer@example.com",
+            password="testpass123",
+        )
+        spare_reviewer.roles.add(
+            Role.objects.get(name=Role.RoleName.REVIEWER)
+        )
+
+        spare_assignment = ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=spare_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline=(
+                timezone.now() + timedelta(days=3)
+            ),
+            review_deadline=(
+                timezone.now() + timedelta(days=14)
+            ),
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assignment.refresh_from_db()
+        spare_assignment.refresh_from_db()
+
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertEqual(
+            spare_assignment.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+        self.assertEqual(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+                status=ReviewerAssignment.Status.ACCEPTED,
+            ).count(),
+            2,
+        )
+
     def test_another_reviewer_cannot_respond(self):
         self.client.force_authenticate(self.other_reviewer)
 
@@ -1236,6 +1384,150 @@ class ReviewerInvitationResponseApiTests(APITestCase):
         self.assertEqual(
             self.assignment.status,
             ReviewerAssignment.Status.PENDING,
+        )
+
+@skipUnlessDBFeature("has_select_for_update")
+class ReviewerAcceptanceConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+        editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR,
+        )
+
+        user_model = get_user_model()
+
+        self.author = user_model.objects.create_user(
+            username="concurrency-author",
+            email="concurrency-author@example.com",
+            password="testpass123",
+        )
+        self.author.roles.add(author_role)
+
+        self.editor = user_model.objects.create_user(
+            username="concurrency-editor",
+            email="concurrency-editor@example.com",
+            password="testpass123",
+        )
+        self.editor.roles.add(editor_role)
+
+        self.section = Section.objects.create(
+            name="Concurrent Reviewer Responses",
+        )
+        self.submission = Submission.objects.create(
+            title="Concurrent response manuscript",
+            abstract="Concurrent reviewer acceptance test.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/concurrency/full.pdf",
+            blinded_file="submissions/concurrency/blinded.pdf",
+        )
+
+        self.assignments = []
+
+        for index in range(2):
+            reviewer = user_model.objects.create_user(
+                username=f"concurrency-reviewer-{index}",
+                email=f"concurrency-reviewer-{index}@example.com",
+                password="testpass123",
+            )
+            reviewer.roles.add(reviewer_role)
+
+            assignment = ReviewerAssignment.objects.create(
+                version=self.version,
+                reviewer=reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.PENDING,
+                response_deadline=(
+                    timezone.now() + timedelta(days=3)
+                ),
+                review_deadline=(
+                    timezone.now() + timedelta(days=14)
+                ),
+            )
+            self.assignments.append(assignment)
+
+    def respond(self, assignment_id, reviewer_id, barrier):
+        close_old_connections()
+
+        try:
+            assignment = ReviewerAssignment.objects.get(
+                pk=assignment_id
+            )
+            reviewer = get_user_model().objects.get(
+                pk=reviewer_id
+            )
+
+            barrier.wait(timeout=10)
+
+            ReviewService.respond_to_assignment(
+                reviewer=reviewer,
+                assignment=assignment,
+                accept=True,
+            )
+            return "accepted"
+
+        except ValidationError:
+            return "rejected"
+
+        finally:
+            close_old_connections()
+
+    @patch(
+        "apps.reviews.services.REQUIRED_REVIEWS_COUNT",
+        1,
+    )
+    def test_concurrent_acceptances_do_not_exceed_capacity(self):
+        barrier = Barrier(2)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(
+                    self.respond,
+                    assignment.id,
+                    assignment.reviewer_id,
+                    barrier,
+                )
+                for assignment in self.assignments
+            ]
+
+            results = [
+                future.result(timeout=15)
+                for future in futures
+            ]
+
+        statuses = list(
+            ReviewerAssignment.objects.filter(
+                version=self.version
+            ).values_list("status", flat=True)
+        )
+
+        self.assertCountEqual(
+            results,
+            ["accepted", "rejected"],
+        )
+        self.assertEqual(
+            statuses.count(
+                ReviewerAssignment.Status.ACCEPTED
+            ),
+            1,
+        )
+        self.assertEqual(
+            statuses.count(
+                ReviewerAssignment.Status.EXPIRED
+            ),
+            1,
         )
 
 class ReviewWorkspaceContractTests(APITestCase):

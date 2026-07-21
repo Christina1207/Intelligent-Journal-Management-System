@@ -210,48 +210,95 @@ class ReviewService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    @transaction.atomic
     def respond_to_assignment(*, reviewer, assignment, accept: bool):
         """
-        Reviewer accepts or declines an assignment invitation.
-        Status is terminal once set.
-        When enough reviewers accept, remaining pending invitations expire.
-        """
-        assignment = (
-        ReviewerAssignment.objects
-        .select_for_update()
-        .select_related("version")
-        .get(pk=assignment.pk)
-        )   
-        
-        if assignment.reviewer_id!= reviewer.id:
-            raise PermissionDenied("You are not the reviewer on this assignment.")
+        Accept or decline a reviewer invitation.
 
-        if assignment.status != ReviewerAssignment.Status.PENDING:
-            raise ValidationError(
-                f"Cannot respond to an assignment with status '{assignment.status}'. "
-                "Only PENDING assignments can be accepted or declined."
+        The submission version is the shared lock for all invitations in
+        the same review round. This prevents concurrent acceptances from
+        exceeding REQUIRED_REVIEWS_COUNT.
+        """
+        response_error = None
+
+        with transaction.atomic():
+            # Every invitation in the round shares this version.
+            # Lock it first so responses for the round are serialized.
+            version = (
+                SubmissionVersion.objects
+                .select_for_update()
+                .only("id")
+                .get(pk=assignment.version_id)
             )
 
-        assignment.status = (
-            ReviewerAssignment.Status.ACCEPTED
-            if accept
-            else ReviewerAssignment.Status.DECLINED
-        )
-        assignment.save(update_fields=['status'])
-        if accept:
-            accepted_count = ReviewerAssignment.objects.filter(
-                version=assignment.version,
-                status=ReviewerAssignment.Status.ACCEPTED,
-            ).count()
+            assignment = (
+                ReviewerAssignment.objects
+                .select_for_update()
+                .select_related("version")
+                .get(pk=assignment.pk)
+            )
 
-            if accepted_count >= REQUIRED_REVIEWS_COUNT:
-                ReviewerAssignment.objects.filter(
-                    version=assignment.version,
-                    status=ReviewerAssignment.Status.PENDING,
-                ).exclude(pk=assignment.pk).update(
-                    status=ReviewerAssignment.Status.EXPIRED,
+            if assignment.reviewer_id != reviewer.id:
+                raise PermissionDenied(
+                    "You are not the reviewer on this assignment."
                 )
+
+            if assignment.status != ReviewerAssignment.Status.PENDING:
+                raise ValidationError(
+                    "Cannot respond to an assignment with status "
+                    f"'{assignment.status}'. Only PENDING assignments "
+                    "can be accepted or declined."
+                )
+
+            if assignment.response_deadline <= timezone.now():
+                assignment.status = ReviewerAssignment.Status.EXPIRED
+                assignment.save(update_fields=["status"])
+
+                response_error = (
+                    "This reviewer invitation has expired because its "
+                    "response deadline has passed."
+                )
+
+            elif not accept:
+                assignment.status = ReviewerAssignment.Status.DECLINED
+                assignment.save(update_fields=["status"])
+
+            else:
+                accepted_count = ReviewerAssignment.objects.filter(
+                    version_id=version.pk,
+                    status=ReviewerAssignment.Status.ACCEPTED,
+                ).count()
+
+                if accepted_count >= REQUIRED_REVIEWS_COUNT:
+                    assignment.status = (
+                        ReviewerAssignment.Status.EXPIRED
+                    )
+                    assignment.save(update_fields=["status"])
+
+                    response_error = (
+                        "The required number of reviewers has already "
+                        "accepted this review round."
+                    )
+                else:
+                    assignment.status = (
+                        ReviewerAssignment.Status.ACCEPTED
+                    )
+                    assignment.save(update_fields=["status"])
+
+                    if (
+                        accepted_count + 1
+                        >= REQUIRED_REVIEWS_COUNT
+                    ):
+                        ReviewerAssignment.objects.filter(
+                            version_id=version.pk,
+                            status=ReviewerAssignment.Status.PENDING,
+                        ).update(
+                            status=ReviewerAssignment.Status.EXPIRED,
+                        )
+
+        # Raise after leaving the transaction so an EXPIRED state is
+        # committed instead of being rolled back with the exception.
+        if response_error:
+            raise ValidationError(response_error)
 
         return assignment
 

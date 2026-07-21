@@ -282,7 +282,10 @@ class ReviewerAssignmentSerializer(serializers.ModelSerializer):
         return True
 
     def get_can_respond(self, instance):
-        return instance.status == ReviewerAssignment.Status.PENDING
+        return (
+            instance.status == ReviewerAssignment.Status.PENDING
+            and instance.response_deadline > timezone.now()
+        )
 
     def get_can_download_manuscript(self, instance):
         return instance.status == ReviewerAssignment.Status.ACCEPTED
