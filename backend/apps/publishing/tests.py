@@ -38,7 +38,7 @@ from .metadata import (
 from .services import PublishingService
 
 
-def create_current_open_issue(
+def create_current_published_issue(
     *,
     title="Current Issue",
     volume="1",
@@ -49,7 +49,8 @@ def create_current_open_issue(
         volume=volume,
         number=number,
         year=timezone.now().year,
-        status=Issue.Status.DRAFT,
+        status=Issue.Status.PUBLISHED,
+        published_at=timezone.now(),
         is_current=True,
     )
 
@@ -513,7 +514,7 @@ class PublishingServiceTests(TestCase):
             actor=self.editor,
             submission=submission,
         )
-        issue = create_current_open_issue()
+        issue = create_current_published_issue()
 
         article = PublishingService.publish_article(article)
 
@@ -523,6 +524,130 @@ class PublishingServiceTests(TestCase):
         self.assertEqual(article.publication_issue, issue)
         self.assertEqual(article.volume, issue.volume)
         self.assertEqual(article.issue, issue.number)
+
+    def test_publish_article_requires_a_published_issue(self):
+        submission = self._create_submission()
+        article = PublishingService.create_draft_from_submission(
+            actor=self.editor,
+            submission=submission,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "published issue",
+        ):
+            PublishingService.publish_article(article)
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.status,
+            PublishedArticle.Status.DRAFT,
+        )
+        self.assertIsNone(article.published_at)
+        self.assertIsNone(article.publication_issue_id)
+
+    def test_publish_article_honors_explicit_published_issue(self):
+        submission = self._create_submission()
+        article = PublishingService.create_draft_from_submission(
+            actor=self.editor,
+            submission=submission,
+        )
+        issue = Issue.objects.create(
+            title="Explicit Publication Issue",
+            volume="7",
+            number="3",
+            year=timezone.now().year,
+            status=Issue.Status.PUBLISHED,
+            published_at=timezone.now(),
+            is_current=False,
+        )
+
+        article.publication_issue = issue
+        article.volume = "stale-volume"
+        article.issue = "stale-issue"
+        article.save(
+            update_fields=[
+                "publication_issue",
+                "volume",
+                "issue",
+            ]
+        )
+
+        article = PublishingService.publish_article(article)
+
+        self.assertEqual(
+            article.status,
+            PublishedArticle.Status.PUBLISHED,
+        )
+        self.assertEqual(article.publication_issue, issue)
+        self.assertEqual(article.volume, issue.volume)
+        self.assertEqual(article.issue, issue.number)
+        self.assertIsNotNone(article.published_at)
+
+    def test_explicit_invalid_issue_is_not_silently_replaced(self):
+        current_issue = create_current_published_issue(
+            title="Valid Current Issue",
+            volume="10",
+            number="1",
+        )
+
+        for index, issue_status in enumerate(
+            [
+                Issue.Status.DRAFT,
+                Issue.Status.ARCHIVED,
+            ],
+            start=1,
+        ):
+            with self.subTest(issue_status=issue_status):
+                submission = self._create_submission(
+                    title=(
+                        "Invalid issue publication "
+                        f"{issue_status}"
+                    )
+                )
+                article = (
+                    PublishingService
+                    .create_draft_from_submission(
+                        actor=self.editor,
+                        submission=submission,
+                    )
+                )
+                invalid_issue = Issue.objects.create(
+                    title=f"Invalid {issue_status} Issue",
+                    volume=str(20 + index),
+                    number="1",
+                    year=timezone.now().year,
+                    status=issue_status,
+                    is_current=False,
+                )
+
+                article.publication_issue = invalid_issue
+                article.save(
+                    update_fields=["publication_issue"]
+                )
+
+                with self.assertRaisesMessage(
+                    ValidationError,
+                    "status 'published'",
+                ):
+                    PublishingService.publish_article(article)
+
+                article.refresh_from_db()
+
+                self.assertEqual(
+                    article.status,
+                    PublishedArticle.Status.DRAFT,
+                )
+                self.assertEqual(
+                    article.publication_issue,
+                    invalid_issue,
+                )
+                self.assertNotEqual(
+                    article.publication_issue,
+                    current_issue,
+                )
+                self.assertIsNone(article.published_at)
 
 
 class ArticleMetadataBuilderTests(TestCase):
@@ -1673,7 +1798,7 @@ class PublishingApiTests(TestCase):
             actor=self.manager,
             submission=self.submission,
         )
-        issue = create_current_open_issue()
+        issue = create_current_published_issue()
 
         response = self.client.post(f"/api/v1/publishing/articles/{article.id}/publish/")
 
@@ -1827,7 +1952,7 @@ class PublishingApiTests(TestCase):
             status=PublishedArticle.Status.DRAFT,
             slug="managed-draft",
         )
-        create_current_open_issue()
+        create_current_published_issue()
         self.client.force_authenticate(self.manager)
 
         response = self.client.post(
@@ -1850,7 +1975,7 @@ class PublishingApiTests(TestCase):
             status=PublishedArticle.Status.DRAFT,
             slug="unrelated-manager-draft",
         )
-        create_current_open_issue()
+        create_current_published_issue()
         self.client.force_authenticate(self.other_manager)
 
         response = self.client.post(
@@ -1867,7 +1992,7 @@ class PublishingApiTests(TestCase):
             status=PublishedArticle.Status.DRAFT,
             slug="section-editor-draft",
         )
-        create_current_open_issue()
+        create_current_published_issue()
         self.client.force_authenticate(self.user)
 
         response = self.client.post(
@@ -1947,4 +2072,117 @@ class PublishingApiTests(TestCase):
         self.assertEqual(
             article.pdf_file,
             original_object_key,
+        )
+
+    def test_published_article_cannot_be_detached_or_moved_to_draft_issue(
+        self,
+    ):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.manager,
+            submission=self.submission,
+        )
+        published_issue = create_current_published_issue()
+        article = PublishingService.publish_article(article)
+
+        draft_issue = Issue.objects.create(
+            title="Future Draft Issue",
+            volume="2",
+            number="1",
+            year=timezone.now().year,
+            status=Issue.Status.DRAFT,
+        )
+
+        self.client.force_authenticate(self.manager)
+        url = reverse(
+            "publishing-article-detail",
+            args=[article.id],
+        )
+
+        detach_response = self.client.patch(
+            url,
+            {"publication_issue": None},
+            format="json",
+        )
+        move_response = self.client.patch(
+            url,
+            {
+                "publication_issue": str(draft_issue.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            detach_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "must remain assigned",
+            str(detach_response.data),
+        )
+
+        self.assertEqual(
+            move_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "status 'published'",
+            str(move_response.data),
+        )
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.publication_issue,
+            published_issue,
+        )
+
+    def test_linked_issue_controls_volume_and_issue_metadata(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.manager,
+            submission=self.submission,
+        )
+        publication_issue = Issue.objects.create(
+            title="Metadata Synchronization Issue",
+            volume="8",
+            number="4",
+            year=timezone.now().year,
+            status=Issue.Status.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.patch(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
+            {
+                "publication_issue": str(
+                    publication_issue.id
+                ),
+                "volume": "incorrect-volume",
+                "issue": "incorrect-number",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.publication_issue,
+            publication_issue,
+        )
+        self.assertEqual(
+            article.volume,
+            publication_issue.volume,
+        )
+        self.assertEqual(
+            article.issue,
+            publication_issue.number,
         )

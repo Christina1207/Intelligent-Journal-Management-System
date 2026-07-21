@@ -53,7 +53,6 @@ export function mapArticle(dto: PublicArticleApiDto): PublicArticle {
     keywords: dto.keywords ?? [],
     doi: dto.doi ?? undefined,
     language: valueOrFallback(dto.language, "English"),
-    pdfUrl: dto.pdf_url ?? dto.pdfUrl ?? dto.download_url ?? "#",
     views: dto.views ?? 0,
     downloads: dto.downloads ?? 0,
     license: valueOrFallback(dto.license, "Not specified"),

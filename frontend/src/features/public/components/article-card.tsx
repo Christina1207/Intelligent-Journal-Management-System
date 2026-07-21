@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PublicArticle } from "../types";
+import { ArticleCardDownloadButton } from "./article-card-download-button";
 
 type ArticleCardProps = {
   article: PublicArticle;
@@ -65,12 +66,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
             View Article
           </Link>
 
-          <Link
-            href={article.pdfUrl}
-            className="rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-          >
-            Download PDF
-          </Link>
+          <ArticleCardDownloadButton slug={article.slug} />
         </div>
       </div>
     </article>

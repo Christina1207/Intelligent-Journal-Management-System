@@ -116,32 +116,77 @@ class PublishingService:
 
     @staticmethod
     @transaction.atomic
-    def publish_article(article: PublishedArticle) -> PublishedArticle:
-        article = PublishedArticle.objects.select_for_update().get(pk=article.pk)
+    def publish_article(
+        article: PublishedArticle,
+    ) -> PublishedArticle:
+        article = (
+            PublishedArticle.objects
+            .select_for_update()
+            .get(pk=article.pk)
+        )
 
         if article.status == PublishedArticle.Status.PUBLISHED:
-            raise ValidationError("This article is already published.")
+            raise ValidationError(
+                "This article is already published."
+            )
 
         if article.status == PublishedArticle.Status.RETRACTED:
-            raise ValidationError("Retracted articles cannot be published.")
+            raise ValidationError(
+                "Retracted articles cannot be published."
+            )
 
         if article.status != PublishedArticle.Status.DRAFT:
-            raise ValidationError("Only draft articles can be published.")
+            raise ValidationError(
+                "Only draft articles can be published."
+            )
 
+        if article.publication_issue_id:
+            publication_issue = (
+                Issue.objects
+                .select_for_update()
+                .get(pk=article.publication_issue_id)
+            )
+        else:
+            publication_issue = (
+                Issue.objects
+                .select_for_update()
+                .filter(
+                    is_current=True,
+                    status=Issue.Status.PUBLISHED,
+                )
+                .first()
+            )
+
+            if publication_issue is None:
+                raise ValidationError(
+                    "Assign the article to a published issue or "
+                    "configure a current published issue before "
+                    "publishing."
+                )
+
+        if publication_issue.status != Issue.Status.PUBLISHED:
+            raise ValidationError(
+                "Articles can only be published in an issue with "
+                "status 'published'. Current issue status: "
+                f"'{publication_issue.status}'."
+            )
+
+        article.publication_issue = publication_issue
+        article.volume = publication_issue.volume
+        article.issue = publication_issue.number
         article.status = PublishedArticle.Status.PUBLISHED
         article.published_at = timezone.now()
-        current_issue = Issue.objects.filter(
-            is_current=True,
-            status=Issue.Status.DRAFT,  # or whatever you define as "open"
-            ).first()
-        if current_issue is None:
-            raise ValidationError("No current open issue is configured.")
 
-        if article.publication_issue_id is None:
-            article.publication_issue = current_issue
-            article.volume = current_issue.volume
-            article.issue = current_issue.number
-        article.save(update_fields=["status", "published_at","publication_issue","volume","issue","updated_at"])
+        article.save(
+            update_fields=[
+                "publication_issue",
+                "volume",
+                "issue",
+                "status",
+                "published_at",
+                "updated_at",
+            ]
+        )
 
         return article
 

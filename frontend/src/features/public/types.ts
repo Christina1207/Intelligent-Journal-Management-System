@@ -10,7 +10,7 @@ export type PublicArticle = {
   keywords: string[];
   doi?: string;
   language: "English" | "Arabic" | "French" | string;
-  pdfUrl: string;
+
   views: number;
   downloads: number;
   license: string;

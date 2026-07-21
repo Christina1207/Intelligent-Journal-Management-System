@@ -280,7 +280,10 @@ class PublishArticleView(APIView):
         responses={
             200: PublishedArticleManagementReadSerializer,
             400: OpenApiResponse(
-                description="The article is already published, retracted, or not a draft."
+                description=(
+                    "The article is not publishable, or no valid "
+                    "published issue is available."
+                )
             ),
             401: OpenApiResponse(description="Authentication credentials were not provided."),
             404: OpenApiResponse(description="Publication record was not found."),

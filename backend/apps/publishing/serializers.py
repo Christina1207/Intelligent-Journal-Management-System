@@ -356,16 +356,36 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
+        errors = {}
+
         if "pdf_file" in self.initial_data:
-            raise serializers.ValidationError(
-                {
-                    "pdf_file": (
-                        "The article PDF is sourced from the accepted "
-                        "submission version and cannot be replaced through "
-                        "the metadata endpoint."
-                    )
-                }
+            errors["pdf_file"] = (
+                "The article PDF is sourced from the accepted "
+                "submission version and cannot be replaced through "
+                "the metadata endpoint."
             )
+
+        if (
+            self.instance is not None
+            and self.instance.status
+            == PublishedArticle.Status.PUBLISHED
+            and "publication_issue" in attrs
+        ):
+            publication_issue = attrs["publication_issue"]
+
+            if publication_issue is None:
+                errors["publication_issue"] = (
+                    "A published article must remain assigned to a "
+                    "published issue."
+                )
+            elif publication_issue.status != Issue.Status.PUBLISHED:
+                errors["publication_issue"] = (
+                    "A published article can only be moved to an "
+                    "issue with status 'published'."
+                )
+
+        if errors:
+            raise serializers.ValidationError(errors)
 
         return attrs
 
@@ -379,14 +399,27 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
         return value
     
     def update(self, instance, validated_data):
-        publication_issue_was_provided = "publication_issue" in validated_data
-
         article = super().update(instance, validated_data)
 
-        if publication_issue_was_provided and article.publication_issue_id:
-            article.volume = article.publication_issue.volume
-            article.issue = article.publication_issue.number
-            article.save(update_fields=["volume", "issue", "updated_at"])
+        if article.publication_issue_id:
+            publication_issue = article.publication_issue
+            changed_fields = []
+
+            if article.volume != publication_issue.volume:
+                article.volume = publication_issue.volume
+                changed_fields.append("volume")
+
+            if article.issue != publication_issue.number:
+                article.issue = publication_issue.number
+                changed_fields.append("issue")
+
+            if changed_fields:
+                article.save(
+                    update_fields=[
+                        *changed_fields,
+                        "updated_at",
+                    ]
+                )
 
         return article
 
