@@ -258,6 +258,25 @@ class AssignedEditorAuthorizationTests(APITestCase):
             review_deadline=timezone.now() + timedelta(days=14),
         )
 
+    def test_review_string_identifies_reviewer_and_submission(self):
+        assignment = self.create_assignment()
+
+        review = Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="The manuscript is ready for publication.",
+            comments_for_editor="No confidential concerns.",
+        )
+
+        self.assertEqual(
+            str(review),
+            (
+                f"Review({self.reviewer.id} → "
+                f"{self.submission.id} "
+                f"[{Review.Recommendation.ACCEPT}])"
+            ),
+        )
+
     def replacement_payload(self, *, reviewer=None):
         return {
             "reviewer_id": str(
@@ -696,8 +715,8 @@ class AssignedEditorAuthorizationTests(APITestCase):
 
 
     def test_candidate_search_excludes_inactive_reviewer(self):
-        self.reviewer.status = get_user_model().Status.INACTIVE
-        self.reviewer.save(update_fields=["status"])
+        self.reviewer.is_active = False
+        self.reviewer.save(update_fields=["is_active"])
 
         self.client.force_authenticate(self.editor)
 

@@ -103,7 +103,7 @@ class RecommendationService:
             )
             .filter(
                 sections=submission.section,
-                user__status=User.Status.ACTIVE,
+                user__is_active=True,
                 user__roles__name=Role.RoleName.REVIEWER,
                 has_active_assignment=False,
                 already_invited_current_round=False,

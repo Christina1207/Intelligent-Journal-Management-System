@@ -22,7 +22,11 @@ class Review(models.Model):
     submitted_at   = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Review({self.assignment.reviewer_id} → {self.assignment.submission_id} [{self.recommendation}])"
+        return (
+            f"Review({self.assignment.reviewer_id} → "
+            f"{self.assignment.version.submission_id} "
+            f"[{self.recommendation}])"
+        )
     class Meta:
         indexes = [
             models.Index(fields=["recommendation"]),

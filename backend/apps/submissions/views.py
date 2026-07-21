@@ -1,6 +1,8 @@
 import logging
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework import status, generics
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -151,36 +153,36 @@ class RevisionUploadView(APIView):
     def post(self, request, submission_id):
         if not request.user.has_role(Role.RoleName.AUTHOR):
             from django.core.exceptions import PermissionDenied
+
             raise PermissionDenied("Only authors can upload revisions.")
 
-        try:
-            submission = Submission.objects.get(id=submission_id)
-        except Submission.DoesNotExist:
-            return Response(
-                {"detail": "Submission not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        submission = get_object_or_404(
+            Submission.objects.filter(author=request.user),
+            id=submission_id,
+        )
 
         serializer = RevisionUploadSerializer(data=request.data)
-        if serializer.is_valid():
-            try:
-                version = SubmissionService.create_revision(
-                    author=request.user,
-                    submission=submission,
-                    file=serializer.validated_data["file"],
-                    blinded_file=serializer.validated_data["blinded_file"],
-                    response_to_reviewers=serializer.validated_data.get(
-                        "response_to_reviewers",
-                        "",
-                    ),
-                )
-                return Response(
-                    SubmissionVersionSerializer(version).data,
-                    status=status.HTTP_201_CREATED,
-                )
-            except Exception as e:
-                return Response(
-                    {"detail": str(e)},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            version = SubmissionService.create_revision(
+                author=request.user,
+                submission=submission,
+                file=serializer.validated_data["file"],
+                blinded_file=serializer.validated_data["blinded_file"],
+                response_to_reviewers=serializer.validated_data[
+                    "response_to_reviewers"
+                ],
+            )
+        except DjangoValidationError as exc:
+            detail = (
+                exc.messages[0]
+                if len(exc.messages) == 1
+                else exc.messages
+            )
+            raise DRFValidationError({"detail": detail}) from exc
+
+        return Response(
+            SubmissionVersionSerializer(version).data,
+            status=status.HTTP_201_CREATED,
+        )

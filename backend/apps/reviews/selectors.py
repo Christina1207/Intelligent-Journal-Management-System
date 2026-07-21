@@ -124,7 +124,7 @@ def reviewer_candidates_for(
 
     candidates = (
         User.objects.filter(
-            status=User.Status.ACTIVE,
+            is_active=True,
             roles__name=Role.RoleName.REVIEWER,
             reviewer_profile__sections=submission.section,
         )

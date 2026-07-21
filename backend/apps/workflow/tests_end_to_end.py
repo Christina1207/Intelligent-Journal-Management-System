@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -149,6 +150,13 @@ class CompleteEditorialWorkflowApiTests(APITestCase):
                     "abstract": (
                         "A sufficiently detailed abstract for the "
                         "complete editorial workflow integration test."
+                    ),
+                    "keywords": json.dumps(
+                        [
+                            "editorial workflow",
+                            "peer review",
+                            "journal management",
+                        ]
                     ),
                     "language": "en",
                     "cover_letter": (

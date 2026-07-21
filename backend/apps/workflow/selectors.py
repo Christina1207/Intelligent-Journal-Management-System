@@ -66,7 +66,7 @@ def eligible_section_editors_for(submission):
     """
     return (
         User.objects.filter(
-            status=User.Status.ACTIVE,
+            is_active=True,
             roles__name=Role.RoleName.SECTION_EDITOR,
             section_editor_memberships__section=submission.section,
             section_editor_memberships__is_active=True,

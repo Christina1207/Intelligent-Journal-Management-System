@@ -873,6 +873,121 @@ class RevisionUploadApiTests(APITestCase):
         self.assertIn("blinded_file", response.data)
         self.assertFalse(self.submission.versions.filter(version_number=2).exists())
         storage_class.return_value.upload.assert_not_called()
+    
+    @patch("apps.submissions.services.StorageService")
+    def test_revision_workflow_validation_returns_400(
+        self,
+        storage_class,
+    ):
+        self.submission.status = Submission.Status.SUBMITTED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {
+                "file": self._pdf_upload(),
+                "blinded_file": self._pdf_upload(
+                    "revision-blinded.pdf"
+                ),
+                "response_to_reviewers": (
+                    "We addressed every point raised by the reviewers."
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "Submission is not under revision",
+            str(response.data),
+        )
+        self.assertFalse(
+            self.submission.versions.filter(
+                version_number=2
+            ).exists()
+        )
+        storage_class.return_value.upload.assert_not_called()
+    
+    @patch("apps.submissions.services.StorageService")
+    def test_unexpected_storage_error_is_not_masked(
+        self,
+        storage_class,
+    ):
+        storage_class.return_value.upload.side_effect = RuntimeError(
+            "Simulated storage outage"
+        )
+        self.client.force_authenticate(self.author)
+
+        with self.assertRaisesMessage(
+            RuntimeError,
+            "Simulated storage outage",
+        ):
+            self.client.post(
+                self.url,
+                {
+                    "file": self._pdf_upload(),
+                    "blinded_file": self._pdf_upload(
+                        "revision-blinded.pdf"
+                    ),
+                    "response_to_reviewers": (
+                        "We addressed every point raised by the reviewers."
+                    ),
+                },
+                format="multipart",
+            )
+
+        self.submission.refresh_from_db()
+
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.UNDER_REVISION,
+        )
+        self.assertFalse(
+            self.submission.versions.filter(
+                version_number=2
+            ).exists()
+        )
+
+    @patch("apps.submissions.services.StorageService")
+    def test_author_cannot_upload_revision_for_another_author(
+        self,
+        storage_class,
+    ):
+        other_author = self._create_user(
+            "other-revision-author",
+            Role.RoleName.AUTHOR,
+        )
+        self.client.force_authenticate(other_author)
+
+        response = self.client.post(
+            self.url,
+            {
+                "file": self._pdf_upload(),
+                "blinded_file": self._pdf_upload(
+                    "revision-blinded.pdf"
+                ),
+                "response_to_reviewers": (
+                    "We addressed every point raised by the reviewers."
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertFalse(
+            self.submission.versions.filter(
+                version_number=2
+            ).exists()
+        )
+        storage_class.return_value.upload.assert_not_called()
 
 
 class SubmissionCreateApiTests(APITestCase):
