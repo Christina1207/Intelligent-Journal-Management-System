@@ -73,17 +73,18 @@ class SectionApiTests(APITestCase):
         self.inactive_section_manager = self._create_user(
             username="inactive-section-manager",
             role_name=Role.RoleName.SECTION_MANAGER,
-            user_status=User.Status.INACTIVE,
+            is_active=False,
         )
 
-    def _create_user(self, *, username, role_name, user_status=User.Status.ACTIVE):
+    def _create_user(self,*,username,role_name,is_active=True,
+    ):
         user = get_user_model().objects.create_user(
             username=username,
             email=f"{username}@example.com",
             password="testpass123",
             first_name=username.replace("-", " ").title(),
             last_name="User",
-            status=user_status,
+            is_active=is_active,
         )
         user.roles.add(self.roles[role_name])
         return user

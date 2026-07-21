@@ -15,6 +15,83 @@ class DefaultRoleBootstrapTests(TestCase):
         expected_roles = set(Role.RoleName.values)
 
         self.assertSetEqual(actual_roles, expected_roles)
+
+class UserActivationApiTests(APITestCase):
+    def setUp(self):
+        self.username = "activation-user"
+        self.password = "testpass123"
+        self.user = get_user_model().objects.create_user(
+            username=self.username,
+            email="activation@example.com",
+            password=self.password,
+        )
+        self.login_url = reverse("auth-login")
+        self.me_url = reverse("auth-me")
+
+    def login(self):
+        return self.client.post(
+            self.login_url,
+            {
+                "username": self.username,
+                "password": self.password,
+            },
+            format="json",
+        )
+
+    def test_active_user_can_login(self):
+        response = self.login()
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+
+    def test_inactive_user_cannot_login(self):
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        response = self.login()
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_existing_access_token_is_rejected_after_deactivation(self):
+        login_response = self.login()
+        access_token = login_response.data["access"]
+
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {access_token}"
+        )
+        response = self.client.get(self.me_url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_profile_keeps_status_api_contract(self):
+        login_response = self.login()
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=(
+                f"Bearer {login_response.data['access']}"
+            )
+        )
+        response = self.client.get(self.me_url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(response.data["status"], "ACTIVE")
+
 class CurrentUserProfileApiTests(APITestCase):
     def setUp(self):
         self.url = reverse("auth-me")
@@ -117,6 +194,7 @@ class CurrentUserProfileApiTests(APITestCase):
                 self.assertEqual(self.user.username, "christina")
                 self.assertEqual(self.user.email, "christina@example.com")
                 self.assertEqual(self.user.status, User.Status.ACTIVE)
+                self.assertTrue(self.user.is_active)
                 self.assertFalse(self.user.is_staff)
                 self.assertFalse(self.user.is_superuser)
                 self.assertEqual(self.user.password, original_password_hash)

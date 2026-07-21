@@ -19,17 +19,35 @@ class ReviewerProfileAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ["username", "email", "first_name", "last_name", "status", "is_staff","orcid"]
-    list_filter = ["status", "is_staff", "roles"]
-    search_fields = ["username", "email", "first_name", "last_name", "orcid"]
+    list_display = [
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "is_active",
+        "is_staff",
+        "orcid",
+    ]
+    list_filter = ["is_active", "is_staff", "roles"]
+    search_fields = [
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "orcid",
+    ]
     ordering = ["username"]
 
-    # Extend the base fieldsets to include our custom fields
     fieldsets = BaseUserAdmin.fieldsets + (
         (
             "Profile",
             {
-                "fields": ("orcid", "affiliation", "country", "status", "roles"),
+                "fields": (
+                    "orcid",
+                    "affiliation",
+                    "country",
+                    "roles",
+                ),
             },
         ),
     )
@@ -38,7 +56,15 @@ class UserAdmin(BaseUserAdmin):
         (
             "Profile",
             {
-                "fields": ("email", "first_name", "last_name", "orcid", "affiliation", "country", "status", "roles"),
+                "fields": (
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "orcid",
+                    "affiliation",
+                    "country",
+                    "roles",
+                ),
             },
         ),
     )

@@ -83,7 +83,7 @@ class AssignSectionManagerSerializer(serializers.Serializer):
                 "Selected user must have the SECTION_MANAGER role."
             )
 
-        if manager.status != User.Status.ACTIVE:
+        if not manager.is_active:
             raise serializers.ValidationError(
                 "Cannot assign an inactive user as section manager."
             )

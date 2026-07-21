@@ -136,6 +136,7 @@ class ReviewerProfileSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     roles = RoleSerializer(many=True, read_only=True)
     reviewer_profile = ReviewerProfileSerializer(read_only=True)
+    status = serializers.CharField(read_only=True)
 
     class Meta:
         model = User
