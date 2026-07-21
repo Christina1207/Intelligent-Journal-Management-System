@@ -6,7 +6,11 @@ from threading import Barrier
 
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections
-from django.test import TransactionTestCase, skipUnlessDBFeature
+from django.test import (
+    TestCase,
+    TransactionTestCase,
+    skipUnlessDBFeature,
+)
 
 from apps.reviews.services import ReviewService
 
@@ -26,6 +30,150 @@ from config.constants import (
     MAX_ACTIVE_REVIEWER_ASSIGNMENTS,
     REQUIRED_REVIEWS_COUNT,
 )
+
+class ReviewerAssignmentExpirationTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+
+        self.author = user_model.objects.create_user(
+            username="expiration-author",
+            email="expiration-author@example.com",
+            password="testpass123",
+        )
+        self.editor = user_model.objects.create_user(
+            username="expiration-editor",
+            email="expiration-editor@example.com",
+            password="testpass123",
+        )
+        self.reviewer = user_model.objects.create_user(
+            username="expiration-reviewer",
+            email="expiration-reviewer@example.com",
+            password="testpass123",
+        )
+
+        self.section = Section.objects.create(
+            name="Invitation Expiration Tests",
+        )
+        self.submission = Submission.objects.create(
+            title="Invitation expiration manuscript",
+            abstract="Testing periodic invitation expiration.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/expiration/full.pdf",
+            blinded_file="submissions/expiration/blinded.pdf",
+        )
+
+    def create_assignment(
+        self,
+        *,
+        status_value,
+        response_deadline,
+        reviewer=None,
+    ):
+        return ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=reviewer or self.reviewer,
+            assigned_by=self.editor,
+            status=status_value,
+            response_deadline=response_deadline,
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+
+    def test_service_expires_only_overdue_pending_assignments(self):
+        now = timezone.now()
+
+        overdue = self.create_assignment(
+            status_value=ReviewerAssignment.Status.PENDING,
+            response_deadline=now - timedelta(minutes=1),
+        )
+
+        exact_deadline_reviewer = get_user_model().objects.create_user(
+            username="exact-deadline-reviewer",
+            email="exact-deadline-reviewer@example.com",
+            password="testpass123",
+        )
+        exact_deadline = self.create_assignment(
+            reviewer=exact_deadline_reviewer,
+            status_value=ReviewerAssignment.Status.PENDING,
+            response_deadline=now,
+        )
+
+        future_reviewer = get_user_model().objects.create_user(
+            username="future-deadline-reviewer",
+            email="future-deadline-reviewer@example.com",
+            password="testpass123",
+        )
+        future = self.create_assignment(
+            reviewer=future_reviewer,
+            status_value=ReviewerAssignment.Status.PENDING,
+            response_deadline=now + timedelta(minutes=1),
+        )
+
+        accepted_reviewer = get_user_model().objects.create_user(
+            username="accepted-expiration-reviewer",
+            email="accepted-expiration-reviewer@example.com",
+            password="testpass123",
+        )
+        accepted = self.create_assignment(
+            reviewer=accepted_reviewer,
+            status_value=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=now - timedelta(minutes=1),
+        )
+
+        expired_count = (
+            ReviewService.expire_overdue_pending_assignments(
+                as_of=now,
+            )
+        )
+
+        self.assertEqual(expired_count, 2)
+
+        overdue.refresh_from_db()
+        exact_deadline.refresh_from_db()
+        future.refresh_from_db()
+        accepted.refresh_from_db()
+
+        self.assertEqual(
+            overdue.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+        self.assertEqual(
+            exact_deadline.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+        self.assertEqual(
+            future.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertEqual(
+            accepted.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+
+    @patch(
+        "apps.reviews.tasks."
+        "ReviewService.expire_overdue_pending_assignments",
+        return_value=4,
+    )
+    def test_celery_task_delegates_to_review_service(
+        self,
+        expiration_service,
+    ):
+        from apps.reviews.tasks import (
+            expire_pending_reviewer_assignments,
+        )
+
+        result = expire_pending_reviewer_assignments.run()
+
+        self.assertEqual(result, 4)
+        expiration_service.assert_called_once_with()
 
 class ReviewerManuscriptDownloadApiTests(APITestCase):
     def setUp(self):

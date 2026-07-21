@@ -5,6 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APITestCase
 from drf_spectacular.generators import SchemaGenerator
 
+from unittest.mock import patch
 from apps.accounts.models import Role, User,ReviewerProfile
 
 class DefaultRoleBootstrapTests(TestCase):
@@ -91,6 +92,25 @@ class UserActivationApiTests(APITestCase):
             status.HTTP_200_OK,
         )
         self.assertEqual(response.data["status"], "ACTIVE")
+
+class LegacyReviewExpirationTaskTests(TestCase):
+    @patch(
+        "apps.reviews.tasks."
+        "ReviewService.expire_overdue_pending_assignments",
+        return_value=3,
+    )
+    def test_legacy_account_task_delegates_to_reviews_task(
+        self,
+        expiration_service,
+    ):
+        from apps.accounts.tasks import (
+            expire_pending_reviewer_assignments,
+        )
+
+        result = expire_pending_reviewer_assignments.run()
+
+        self.assertEqual(result, 3)
+        expiration_service.assert_called_once_with()
 
 class CurrentUserProfileApiTests(APITestCase):
     def setUp(self):

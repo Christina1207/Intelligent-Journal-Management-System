@@ -85,32 +85,16 @@ def refresh_all_reviewer_orcid_profiles(self):
         "refresh_all_reviewer_orcid_profiles: dispatched %d tasks.", count
     )
 
-@shared_task(bind=True)
-def expire_pending_reviewer_assignments(self):
+@shared_task
+def expire_pending_reviewer_assignments():
     """
-    Daily beat task — expires ReviewerAssignment records where
-    response_deadline has passed and status is still PENDING.
-    Each assignment is independent — one failure does not block others.
-    """
-    from django.utils import timezone
-    from apps.workflow.models import ReviewerAssignment
+    Compatibility wrapper for workers or schedules still referencing
+    the former account-domain task path.
 
-    now = timezone.now()
-    stale_assignments = ReviewerAssignment.objects.filter(
-        status=ReviewerAssignment.Status.PENDING,
-        response_deadline__lt=now,
+    New schedules must use apps.reviews.tasks.
+    """
+    from apps.reviews.tasks import (
+        expire_pending_reviewer_assignments as reviews_expiration_task,
     )
 
-    count = 0
-    for assignment in stale_assignments:
-        try:
-            assignment.status = ReviewerAssignment.Status.EXPIRED
-            assignment.save(update_fields=["status"])
-            count += 1
-        except Exception as e:
-            logger.error(
-                "Failed to expire ReviewerAssignment %s: %s",
-                assignment.id, str(e),
-            )
-
-    logger.info("expire_pending_reviewer_assignments: expired %d assignments.", count)
+    return reviews_expiration_task.run()

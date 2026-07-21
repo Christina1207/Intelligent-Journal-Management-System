@@ -366,6 +366,28 @@ class ReviewService:
     #  MARK ASSIGNMENT EXPIRED                                             #
     # ------------------------------------------------------------------ #
 
+        # ------------------------------------------------------------------ #
+    # EXPIRE OVERDUE PENDING INVITATIONS
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def expire_overdue_pending_assignments(*, as_of=None):
+        """
+        Expire invitations that are still pending when their response
+        deadline is reached.
+
+        Returns the number of assignments updated.
+        """
+        cutoff = as_of or timezone.now()
+
+        return ReviewerAssignment.objects.filter(
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline__lte=cutoff,
+        ).update(
+            status=ReviewerAssignment.Status.EXPIRED,
+        )
+
+
     @staticmethod
     @transaction.atomic
     def mark_assignment_expired(*, editor, assignment):
