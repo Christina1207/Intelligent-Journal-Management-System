@@ -47,11 +47,11 @@ class PublishedArticle(models.Model):
     issue = models.CharField(max_length=100, blank=True, default="")
     first_page = models.CharField(max_length=50, blank=True, default="")
     last_page = models.CharField(max_length=50, blank=True, default="")
-    pdf_file = models.FileField(
-        upload_to="published/articles/",
+    pdf_file = models.CharField(
         max_length=500,
         blank=True,
-        null=True,
+        default="",
+        help_text="Private MinIO object key for the published PDF.",
     )
     status = models.CharField(
         max_length=20,

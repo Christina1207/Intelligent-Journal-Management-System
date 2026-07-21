@@ -688,7 +688,7 @@ class CompleteEditorialWorkflowApiTests(APITestCase):
             version_two,
         )
         self.assertEqual(
-            article.pdf_file.name,
+            article.pdf_file,
             version_two.file,
         )
 

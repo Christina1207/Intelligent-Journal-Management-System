@@ -339,7 +339,6 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
             "issue",
             "first_page",
             "last_page",
-            "pdf_file",
         ]
         extra_kwargs = {
             "publication_issue": {"required": False, "allow_null": True},
@@ -354,8 +353,21 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
             "issue": {"required": False, "allow_blank": True},
             "first_page": {"required": False, "allow_blank": True},
             "last_page": {"required": False, "allow_blank": True},
-            "pdf_file": {"required": False, "allow_null": True},
         }
+
+    def validate(self, attrs):
+        if "pdf_file" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "pdf_file": (
+                        "The article PDF is sourced from the accepted "
+                        "submission version and cannot be replaced through "
+                        "the metadata endpoint."
+                    )
+                }
+            )
+
+        return attrs
 
     def validate_doi(self, value):
         return value or None

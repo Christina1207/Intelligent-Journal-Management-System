@@ -162,7 +162,11 @@ class PublishingServiceTests(TestCase):
             article.license_url,
             "https://creativecommons.org/licenses/by/4.0/",
         )
-        self.assertEqual(article.pdf_file.name, "submissions/example/v1/manuscript.pdf")
+        self.assertIsInstance(article.pdf_file, str)
+        self.assertEqual(
+            article.pdf_file,
+            "submissions/example/v1/manuscript.pdf",
+        )
         self.assertTrue(article.slug.startswith("semantic-matching-in-editorial-workflows"))
 
     def test_create_draft_snapshots_primary_author_metadata(self):
@@ -501,7 +505,7 @@ class PublishingServiceTests(TestCase):
             submission=submission,
         )
 
-        self.assertEqual(article.pdf_file.name, long_object_path)
+        self.assertEqual(article.pdf_file, long_object_path)
 
     def test_publish_article_sets_published_status_and_timestamp(self):
         submission = self._create_submission()
@@ -1906,4 +1910,41 @@ class PublishingApiTests(TestCase):
         self.assertEqual(
             returned_ids,
             {str(managed_article.id)},
+        )
+    def test_patch_cannot_replace_pdf_object_key(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.manager,
+            submission=self.submission,
+        )
+        original_object_key = article.pdf_file
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.patch(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
+            {
+                "pdf_file": (
+                    "submissions/unrelated/v1/full/replacement.pdf"
+                )
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "accepted submission version",
+            str(response.data),
+        )
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.pdf_file,
+            original_object_key,
         )

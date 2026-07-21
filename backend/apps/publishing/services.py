@@ -155,7 +155,7 @@ class PublishingService:
         if article.status != PublishedArticle.Status.PUBLISHED:
             raise Http404("Article not found.")
 
-        object_name = article.pdf_file.name if article.pdf_file else ""
+        object_name = (article.pdf_file or "").strip()
         if not object_name:
             raise Http404("Article PDF is not available.")
 
