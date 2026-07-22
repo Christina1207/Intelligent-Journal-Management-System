@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from apps.reviews.views import (
     AssignReviewerView,
     AssignReviewersView,
@@ -83,5 +83,26 @@ reviewer_urlpatterns = [
         'assignments/<uuid:assignment_id>/manuscript/',
         ReviewerManuscriptDownloadView.as_view(),
         name='reviewer-manuscript-download',
+    ),
+]
+
+urlpatterns = [
+    path(
+        "editor/",
+        include(
+            (
+                editor_urlpatterns,
+                "editor-reviews",
+            )
+        ),
+    ),
+    path(
+        "reviewer/",
+        include(
+            (
+                reviewer_urlpatterns,
+                "reviewer",
+            )
+        ),
     ),
 ]
