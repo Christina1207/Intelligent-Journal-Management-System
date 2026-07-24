@@ -11,6 +11,7 @@ from .constants import (
     get_triage_checklist,
 )
 from .models import SubmissionAssignment, TriageAssessment
+from .transitions import transition_submission
 
 class AssignmentService:
     @staticmethod
@@ -149,8 +150,11 @@ class AssignmentService:
         )
 
         submission.assigned_editor = editor
-        submission.status = Submission.Status.ASSIGNED
-        submission.save(update_fields=["assigned_editor", "status"])
+        transition_submission(
+            submission,
+            Submission.Status.ASSIGNED,
+            update_fields=("assigned_editor",),
+        )
 
         return assignment
 
@@ -658,8 +662,9 @@ class TriageService:
                 "decision_letter",
             ]
         )
-
-        submission.status = Submission.Status.REJECTED
-        submission.save(update_fields=["status"])
+        transition_submission(
+            submission,
+            Submission.Status.REJECTED,
+        )
 
         return assessment
