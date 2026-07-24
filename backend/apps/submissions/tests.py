@@ -1061,7 +1061,13 @@ class SubmissionCreateApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        submission = Submission.objects.get(title="Submission with blinded manuscript")
+        submission = Submission.objects.get(
+            title="Submission with blinded manuscript"
+        )
+        self.assertEqual(
+            submission.status,
+            Submission.Status.SUBMITTED,
+        )
         self.assertEqual(submission.versions.count(), 1)
         self.assertEqual(
             submission.keywords,

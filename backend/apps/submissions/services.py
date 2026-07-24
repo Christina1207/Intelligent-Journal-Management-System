@@ -6,6 +6,7 @@ from django.db.models import Count, Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.workflow.models import ReviewerAssignment
+from apps.workflow.transitions import transition_submission
 from apps.core.storage import StorageService
 from config.constants import  REVISION_REVIEW_DEADLINE_DAYS
 from .models import Submission, SubmissionVersion,SubmissionCoAuthor
@@ -95,7 +96,6 @@ class SubmissionService:
         coauthors_data = validated_data.pop("coauthors", [])
         submission = Submission.objects.create(
             author=author,
-            status=Submission.Status.SUBMITTED,
             **validated_data,
         )
         SubmissionCoAuthor.objects.bulk_create(
@@ -279,8 +279,10 @@ class SubmissionService:
                     response_deadline=response_deadline,
                     review_deadline=review_deadline,
                 )
-            submission.status = Submission.Status.UNDER_REVIEW
-            submission.save(update_fields=["status"])
+            transition_submission(
+                submission,
+                Submission.Status.UNDER_REVIEW,
+            )
 
             logger.info(
                 "Revision v%d created for submission %s. "
