@@ -7,6 +7,7 @@ from apps.submissions.policies import (
     validate_revision_round_available,
 )
 from apps.workflow.models import ReviewerAssignment
+from apps.workflow.transitions import transition_submission
 from apps.reviews.models import Review
 from config.constants import REQUIRED_REVIEWS_COUNT
 
@@ -157,8 +158,10 @@ class ReviewService:
 
         # --- transition submission to UNDER_REVIEW on first active assignment ---
         if submission.status == Submission.Status.ASSIGNED:
-            submission.status = Submission.Status.UNDER_REVIEW
-            submission.save(update_fields=['status'])
+            transition_submission(
+                submission,
+                Submission.Status.UNDER_REVIEW,
+            )
 
         return assignment
 
@@ -356,9 +359,14 @@ class ReviewService:
             review__isnull=False,
         ).count()
 
-        if accepted_count >= REQUIRED_REVIEWS_COUNT and submitted_count == accepted_count:
-            submission.status = Submission.Status.REVIEWED
-            submission.save(update_fields=["status"])
+        if (
+            accepted_count >= REQUIRED_REVIEWS_COUNT
+            and submitted_count == accepted_count
+        ):
+            transition_submission(
+                submission,
+                Submission.Status.REVIEWED,
+            )
 
         return review
 
@@ -516,18 +524,21 @@ class ReviewService:
         )
 
         if decision == SubmissionVersion.Decision.ACCEPTED:
-            submission.status = Submission.Status.ACCEPTED
+            target_status = Submission.Status.ACCEPTED
         elif decision == SubmissionVersion.Decision.REJECTED:
-            submission.status = Submission.Status.REJECTED
+            target_status = Submission.Status.REJECTED
         elif decision in (
             SubmissionVersion.Decision.MINOR_REVISION,
             SubmissionVersion.Decision.MAJOR_REVISION,
         ):
-            submission.status = Submission.Status.UNDER_REVISION
+            target_status = Submission.Status.UNDER_REVISION
         else:
             raise ValidationError(f"Unsupported decision '{decision}'.")
 
-        submission.save(update_fields=["status"])
+        transition_submission(
+            submission,
+            target_status,
+        )
 
         return current_version
 
