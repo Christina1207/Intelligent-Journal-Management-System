@@ -810,10 +810,8 @@ class EditorQueueApiTests(APITestCase):
         active_statuses = [
             Submission.Status.ASSIGNED,
             Submission.Status.UNDER_REVIEW,
-            Submission.Status.SUSPENDED,
             Submission.Status.REVIEWED,
             Submission.Status.UNDER_REVISION,
-            Submission.Status.REVISED,
         ]
 
         expected_ids = set()

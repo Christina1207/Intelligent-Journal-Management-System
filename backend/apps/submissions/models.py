@@ -17,13 +17,10 @@ class Submission(models.Model):
         SUBMITTED     = "SUBMITTED",     "Submitted"
         ASSIGNED      = "ASSIGNED",      "Assigned"
         UNDER_REVIEW  = "UNDER_REVIEW",  "Under Review"
-        SUSPENDED     = "SUSPENDED",     "Suspended"
         REVIEWED      = "REVIEWED",      "Reviewed"
         UNDER_REVISION = "UNDER_REVISION", "Under Revision"
-        REVISED       = "REVISED",       "Revised"
         ACCEPTED      = "ACCEPTED",      "Accepted"
         REJECTED      = "REJECTED",      "Rejected"
-    # TODO: should i add PUBLISHED?
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=500)
@@ -59,7 +56,6 @@ class Submission(models.Model):
         on_delete=models.PROTECT,
         related_name="submissions",
         # PROTECT: deactivating a section ≠ deleting its submissions
-        # suspension logic handled at the view/service layer, not DB cascade
     )
     # Use SubmissionAssignment as audit/history
     # Use Submission.assigned_editor as current active editor

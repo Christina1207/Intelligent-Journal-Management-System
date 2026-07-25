@@ -21,7 +21,6 @@ class AuthorDashboardService:
         Submission.Status.ASSIGNED,
         Submission.Status.UNDER_REVIEW,
         Submission.Status.REVIEWED,
-        Submission.Status.REVISED,
     )
     ACTION_REQUIRED_STATUSES = (
         Submission.Status.UNDER_REVISION,

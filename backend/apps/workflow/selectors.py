@@ -23,10 +23,8 @@ def submissions_managed_by(user):
 EDITOR_WORKLOAD_STATUSES = (
     Submission.Status.ASSIGNED,
     Submission.Status.UNDER_REVIEW,
-    Submission.Status.SUSPENDED,
     Submission.Status.REVIEWED,
     Submission.Status.UNDER_REVISION,
-    Submission.Status.REVISED,
 )
 
 EDITOR_ACTIVE_STATUSES = EDITOR_WORKLOAD_STATUSES
@@ -95,10 +93,8 @@ def eligible_section_editors_for(submission):
 MANAGER_MONITORED_STATUSES = (
     Submission.Status.ASSIGNED,
     Submission.Status.UNDER_REVIEW,
-    Submission.Status.SUSPENDED,
     Submission.Status.REVIEWED,
     Submission.Status.UNDER_REVISION,
-    Submission.Status.REVISED,
 )
 
 
@@ -145,10 +141,8 @@ PRIORITIZABLE_STATUSES = (
     Submission.Status.SUBMITTED,
     Submission.Status.ASSIGNED,
     Submission.Status.UNDER_REVIEW,
-    Submission.Status.SUSPENDED,
     Submission.Status.REVIEWED,
     Submission.Status.UNDER_REVISION,
-    Submission.Status.REVISED,
 )
 
 

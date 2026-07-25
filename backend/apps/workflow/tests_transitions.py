@@ -134,3 +134,13 @@ class SubmissionTransitionTests(SimpleTestCase):
         save_mock.assert_called_once_with(
             update_fields=["status", "assigned_editor"]
         )
+
+    def test_unused_statuses_are_not_submission_choices(self):
+        self.assertNotIn(
+            "SUSPENDED",
+            Submission.Status.values,
+        )
+        self.assertNotIn(
+            "REVISED",
+            Submission.Status.values,
+        )

@@ -34,8 +34,6 @@ ALLOWED_SUBMISSION_TRANSITIONS = {
             Submission.Status.UNDER_REVIEW,
         }
     ),
-    Submission.Status.SUSPENDED: frozenset(),
-    Submission.Status.REVISED: frozenset(),
     Submission.Status.ACCEPTED: frozenset(),
     Submission.Status.REJECTED: frozenset(),
 }

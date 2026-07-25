@@ -24,10 +24,6 @@ class SubmissionPriorityService:
             100,
             "Completed reviews are awaiting an editorial decision.",
         ),
-        Submission.Status.REVISED: (
-            90,
-            "A revised manuscript is awaiting the next review action.",
-        ),
         Submission.Status.SUBMITTED: (
             85,
             "A new submission is awaiting initial editorial processing.",
@@ -35,10 +31,6 @@ class SubmissionPriorityService:
         Submission.Status.ASSIGNED: (
             80,
             "The assigned editor should begin reviewer selection.",
-        ),
-        Submission.Status.SUSPENDED: (
-            60,
-            "The suspended case may require editorial resolution.",
         ),
         Submission.Status.UNDER_REVIEW: (
             30,
@@ -53,7 +45,6 @@ class SubmissionPriorityService:
     REVIEWER_COVERAGE_STATUSES = {
         Submission.Status.ASSIGNED,
         Submission.Status.UNDER_REVIEW,
-        Submission.Status.REVISED,
     }
 
     @classmethod

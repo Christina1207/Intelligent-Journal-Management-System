@@ -513,11 +513,9 @@ class AuthorDashboardApiTests(APITestCase):
             ("Assigned paper", Submission.Status.ASSIGNED),
             ("Under review paper", Submission.Status.UNDER_REVIEW),
             ("Reviewed paper", Submission.Status.REVIEWED),
-            ("Revised paper", Submission.Status.REVISED),
             ("Revision paper", Submission.Status.UNDER_REVISION),
             ("Accepted paper", Submission.Status.ACCEPTED),
             ("Rejected paper", Submission.Status.REJECTED),
-            ("Suspended paper", Submission.Status.SUSPENDED),
         ]
 
         for index, (title, submission_status) in enumerate(statuses):
@@ -563,8 +561,8 @@ class AuthorDashboardApiTests(APITestCase):
         self.assertEqual(
             response.data["summary"],
             {
-                "total": 9,
-                "active": 5,
+                "total": 7,
+                "active": 4,
                 "needs_revision": 1,
                 "accepted": 1,
                 "rejected": 1,
@@ -585,11 +583,11 @@ class AuthorDashboardApiTests(APITestCase):
         self.assertEqual(
             recent_titles,
             [
-                "Suspended paper",
                 "Rejected paper",
                 "Accepted paper",
                 "Revision paper",
-                "Revised paper",
+                "Reviewed paper",
+                "Under review paper",
             ],
         )
 

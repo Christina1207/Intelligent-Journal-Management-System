@@ -546,10 +546,4 @@ class ManagerMonitoringSubmissionSerializer(
         if submission.status == submission.Status.UNDER_REVISION:
             flags.append("AUTHOR_REVISION_PENDING")
 
-        if submission.status == submission.Status.REVISED:
-            flags.append("REVISION_REVIEW_PENDING")
-
-        if submission.status == submission.Status.SUSPENDED:
-            flags.append("CASE_SUSPENDED")
-
         return flags
