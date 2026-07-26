@@ -14,6 +14,9 @@ import type {
   EditorReviewWorkspaceResponse,
   EditorDecisionResponse,
   MakeEditorDecisionPayload,
+  CancelReviewerAssignmentPayload,
+  ReplaceReviewerAssignmentPayload,
+  ReplaceReviewerAssignmentResponse,
 } from "@/features/reviews/types";
 
 export function getReviewerAssignments() {
@@ -108,6 +111,32 @@ export function makeEditorDecision(
 ) {
   return apiClient.post<EditorDecisionResponse>(
     `/editor/submissions/${submissionId}/decision/`,
+    payload,
+  );
+}
+
+export function expireReviewerAssignment(assignmentId: string) {
+  return apiClient.post<ReviewerAssignment>(
+    `/editor/assignments/${assignmentId}/expire/`,
+  );
+}
+
+export function cancelReviewerAssignment(
+  assignmentId: string,
+  payload: CancelReviewerAssignmentPayload,
+) {
+  return apiClient.post<ReviewerAssignment>(
+    `/editor/assignments/${assignmentId}/cancel/`,
+    payload,
+  );
+}
+
+export function replaceReviewerAssignment(
+  assignmentId: string,
+  payload: ReplaceReviewerAssignmentPayload,
+) {
+  return apiClient.post<ReplaceReviewerAssignmentResponse>(
+    `/editor/assignments/${assignmentId}/replace/`,
     payload,
   );
 }

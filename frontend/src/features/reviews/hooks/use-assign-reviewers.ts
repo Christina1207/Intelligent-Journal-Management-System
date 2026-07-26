@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { assignReviewers } from "@/features/reviews/api";
 import { reviewQueryKeys } from "@/features/reviews/api/review-query-keys";
 import type { AssignReviewersPayload } from "@/features/reviews/types";
+import { submissionQueryKeys } from "@/features/submissions/query-keys";
 
 interface AssignReviewersVariables {
   submissionId: string;
@@ -29,6 +30,9 @@ export function useAssignReviewers() {
             "submissions",
             variables.submissionId,
           ],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.detail(variables.submissionId),
         }),
       ]);
     },

@@ -20,6 +20,7 @@ import {
 import { useEditorReviewWorkspace } from "@/features/reviews/hooks";
 import type { EditorReview, ReviewerAssignment } from "@/features/reviews/types";
 import { EditorDecisionForm } from "@/features/reviews/components/editor-decision-form";
+import { ReviewerAssignmentActions } from "@/features/reviews/components/reviewer-assignment-actions";
 
 interface EditorReviewProgressPanelProps {
   submissionId: string;
@@ -37,13 +38,17 @@ function formatDateTime(value: string | null) {
 }
 
 function assignmentDeadline(assignment: ReviewerAssignment) {
-  return assignment.status === "PENDING"
-    ? assignment.response_deadline
-    : assignment.review_deadline;
+  return assignment.status === "ACCEPTED"
+    ? assignment.review_deadline
+    : assignment.response_deadline;
 }
 
-function assignmentDeadlinePassed(assignment: ReviewerAssignment) {
-  return assignment.is_overdue || isDeadlinePast(assignmentDeadline(assignment));
+function assignmentRequiresAttention(assignment: ReviewerAssignment) {
+  return (
+    !assignment.review_submitted &&
+    (assignment.status === "PENDING" || assignment.status === "ACCEPTED") &&
+    (assignment.is_overdue || isDeadlinePast(assignmentDeadline(assignment)))
+  );
 }
 
 function ReviewCard({ review }: { review: EditorReview }) {
@@ -74,12 +79,12 @@ function ReviewCard({ review }: { review: EditorReview }) {
       </div>
 
       {review.comments_for_editor ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-          <h5 className="text-sm font-medium text-amber-950">
+        <div className="rounded-md border border-status-warning-border bg-status-warning-subtle p-3">
+          <h5 className="text-sm font-medium text-status-warning-foreground">
             Confidential comments for the editor
           </h5>
           <p
-            className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-900"
+            className="mt-2 whitespace-pre-wrap text-sm leading-6 text-status-warning-foreground"
             dir="auto"
           >
             {review.comments_for_editor}
@@ -133,32 +138,23 @@ export function EditorReviewProgressPanel({
   const assignments = workspace.assignments;
 
   const counts = {
-    total: assignments.length,
-    pending: assignments.filter((assignment) => assignment.status === "PENDING")
-      .length,
-    accepted: assignments.filter(
-      (assignment) => assignment.status === "ACCEPTED",
-    ).length,
-    declined: assignments.filter(
-      (assignment) => assignment.status === "DECLINED",
-    ).length,
-    expired: assignments.filter((assignment) => assignment.status === "EXPIRED")
-      .length,
-    cancelled: assignments.filter(
-      (assignment) => assignment.status === "CANCELLED",
-    ).length,
-    submitted: assignments.filter((assignment) => assignment.review_submitted)
-      .length,
+    total: workspace.progress.total_invitations,
+    pending: workspace.progress.pending,
+    accepted: workspace.progress.accepted,
+    declined: workspace.progress.declined,
+    expired: workspace.progress.expired,
+    cancelled: workspace.progress.cancelled,
+    submitted: workspace.progress.submitted,
     overdueInvitations: assignments.filter(
       (assignment) =>
         assignment.status === "PENDING" &&
-        assignmentDeadlinePassed(assignment),
+        assignmentRequiresAttention(assignment),
     ).length,
     overdueReviews: assignments.filter(
       (assignment) =>
         assignment.status === "ACCEPTED" &&
         !assignment.review_submitted &&
-        assignmentDeadlinePassed(assignment),
+        assignmentRequiresAttention(assignment),
     ).length,
   };
 
@@ -310,7 +306,7 @@ export function EditorReviewProgressPanel({
                   key={assignment.id}
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium" dir="auto">
                       {assignment.reviewer.full_name}
                     </p>
@@ -326,17 +322,29 @@ export function EditorReviewProgressPanel({
                       deadline={deadline}
                       isOverdue={assignment.is_overdue}
                       kind={
-                        assignment.status === "PENDING" ? "response" : "review"
+                        assignment.status === "ACCEPTED" ? "review" : "response"
                       }
                       className="mt-3"
                     />
                   </div>
 
-                  <InvitationStatusBadge
-                    status={assignment.status}
-                    reviewSubmitted={assignment.review_submitted}
-                    isOverdue={assignmentDeadlinePassed(assignment)}
-                  />
+                  <div className="shrink-0 space-y-2 sm:max-w-xs">
+                    <div className="flex justify-start sm:justify-end">
+                      <InvitationStatusBadge
+                        status={assignment.status}
+                        reviewSubmitted={assignment.review_submitted}
+                        isOverdue={assignmentRequiresAttention(assignment)}
+                      />
+                    </div>
+                    <ReviewerAssignmentActions
+                      assignment={assignment}
+                      submissionId={submissionId}
+                      responseDeadlinePassed={
+                        assignment.status === "PENDING" &&
+                        assignmentRequiresAttention(assignment)
+                      }
+                    />
+                  </div>
                 </article>
               );
             })}

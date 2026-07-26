@@ -74,3 +74,10 @@ export {
 export { useSectionEditorQueue } from "./use-section-editor-queue";
 export { useEditorReviewWorkspace } from "./use-editor-review-workspace";
 export { useMakeEditorDecision } from "./use-make-editor-decision";
+export {
+  useCancelReviewerAssignment,
+  useExpireReviewerAssignment,
+  useReplaceReviewerAssignment,
+} from "./use-manage-reviewer-assignment";
+export { useEditorQueueWorkspaces } from "./use-editor-queue-workspaces";
+export type { EditorQueueWorkspaceState } from "./use-editor-queue-workspaces";

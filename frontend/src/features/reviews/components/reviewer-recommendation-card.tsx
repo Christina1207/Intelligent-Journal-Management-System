@@ -20,6 +20,8 @@ export function ReviewerRecommendationCard({
   selected,
   onSelect,
 }: ReviewerRecommendationCardProps) {
+  const evidenceAvailable = reviewer.scoring_mode !== "unavailable";
+
   return (
     <button
       type="button"
@@ -41,7 +43,13 @@ export function ReviewerRecommendationCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Badge>{percentage(reviewer.recommendation_score)}% relevance</Badge>
+          {evidenceAvailable ? (
+            <Badge>
+              {percentage(reviewer.recommendation_score)}% match evidence
+            </Badge>
+          ) : (
+            <Badge variant="outline">Match evidence unavailable</Badge>
+          )}
 
           {selected ? (
             <Check className="size-4 text-primary" aria-label="Selected" />
@@ -50,25 +58,27 @@ export function ReviewerRecommendationCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {reviewer.scoring_mode !== "keyword_only" ? (
+        {evidenceAvailable && reviewer.scoring_mode !== "keyword_only" ? (
           <Badge variant="secondary">
             {percentage(reviewer.similarity_score)}% semantic
           </Badge>
         ) : null}
 
-        {reviewer.scoring_mode !== "semantic_only" ? (
+        {evidenceAvailable && reviewer.scoring_mode !== "semantic_only" ? (
           <Badge variant="secondary">
             {percentage(reviewer.keyword_overlap_score)}% keyword coverage
           </Badge>
         ) : null}
 
-        <Badge variant="outline">
-          {reviewer.scoring_mode === "hybrid"
-            ? "Hybrid evidence"
-            : reviewer.scoring_mode === "keyword_only"
-              ? "Keyword fallback"
-              : "Semantic only"}
-        </Badge>
+        {evidenceAvailable ? (
+          <Badge variant="outline">
+            {reviewer.scoring_mode === "hybrid"
+              ? "Hybrid evidence"
+              : reviewer.scoring_mode === "keyword_only"
+                ? "Keyword fallback"
+                : "Semantic only"}
+          </Badge>
+        ) : null}
         <Badge variant="outline">
           {reviewer.active_assignment_count} active
         </Badge>
