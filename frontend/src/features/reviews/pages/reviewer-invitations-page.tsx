@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { RefreshCw } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  RefreshCw,
+  RotateCcw,
+  Send,
+  TriangleAlert,
+} from "lucide-react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -11,55 +19,89 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReviewerAssignmentCard } from "@/features/reviews/components";
 import { useReviewerAssignments } from "@/features/reviews/hooks";
+import {
+  compareAssignmentDeadlines,
+  compareNewestAssignments,
+  getReviewerQueueGroup,
+  type ReviewerQueueGroup,
+} from "@/features/reviews/reviewer-assignment-state";
 import type { ReviewerAssignment } from "@/features/reviews/types";
-
-function compareDeadlines(
-  first: ReviewerAssignment,
-  second: ReviewerAssignment,
-) {
-  const firstDeadline = first.review_deadline ?? first.response_deadline;
-  const secondDeadline = second.review_deadline ?? second.response_deadline;
-
-  return (
-    new Date(firstDeadline ?? 0).getTime() -
-    new Date(secondDeadline ?? 0).getTime()
-  );
-}
 
 interface AssignmentSectionProps {
   title: string;
   description: string;
   assignments: ReviewerAssignment[];
-  emptyMessage: string;
+  variant?: "invitation" | "queue" | "history";
+  icon: typeof Clock3;
+  emptyMessage?: string;
+  showWhenEmpty?: boolean;
 }
 
 function AssignmentSection({
   title,
   description,
   assignments,
+  variant = "queue",
+  icon: Icon,
   emptyMessage,
+  showWhenEmpty = false,
 }: AssignmentSectionProps) {
+  if (assignments.length === 0 && !showWhenEmpty) {
+    return null;
+  }
+
+  const headingId = `${title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}-heading`;
+
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+    <section className="space-y-3" aria-labelledby={headingId}>
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <div>
+          <h2 id={headingId} className="text-lg font-semibold">
+            {title}
+          </h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
       </div>
 
       {assignments.length > 0 ? (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {assignments.map((assignment) => (
             <ReviewerAssignmentCard
               key={assignment.id}
               assignment={assignment}
+              variant={variant}
             />
           ))}
         </div>
       ) : (
-        <EmptyState title={emptyMessage} className="min-h-32" />
+        <EmptyState
+          title={emptyMessage ?? `No ${title.toLowerCase()}`}
+          className="min-h-28"
+        />
       )}
     </section>
   );
+}
+
+function createAssignmentGroups(): Record<
+  ReviewerQueueGroup,
+  ReviewerAssignment[]
+> {
+  return {
+    INVITATION: [],
+    APPROACHING: [],
+    OVERDUE: [],
+    MANDATORY_REVISION: [],
+    ACTIVE: [],
+    COMPLETED: [],
+    CLOSED: [],
+  };
 }
 
 export function ReviewerInvitationsPage() {
@@ -70,36 +112,26 @@ export function ReviewerInvitationsPage() {
   );
 
   const groupedAssignments = useMemo(() => {
-    const invitations = assignments
-      .filter((assignment) => assignment.status === "PENDING")
-      .sort(compareDeadlines);
+    const groups = createAssignmentGroups();
 
-    const active = assignments
-      .filter(
-        (assignment) =>
-          assignment.status === "ACCEPTED" && !assignment.review_submitted,
-      )
-      .sort((first, second) => {
-        if (first.is_overdue !== second.is_overdue) {
-          return first.is_overdue ? -1 : 1;
-        }
+    for (const assignment of assignments) {
+      groups[getReviewerQueueGroup(assignment)].push(assignment);
+    }
 
-        return compareDeadlines(first, second);
-      });
+    for (const group of [
+      "INVITATION",
+      "APPROACHING",
+      "OVERDUE",
+      "MANDATORY_REVISION",
+      "ACTIVE",
+    ] satisfies ReviewerQueueGroup[]) {
+      groups[group].sort(compareAssignmentDeadlines);
+    }
 
-    const history = assignments
-      .filter(
-        (assignment) =>
-          assignment.review_submitted ||
-          ["DECLINED", "EXPIRED", "CANCELLED"].includes(assignment.status),
-      )
-      .sort(
-        (first, second) =>
-          new Date(second.assigned_at).getTime() -
-          new Date(first.assigned_at).getTime(),
-      );
+    groups.COMPLETED.sort(compareNewestAssignments);
+    groups.CLOSED.sort(compareNewestAssignments);
 
-    return { invitations, active, history };
+    return groups;
   }, [assignments]);
 
   if (assignmentsQuery.isPending) {
@@ -135,73 +167,140 @@ export function ReviewerInvitationsPage() {
     );
   }
 
+  const activeCount =
+    groupedAssignments.APPROACHING.length +
+    groupedAssignments.OVERDUE.length +
+    groupedAssignments.MANDATORY_REVISION.length +
+    groupedAssignments.ACTIVE.length;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-9">
       <PageHeader
         eyebrow="Peer review"
         title="Reviewer workspace"
-        description="Manage invitations, access blinded manuscripts, and submit confidential peer-review reports."
+        description="Respond to invitations, work from blinded manuscript versions, and submit advisory reports without exposing author identities."
+        actions={
+          assignmentsQuery.isFetching ? (
+            <p
+              className="flex items-center gap-2 text-xs text-muted-foreground"
+              role="status"
+            >
+              <RefreshCw
+                className="size-3.5 animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+              Refreshing assignments
+            </p>
+          ) : null
+        }
       />
-
-      <section
-        aria-label="Reviewer assignment summary"
-        className="grid gap-3 sm:grid-cols-3"
-      >
-        <Card size="sm">
-          <CardContent>
-            <p className="text-sm text-muted-foreground">Pending invitations</p>
-            <p className="mt-2 text-2xl font-semibold">
-              {groupedAssignments.invitations.length}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardContent>
-            <p className="text-sm text-muted-foreground">Active reviews</p>
-            <p className="mt-2 text-2xl font-semibold">
-              {groupedAssignments.active.length}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardContent>
-            <p className="text-sm text-muted-foreground">Submitted or closed</p>
-            <p className="mt-2 text-2xl font-semibold">
-              {groupedAssignments.history.length}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
 
       {assignments.length === 0 ? (
         <EmptyState
           title="No reviewer assignments"
           description="New review invitations and active assignments will appear here."
+          icon={<ClipboardList aria-hidden="true" />}
         />
       ) : (
         <>
           <AssignmentSection
-            title="Pending invitations"
-            description="Accept or decline invitations before their response deadlines."
-            assignments={groupedAssignments.invitations}
-            emptyMessage="No pending invitations"
+            title="Invitations requiring response"
+            description="Check scope, availability, conflicts, and both deadlines before responding."
+            assignments={groupedAssignments.INVITATION}
+            variant="invitation"
+            icon={Send}
           />
 
           <AssignmentSection
-            title="Active reviews"
-            description="Download the blinded manuscript and submit your report before the deadline."
-            assignments={groupedAssignments.active}
-            emptyMessage="No active reviews"
+            title="Reviews due soon"
+            description="Active first-round reviews with a deadline in the next 48 hours."
+            assignments={groupedAssignments.APPROACHING}
+            icon={Clock3}
           />
 
           <AssignmentSection
-            title="Review history"
-            description="Submitted reviews and closed invitations remain available for workflow tracking."
-            assignments={groupedAssignments.history}
-            emptyMessage="No review history"
+            title="Overdue reviews"
+            description="These accepted reviews have passed their deadlines and need immediate attention."
+            assignments={groupedAssignments.OVERDUE}
+            icon={TriangleAlert}
           />
+
+          <AssignmentSection
+            title="Mandatory revision-round reviews"
+            description="Accepted reviewers continue automatically on revised manuscript versions; no optional invitation is shown."
+            assignments={groupedAssignments.MANDATORY_REVISION}
+            icon={RotateCcw}
+          />
+
+          <AssignmentSection
+            title="Other active reviews"
+            description="Accepted reviews that are underway and not yet close to their deadlines."
+            assignments={groupedAssignments.ACTIVE}
+            icon={ClipboardList}
+          />
+
+          <AssignmentSection
+            title="Recently completed reviews"
+            description="Submitted review assignments are locked and retained as read-only workflow records."
+            assignments={groupedAssignments.COMPLETED}
+            variant="history"
+            icon={CheckCircle2}
+          />
+
+          <section
+            aria-labelledby="reviewer-workload-heading"
+            className="space-y-3"
+          >
+            <div>
+              <h2 id="reviewer-workload-heading" className="text-lg font-semibold">
+                Workload summary
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                A concise count of your current reviewer workload.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  label: "Awaiting response",
+                  value: groupedAssignments.INVITATION.length,
+                },
+                { label: "Active reviews", value: activeCount },
+                {
+                  label: "Overdue",
+                  value: groupedAssignments.OVERDUE.length,
+                },
+                {
+                  label: "Completed",
+                  value: groupedAssignments.COMPLETED.length,
+                },
+              ].map((item) => (
+                <Card key={item.label} size="sm">
+                  <CardContent className="flex items-baseline justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">{item.label}</p>
+                    <p className="text-xl font-semibold">{item.value}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          {groupedAssignments.CLOSED.length > 0 ? (
+            <details className="rounded-xl border border-border/80 bg-muted/20 p-4">
+              <summary className="cursor-pointer font-medium">
+                Closed invitations ({groupedAssignments.CLOSED.length})
+              </summary>
+              <div className="mt-4 grid gap-3">
+                {groupedAssignments.CLOSED.map((assignment) => (
+                  <ReviewerAssignmentCard
+                    key={assignment.id}
+                    assignment={assignment}
+                    variant="history"
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </>
       )}
     </div>

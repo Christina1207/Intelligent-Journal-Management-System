@@ -21,6 +21,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -229,27 +230,34 @@ export function EditorialWorkspaceShell({
                 />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel className="font-normal">
-                  <span className="block truncate font-medium">{displayName}</span>
-                  {user?.email ? (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {user.email}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <span className="block truncate font-medium">
+                      {displayName}
                     </span>
-                  ) : null}
-                </DropdownMenuLabel>
+
+                    {user?.email ? (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {user.email}
+                      </span>
+                    ) : null}
+                  </DropdownMenuLabel>
+
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={() => router.push("/")}
+                  >
+                    <BookOpen className="size-4" aria-hidden="true" />
+                    Public journal
+                    <ExternalLink
+                      className="ml-auto size-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="gap-2"
-                  onClick={() => router.push("/")}
-                >
-                  <BookOpen className="size-4" aria-hidden="true" />
-                  Public journal
-                  <ExternalLink
-                    className="ml-auto size-3.5 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                   className="gap-2 text-destructive focus:text-destructive"
                   variant="destructive"

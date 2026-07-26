@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileCheck2, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  CircleAlert,
+  Clock3,
+  RotateCcw,
+  ShieldAlert,
+} from "lucide-react";
+import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardAction,
@@ -15,244 +22,375 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DeadlineIndicator,
   InvitationStatusBadge,
   isDeadlinePast,
   ReviewRoundLabel,
 } from "@/features/editorial/components";
-import { ReviewReportForm } from "@/features/reviews/components/review-report-form";
+import { useRespondToReviewInvitation } from "@/features/reviews/hooks";
 import {
-  useRespondToReviewInvitation,
-  useReviewerManuscriptDownload,
-} from "@/features/reviews/hooks";
+  isActiveReviewOverdue,
+  isMandatoryRevisionAssignment,
+} from "@/features/reviews/reviewer-assignment-state";
 import type { ReviewerAssignment } from "@/features/reviews/types";
+
+type ReviewerAssignmentCardVariant = "invitation" | "queue" | "history";
 
 interface ReviewerAssignmentCardProps {
   assignment: ReviewerAssignment;
+  variant?: ReviewerAssignmentCardVariant;
 }
 
-function formatDateTime(value: string | null) {
+function formatDateTime(value: string | null | undefined) {
   if (!value) {
+    return "Not specified";
+  }
+
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
     return "Not specified";
   }
 
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
+  return error instanceof Error
+    ? error.message
+    : "The invitation response could not be saved.";
+}
 
-  return "The requested action could not be completed.";
+function AssignmentMetadata({
+  assignment,
+  includeResponseDeadline = false,
+  showDeadlineState = true,
+}: {
+  assignment: ReviewerAssignment;
+  includeResponseDeadline?: boolean;
+  showDeadlineState?: boolean;
+}) {
+  return (
+    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+      {includeResponseDeadline ? (
+        <DeadlineIndicator
+          deadline={assignment.response_deadline}
+          kind="response"
+        />
+      ) : null}
+      {showDeadlineState ? (
+        <DeadlineIndicator
+          deadline={assignment.review_deadline}
+          isOverdue={isActiveReviewOverdue(assignment)}
+          kind="review"
+        />
+      ) : (
+        <div>
+          <dt className="text-xs text-muted-foreground">Review deadline</dt>
+          <dd className="mt-1">
+            <time dateTime={assignment.review_deadline}>
+              {formatDateTime(assignment.review_deadline)}
+            </time>
+          </dd>
+        </div>
+      )}
+      <div>
+        <dt className="text-xs text-muted-foreground">Invitation sent</dt>
+        <dd className="mt-1">
+          <time dateTime={assignment.assigned_at}>
+            {formatDateTime(assignment.assigned_at)}
+          </time>
+        </dd>
+      </div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Version submitted</dt>
+        <dd className="mt-1">
+          <time dateTime={assignment.version.submitted_at}>
+            {formatDateTime(assignment.version.submitted_at)}
+          </time>
+        </dd>
+      </div>
+    </dl>
+  );
 }
 
 export function ReviewerAssignmentCard({
   assignment,
+  variant = "queue",
 }: ReviewerAssignmentCardProps) {
   const respondToInvitation = useRespondToReviewInvitation();
-  const manuscriptDownload = useReviewerManuscriptDownload();
-
-  const [showReport, setShowReport] = useState(false);
+  const [confirmation, setConfirmation] = useState<
+    "accept" | "decline" | null
+  >(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const handleInvitationResponse = (accept: boolean) => {
-    setActionError(null);
+  const isInvitation = variant === "invitation";
+  const isCompleted = assignment.review_submitted;
+  const isMandatoryRevision = isMandatoryRevisionAssignment(assignment);
+  const isOverdue = isActiveReviewOverdue(assignment);
+  const invitationExpired =
+    assignment.status === "PENDING" &&
+    (!assignment.can_respond ||
+      isDeadlinePast(assignment.response_deadline));
 
-    if (
-      !accept &&
-      !window.confirm(
-        "Decline this invitation? You will not be able to review this manuscript.",
-      )
-    ) {
+  const confirmInvitationResponse = async () => {
+    if (!confirmation) {
       return;
     }
 
-    respondToInvitation.mutate(
-      {
-        assignmentId: assignment.id,
-        accept,
-      },
-      {
-        onError: (error) => setActionError(getErrorMessage(error)),
-      },
-    );
-  };
-
-  const handleDownload = () => {
     setActionError(null);
 
-    manuscriptDownload.mutate(
-      { assignmentId: assignment.id },
-      {
-        onSuccess: ({ manuscript_url }) => {
-          const link = document.createElement("a");
-          link.href = manuscript_url;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-        },
-        onError: (error) => setActionError(getErrorMessage(error)),
-      },
-    );
+    try {
+      await respondToInvitation.mutateAsync({
+        assignmentId: assignment.id,
+        accept: confirmation === "accept",
+      });
+      setConfirmation(null);
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    }
   };
 
-  const deadline =
-    assignment.status === "PENDING"
-      ? assignment.response_deadline
-      : assignment.review_deadline;
-
-  const isInvitationBusy = respondToInvitation.isPending;
-  const deadlinePassed =
-    assignment.is_overdue || isDeadlinePast(deadline);
-  const hasRevisionResponse =
-    Boolean(assignment.version.response_to_reviewers?.trim()) &&
-    assignment.version.version_number > 1;
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle dir="auto">{assignment.submission.title}</CardTitle>
-        <CardDescription className="flex flex-wrap items-center gap-2">
-          <span>{assignment.submission.section}</span>
-          <ReviewRoundLabel versionNumber={assignment.version.version_number} />
-          <span>{assignment.submission.language.toUpperCase()}</span>
-        </CardDescription>
-        <CardAction>
-          <InvitationStatusBadge
-            status={assignment.status}
-            reviewSubmitted={assignment.review_submitted}
-            isOverdue={deadlinePassed}
-          />
-        </CardAction>
-      </CardHeader>
+    <>
+      <Card
+        size={variant === "queue" || variant === "history" ? "sm" : "default"}
+        className={
+          isOverdue
+            ? "border-status-danger-border"
+            : isMandatoryRevision
+              ? "border-primary/30"
+              : undefined
+        }
+      >
+        <CardHeader>
+          <CardTitle dir="auto">{assignment.submission.title}</CardTitle>
+          <CardDescription className="flex flex-wrap items-center gap-2">
+            <span>{assignment.submission.section}</span>
+            <ReviewRoundLabel
+              versionNumber={assignment.version.version_number}
+            />
+            <span>{assignment.submission.language.toUpperCase()}</span>
+          </CardDescription>
+          <CardAction>
+            <InvitationStatusBadge
+              status={assignment.status}
+              reviewSubmitted={isCompleted}
+              isOverdue={
+                isOverdue ||
+                (assignment.status === "PENDING" &&
+                  isDeadlinePast(assignment.response_deadline))
+              }
+            />
+          </CardAction>
+        </CardHeader>
 
-      <CardContent className="space-y-4">
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <DeadlineIndicator
-            deadline={deadline}
-            isOverdue={assignment.is_overdue}
-            kind={assignment.status === "PENDING" ? "response" : "review"}
-          />
-
-          <div>
-            <dt className="text-muted-foreground">Version submitted</dt>
-            <dd className="mt-1">
-              {formatDateTime(assignment.version.submitted_at)}
-            </dd>
-          </div>
-        </dl>
-
-        <details className="rounded-lg border bg-background p-3">
-          <summary className="cursor-pointer font-medium">
-            Manuscript abstract
-          </summary>
-          <p
-            className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground"
-            dir="auto"
-          >
-            {assignment.submission.abstract}
-          </p>
-        </details>
-
-        {hasRevisionResponse && assignment.status === "ACCEPTED" ? (
-          <details className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-            <summary className="cursor-pointer font-medium">
-              Author response to previous reviews
-            </summary>
-            <p
-              className="mt-3 whitespace-pre-wrap text-sm leading-6"
-              dir="auto"
-            >
-              {assignment.version.response_to_reviewers}
-            </p>
-          </details>
-        ) : null}
-
-        {assignment.cancellation_reason ? (
-          <Alert>
-            <AlertTitle>Assignment closed</AlertTitle>
-            <AlertDescription>
-              {assignment.cancellation_reason}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        {actionError ? (
-          <Alert variant="destructive">
-            <AlertTitle>Action failed</AlertTitle>
-            <AlertDescription>{actionError}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {showReport && assignment.can_submit_review ? (
-          <ReviewReportForm
+        <CardContent className="space-y-4">
+          <AssignmentMetadata
             assignment={assignment}
-            onCancel={() => setShowReport(false)}
-            onSubmitted={() => setShowReport(false)}
+            includeResponseDeadline={isInvitation}
+            showDeadlineState={variant !== "history"}
           />
+
+          {isInvitation ? (
+            <>
+              <details className="rounded-lg border bg-background p-3">
+                <summary className="cursor-pointer font-medium">
+                  Read the blinded manuscript abstract
+                </summary>
+                <p
+                  className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground"
+                  dir="auto"
+                >
+                  {assignment.submission.abstract}
+                </p>
+              </details>
+
+              <Alert variant="info">
+                <ShieldAlert aria-hidden="true" />
+                <AlertTitle>Check for conflicts before responding</AlertTitle>
+                <AlertDescription>
+                  Decline if the topic, institution, recent collaboration, or
+                  another relationship could affect your impartiality. The
+                  current API does not collect a decline reason.
+                </AlertDescription>
+              </Alert>
+            </>
+          ) : null}
+
+          {isMandatoryRevision ? (
+            <Alert variant="info">
+              <RotateCcw aria-hidden="true" />
+              <AlertTitle>Mandatory revision-round review</AlertTitle>
+              <AlertDescription>
+                This assignment continues your accepted review into version{" "}
+                {assignment.version.version_number}. A new invitation response
+                is not required.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {invitationExpired ? (
+            <Alert variant="warning">
+              <Clock3 aria-hidden="true" />
+              <AlertTitle>Response no longer available</AlertTitle>
+              <AlertDescription>
+                The response deadline has passed or the invitation was closed.
+                Refresh the workspace if its status has not updated yet.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {actionError ? (
+            <Alert variant="destructive">
+              <CircleAlert aria-hidden="true" />
+              <AlertTitle>Response not saved</AlertTitle>
+              <AlertDescription>{actionError}</AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+
+        {isInvitation &&
+        assignment.status === "PENDING" &&
+        assignment.can_respond &&
+        !invitationExpired ? (
+          <CardFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="touch"
+              className="w-full sm:w-auto"
+              disabled={respondToInvitation.isPending}
+              onClick={() => {
+                setActionError(null);
+                setConfirmation("decline");
+              }}
+            >
+              Decline
+            </Button>
+            <Button
+              type="button"
+              size="touch"
+              className="w-full sm:w-auto"
+              disabled={respondToInvitation.isPending}
+              onClick={() => {
+                setActionError(null);
+                setConfirmation("accept");
+              }}
+            >
+              Accept invitation
+            </Button>
+          </CardFooter>
+        ) : variant !== "invitation" ? (
+          <CardFooter className="justify-end">
+            <Link
+              href={`/reviewer/assignments/${assignment.id}`}
+              className={buttonVariants({
+                variant: isOverdue ? "default" : "outline",
+                size: "sm",
+              })}
+            >
+              {isCompleted
+                ? "View review record"
+                : assignment.status === "ACCEPTED"
+                  ? "Open review workspace"
+                  : "View assignment"}
+              <ArrowRight aria-hidden="true" />
+            </Link>
+          </CardFooter>
         ) : null}
-      </CardContent>
+      </Card>
 
-      {assignment.status === "PENDING" && assignment.can_respond ? (
-        <CardFooter className="justify-end gap-2">
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={isInvitationBusy}
-            onClick={() => handleInvitationResponse(false)}
-          >
-            Decline
-          </Button>
-          <Button
-            type="button"
-            disabled={isInvitationBusy}
-            onClick={() => handleInvitationResponse(true)}
-          >
-            {isInvitationBusy ? "Saving…" : "Accept invitation"}
-          </Button>
-        </CardFooter>
-      ) : null}
+      <Dialog
+        open={confirmation !== null}
+        onOpenChange={(open) => {
+          if (!open && !respondToInvitation.isPending) {
+            setConfirmation(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {confirmation === "accept"
+                ? "Accept this review invitation?"
+                : "Decline this review invitation?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmation === "accept"
+                ? "Accepting makes the blinded manuscript available and commits you to the stated review deadline."
+                : "Declining closes this invitation. The current workflow does not request or store a decline reason."}
+            </DialogDescription>
+          </DialogHeader>
 
-      {assignment.status === "ACCEPTED" && !assignment.review_submitted ? (
-        <CardFooter className="flex-wrap justify-between gap-2">
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ShieldCheck className="size-4" aria-hidden="true" />
-            Blinded reviewer access
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {assignment.can_download_manuscript ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={manuscriptDownload.isPending}
-                onClick={handleDownload}
-              >
-                <Download aria-hidden="true" />
-                {manuscriptDownload.isPending
-                  ? "Preparing…"
-                  : "Download blinded manuscript"}
-              </Button>
-            ) : null}
-
-            {assignment.can_submit_review ? (
-              <Button
-                type="button"
-                onClick={() => setShowReport((current) => !current)}
-              >
-                <FileCheck2 aria-hidden="true" />
-                {showReport ? "Close report" : "Write review"}
-              </Button>
-            ) : null}
+          <div className="rounded-lg border bg-muted/35 p-3">
+            <p className="font-medium" dir="auto">
+              {assignment.submission.title}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Review due {formatDateTime(assignment.review_deadline)}
+            </p>
           </div>
-        </CardFooter>
-      ) : null}
-    </Card>
+
+          {confirmation === "accept" ? (
+            <Alert variant="warning">
+              <CircleAlert aria-hidden="true" />
+              <AlertTitle>Confirm your availability</AlertTitle>
+              <AlertDescription>
+                Accept only if you can complete an impartial review by the
+                deadline. You will receive access to the blinded version only.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {actionError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Response not saved</AlertTitle>
+              <AlertDescription>{actionError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <DialogFooter>
+            <DialogClose
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={respondToInvitation.isPending}
+                />
+              }
+            >
+              Go back
+            </DialogClose>
+            <Button
+              type="button"
+              variant={
+                confirmation === "decline" ? "destructive" : "default"
+              }
+              disabled={respondToInvitation.isPending}
+              onClick={confirmInvitationResponse}
+            >
+              {respondToInvitation.isPending
+                ? "Saving response…"
+                : confirmation === "accept"
+                  ? "Confirm acceptance"
+                  : "Confirm decline"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

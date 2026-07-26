@@ -17,6 +17,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -249,35 +250,44 @@ export function AuthorShell({
                 <span className="hidden max-w-28 truncate sm:block">
                   {displayName}
                 </span>
-                <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                <ChevronDown
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel className="px-2 py-2">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {displayName}
-                  </span>
-                  {user?.email ? (
-                    <span className="mt-0.5 block truncate font-normal text-muted-foreground">
-                      {user.email}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="px-2 py-2">
+                    <span className="block truncate text-sm font-semibold text-foreground">
+                      {displayName}
                     </span>
-                  ) : null}
-                </DropdownMenuLabel>
+
+                    {user?.email ? (
+                      <span className="mt-0.5 block truncate font-normal text-muted-foreground">
+                        {user.email}
+                      </span>
+                    ) : null}
+                  </DropdownMenuLabel>
+
+                  <DropdownMenuItem
+                    className="min-h-10 px-2"
+                    onClick={() => router.push("/author/profile")}
+                  >
+                    <UserRound aria-hidden="true" />
+                    Profile
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    className="min-h-10 px-2"
+                    onClick={() => router.push("/")}
+                  >
+                    <ExternalLink aria-hidden="true" />
+                    Public journal
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="min-h-10 px-2"
-                  onClick={() => router.push("/author/profile")}
-                >
-                  <UserRound aria-hidden="true" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="min-h-10 px-2"
-                  onClick={() => router.push("/")}
-                >
-                  <ExternalLink aria-hidden="true" />
-                  Public journal
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                   variant="destructive"
                   className="min-h-10 px-2"

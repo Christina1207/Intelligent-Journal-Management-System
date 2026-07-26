@@ -10,6 +10,7 @@ import {
 } from "@/features/reviews/api";
 import { reviewQueryKeys } from "@/features/reviews/api/review-query-keys";
 import type { SubmitReviewPayload } from "@/features/reviews/types";
+import { submissionQueryKeys } from "@/features/submissions/query-keys";
 
 export function useReviewerAssignments() {
   return useQuery({
@@ -33,7 +34,7 @@ export function useRespondToReviewInvitation() {
 
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: reviewQueryKeys.reviewerAssignments(),
+        queryKey: reviewQueryKeys.all,
       });
     },
   });
@@ -59,9 +60,14 @@ export function useSubmitReview() {
     }) => submitReview(assignmentId, payload),
 
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: reviewQueryKeys.reviewerAssignments(),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: reviewQueryKeys.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.all,
+        }),
+      ]);
     },
   });
 }

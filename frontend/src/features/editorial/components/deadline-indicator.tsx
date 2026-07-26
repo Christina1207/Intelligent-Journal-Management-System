@@ -19,7 +19,7 @@ export function isDeadlinePast(deadline: string | null | undefined) {
   return Number.isFinite(timestamp) && timestamp < Date.now();
 }
 
-function isDeadlineApproaching(deadline: string | null | undefined) {
+export function isDeadlineApproaching(deadline: string | null | undefined) {
   if (!deadline) {
     return false;
   }
