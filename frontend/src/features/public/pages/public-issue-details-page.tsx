@@ -1,60 +1,56 @@
-import { IssueArticlesSection } from "../components/issue-articles-section";
-import { IssueCard } from "../components/issue-card";
-import { IssueDetailHeader } from "../components/issue-detail-header";
-import { PublicFooter } from "../components/public-footer";
-import { PublicHeader } from "../components/public-header";
-import type { JournalInfo, PublicArticle, PublicIssue } from "../types";
+import { SectionHeader } from "@/components/common/section-header"
+
+import { IssueArticlesSection } from "../components/issue-articles-section"
+import { IssueCard } from "../components/issue-card"
+import { IssueDetailHeader } from "../components/issue-detail-header"
+import type { PublicArticle, PublicIssue } from "../types"
 
 type PublicIssueDetailsPageProps = {
-  journal: JournalInfo;
-  issue: PublicIssue;
-  articles: PublicArticle[];
-  previousIssues: PublicIssue[];
-};
+  issue: PublicIssue
+  articles: PublicArticle[]
+  articleCount: number
+  currentPage: number
+  totalPages: number
+  previousIssues: PublicIssue[]
+}
 
 export function PublicIssueDetailsPage({
-  journal,
   issue,
   articles,
+  articleCount,
+  currentPage,
+  totalPages,
   previousIssues,
 }: PublicIssueDetailsPageProps) {
   return (
     <>
-      <PublicHeader journal={journal} />
+      <IssueDetailHeader issue={issue} articleCount={articleCount} />
+      <IssueArticlesSection
+        issue={issue}
+        articles={articles}
+        currentPage={currentPage}
+        totalPages={totalPages}
+      />
 
-      <main id="main-content" className="bg-slate-50">
-        <IssueDetailHeader issue={issue} articles={articles} />
-
-        <IssueArticlesSection issue={issue} articles={articles} />
-
-        {previousIssues.length > 0 ? (
-          <section
-            className="border-t bg-white py-12 sm:py-16"
-            aria-labelledby="previous-issues-title"
-          >
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                More Archives
-              </p>
-
-              <h2
-                id="previous-issues-title"
-                className="mt-2 text-3xl font-bold tracking-tight text-slate-950"
-              >
-                Other Issues
-              </h2>
-
-              <div className="mt-8 grid gap-6 lg:grid-cols-3">
-                {previousIssues.map((previousIssue) => (
-                  <IssueCard key={previousIssue.id} issue={previousIssue} />
-                ))}
-              </div>
+      {previousIssues.length > 0 ? (
+        <section
+          className="border-t border-border bg-surface-muted/45 py-10 sm:py-12"
+          aria-labelledby="previous-issues-title"
+        >
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <SectionHeader
+              titleId="previous-issues-title"
+              title="More issues"
+              description="Continue browsing the journal archive."
+            />
+            <div className="mt-6 grid gap-3">
+              {previousIssues.map((previousIssue) => (
+                <IssueCard key={previousIssue.id} issue={previousIssue} />
+              ))}
             </div>
-          </section>
-        ) : null}
-      </main>
-
-      <PublicFooter journal={journal} />
+          </div>
+        </section>
+      ) : null}
     </>
-  );
+  )
 }

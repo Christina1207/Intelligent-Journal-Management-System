@@ -1,39 +1,57 @@
-import type { SubmissionStatus } from "@/features/submissions/types";
+import { Badge } from "@/components/ui/badge"
+import {
+  getSubmissionStatusPresentation,
+  type SubmissionStatusTone,
+} from "@/features/submissions/status-presentation"
+import type { SubmissionStatus } from "@/features/submissions/types"
+import { cn } from "@/lib/utils"
 
-const statusLabels: Record<SubmissionStatus, string> = {
-  SUBMITTED: "Submitted",
-  ASSIGNED: "Assigned to editor",
-  UNDER_REVIEW: "Under review",
-  REVIEWED: "Reviews completed",
-  UNDER_REVISION: "Revision requested",
-  ACCEPTED: "Accepted",
-  REJECTED: "Rejected",
-};
-
-const statusClasses: Record<SubmissionStatus, string> = {
-  SUBMITTED: "border-slate-200 bg-slate-50 text-slate-700",
-  ASSIGNED: "border-blue-200 bg-blue-50 text-blue-700",
-  UNDER_REVIEW: "border-blue-200 bg-blue-50 text-blue-700",
-  REVIEWED: "border-indigo-200 bg-indigo-50 text-indigo-700",
-  UNDER_REVISION: "border-amber-200 bg-amber-50 text-amber-700",
-  ACCEPTED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  REJECTED: "border-red-200 bg-red-50 text-red-700",
-};
+const toneClasses: Record<SubmissionStatusTone, string> = {
+  info:
+    "border-status-info-border bg-status-info-subtle text-status-info-foreground",
+  assigned:
+    "border-status-assigned-border bg-status-assigned-subtle text-status-assigned-foreground",
+  review:
+    "border-status-review-border bg-status-review-subtle text-status-review-foreground",
+  reviewed:
+    "border-status-reviewed-border bg-status-reviewed-subtle text-status-reviewed-foreground",
+  action:
+    "border-status-action-border bg-status-action-subtle text-status-action-foreground",
+  success:
+    "border-status-success-border bg-status-success-subtle text-status-success-foreground",
+  danger:
+    "border-status-danger-border bg-status-danger-subtle text-status-danger-foreground",
+}
 
 type SubmissionStatusBadgeProps = {
-  status: SubmissionStatus;
-};
+  status: SubmissionStatus
+  className?: string
+  showIcon?: boolean
+}
 
-export function SubmissionStatusBadge({ status }: SubmissionStatusBadgeProps) {
+export function SubmissionStatusBadge({
+  status,
+  className,
+  showIcon = true,
+}: SubmissionStatusBadgeProps) {
+  const presentation = getSubmissionStatusPresentation(status)
+  const Icon = presentation.icon
+
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusClasses[status]}`}
+    <Badge
+      variant="outline"
+      className={cn(
+        "h-auto min-h-6 gap-1.5 rounded-md px-2 py-1 whitespace-normal",
+        toneClasses[presentation.tone],
+        className
+      )}
     >
-      {statusLabels[status]}
-    </span>
-  );
+      {showIcon ? <Icon aria-hidden="true" /> : null}
+      <span>{presentation.label}</span>
+    </Badge>
+  )
 }
 
 export function getSubmissionStatusLabel(status: SubmissionStatus) {
-  return statusLabels[status];
+  return getSubmissionStatusPresentation(status).label
 }

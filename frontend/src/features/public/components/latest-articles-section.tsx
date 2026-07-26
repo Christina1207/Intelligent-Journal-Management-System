@@ -1,48 +1,52 @@
-import Link from "next/link";
-import type { PublicArticle } from "../types";
-import { ArticleCard } from "./article-card";
+import { BookOpenText, ArrowRight } from "lucide-react"
+import Link from "next/link"
+
+import { EmptyState } from "@/components/common/empty-state"
+import { SectionHeader } from "@/components/common/section-header"
+import { buttonVariants } from "@/components/ui/button"
+
+import type { PublicArticle } from "../types"
+import { ArticleCard } from "./article-card"
 
 type LatestArticlesSectionProps = {
-  articles: PublicArticle[];
-};
+  articles: PublicArticle[]
+}
 
 export function LatestArticlesSection({
   articles,
 }: LatestArticlesSectionProps) {
   return (
-    <section className="bg-white py-16 sm:py-20" aria-labelledby="latest-title">
+    <section className="bg-background py-12 sm:py-16" aria-labelledby="latest-title">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Published Research
-            </p>
-            <h2
-              id="latest-title"
-              className="mt-2 text-3xl font-bold tracking-tight text-slate-950"
+        <SectionHeader
+          titleId="latest-title"
+          title="Latest published articles"
+          description="Recently published research from across the journal."
+          action={
+            <Link
+              href="/articles"
+              className={buttonVariants({ variant: "outline", size: "touch" })}
             >
-              Latest Articles
-            </h2>
-            <p className="mt-3 max-w-2xl text-slate-600">
-              Browse recently published peer-reviewed articles across journal
-              sections.
-            </p>
+              View all articles
+              <ArrowRight data-icon="inline-end" aria-hidden="true" />
+            </Link>
+          }
+        />
+        {articles.length > 0 ? (
+          <div className="mt-7 grid gap-4 lg:grid-cols-3">
+            {articles.map((article) => (
+              <ArticleCard key={article.id} article={article} compact />
+            ))}
           </div>
-
-          <Link
-            href="/articles"
-            className="text-sm font-semibold text-slate-950 underline-offset-4 hover:underline"
-          >
-            View all articles
-          </Link>
-        </div>
-
-        <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          {articles.map((article) => (
-            <ArticleCard key={article.id} article={article} />
-          ))}
-        </div>
+        ) : (
+          <EmptyState
+            className="mt-7"
+            icon={<BookOpenText aria-hidden="true" />}
+            title="No published articles yet"
+            description="Published research will appear here when it becomes available."
+          />
+        )}
       </div>
     </section>
-  );
+  )
 }

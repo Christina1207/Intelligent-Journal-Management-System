@@ -1,38 +1,113 @@
-import type { InfoSection } from "../types";
+import { FileText } from "lucide-react"
+
+import { EmptyState } from "@/components/common/empty-state"
+
+import type { InfoSection } from "../types"
 
 type InfoContentSectionProps = {
-  sections: InfoSection[];
-};
+  sections: InfoSection[]
+  emptyTitle?: string
+  emptyDescription?: string
+}
 
-export function InfoContentSection({ sections }: InfoContentSectionProps) {
+function ContentBody({ body }: { body: string }) {
+  const paragraphs = body
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
   return (
-    <section className="py-12 sm:py-16" aria-labelledby="info-content-title">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        <h2 id="info-content-title" className="sr-only">
-          Page information
-        </h2>
+    <div className="mt-4 space-y-4 text-base leading-8 text-text-secondary">
+      {paragraphs.map((paragraph, index) => (
+        <p key={`${paragraph.slice(0, 30)}-${index}`} dir="auto">
+          {paragraph}
+        </p>
+      ))}
+    </div>
+  )
+}
 
-        <div className="space-y-6">
+export function InfoContentSection({
+  sections,
+  emptyTitle = "Content not published",
+  emptyDescription = "Journal-managed information is not currently available.",
+}: InfoContentSectionProps) {
+  if (sections.length === 0) {
+    return (
+      <section className="py-10 sm:py-12">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          <EmptyState
+            icon={<FileText aria-hidden="true" />}
+            title={emptyTitle}
+            description={emptyDescription}
+          />
+        </div>
+      </section>
+    )
+  }
+
+  const showTableOfContents = sections.length > 2
+
+  return (
+    <section className="py-10 sm:py-12" aria-label="Page information">
+      <div
+        className={
+          showTableOfContents
+            ? "mx-auto grid max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:px-8"
+            : "mx-auto max-w-4xl px-4 sm:px-6 lg:px-8"
+        }
+      >
+        {showTableOfContents ? (
+          <aside>
+            <nav
+              aria-label="On this page"
+              className="rounded-xl border border-border bg-card p-4 lg:sticky lg:top-24"
+            >
+              <h2 className="font-sans text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                On this page
+              </h2>
+              <ol className="mt-3 space-y-2">
+                {sections.map((section) => (
+                  <li key={section.id}>
+                    <a
+                      href={`#${section.id}`}
+                      className="block rounded-md py-1 text-sm leading-5 text-text-secondary underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      {section.title}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          </aside>
+        ) : null}
+
+        <div className="divide-y divide-border rounded-xl border border-border bg-card px-5 shadow-xs sm:px-8">
           {sections.map((section) => (
             <article
               key={section.id}
-              className="rounded-2xl border bg-white p-6 shadow-sm"
+              id={section.id}
+              className="scroll-mt-24 py-7 first:pt-8 last:pb-8"
             >
-              <h3 className="text-2xl font-bold text-slate-950">
+              <h2
+                className="text-2xl leading-snug font-semibold tracking-tight text-foreground"
+                dir="auto"
+              >
                 {section.title}
-              </h3>
-
-              <p className="mt-4 whitespace-pre-line leading-8 text-slate-700">
-                {section.body}
-              </p>
+              </h2>
+              <ContentBody body={section.body} />
 
               {section.items && section.items.length > 0 ? (
                 <ul className="mt-5 space-y-3">
                   {section.items.map((item) => (
-                    <li key={item} className="flex gap-3 text-slate-700">
+                    <li
+                      key={item}
+                      className="flex gap-3 text-sm leading-6 text-text-secondary"
+                      dir="auto"
+                    >
                       <span
                         aria-hidden="true"
-                        className="mt-2 h-2 w-2 shrink-0 rounded-full bg-slate-950"
+                        className="mt-2.5 size-1.5 shrink-0 rounded-full bg-accent"
                       />
                       <span>{item}</span>
                     </li>
@@ -44,5 +119,5 @@ export function InfoContentSection({ sections }: InfoContentSectionProps) {
         </div>
       </div>
     </section>
-  );
+  )
 }

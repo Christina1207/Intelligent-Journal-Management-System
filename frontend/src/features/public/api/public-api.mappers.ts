@@ -26,15 +26,12 @@ export function mapJournal(dto: PublicJournalApiDto): JournalInfo {
     name: valueOrFallback(dto.name, "Journal"),
     shortName: valueOrFallback(dto.short_name, dto.name),
     description: valueOrFallback(dto.description, ""),
-    issn: valueOrFallback(dto.issn, "Not assigned"),
+    issn: valueOrFallback(dto.issn, ""),
     publisher: valueOrFallback(dto.publisher, ""),
-    accessPolicy: valueOrFallback(dto.access_policy, "Open Access"),
-    peerReviewPolicy: valueOrFallback(dto.peer_review_policy, "Peer Reviewed"),
-    publicationFrequency: valueOrFallback(
-      dto.publication_frequency,
-      "Continuous publication",
-    ),
-    license: valueOrFallback(dto.license, "Not specified"),
+    accessPolicy: valueOrFallback(dto.access_policy, ""),
+    peerReviewPolicy: valueOrFallback(dto.peer_review_policy, ""),
+    publicationFrequency: valueOrFallback(dto.publication_frequency, ""),
+    license: valueOrFallback(dto.license, ""),
   };
 }
 
@@ -48,14 +45,15 @@ export function mapArticle(dto: PublicArticleApiDto): PublicArticle {
     authors: dto.authors ?? [],
     section: valueOrFallback(dto.section, "Uncategorized"),
     sectionSlug: dto.section_slug,
-    publishedAt: valueOrFallback(publishedAt, new Date().toISOString()),
+    publishedAt: valueOrFallback(publishedAt, ""),
     abstract: valueOrFallback(dto.abstract, ""),
     keywords: dto.keywords ?? [],
     doi: dto.doi ?? undefined,
     language: valueOrFallback(dto.language, "English"),
     views: dto.views ?? 0,
     downloads: dto.downloads ?? 0,
-    license: valueOrFallback(dto.license, "Not specified"),
+    license: valueOrFallback(dto.license, ""),
+    licenseUrl: dto.license_url || undefined,
 
     volume: dto.volume ?? undefined,
     issue: dto.issue ?? undefined,
@@ -64,6 +62,14 @@ export function mapArticle(dto: PublicArticleApiDto): PublicArticle {
     receivedAt: dto.received_at ?? undefined,
     acceptedAt: dto.accepted_at ?? undefined,
     affiliations: dto.affiliations ?? [],
+    authorDetails: dto.author_details?.map((author) => ({
+      fullName: author.full_name,
+      orcid: author.orcid || undefined,
+      affiliation: author.affiliation || undefined,
+      country: author.country || undefined,
+      order: author.order ?? 0,
+      isCorresponding: author.is_corresponding ?? false,
+    })),
   };
 }
 
@@ -88,7 +94,7 @@ export function mapIssue(dto: PublicIssueApiDto): PublicIssue {
     volume: valueOrFallback(dto.volume, ""),
     issue: valueOrFallback(dto.issue, ""),
     year: valueOrFallback(dto.year, ""),
-    publishedAt: valueOrFallback(publishedAt, new Date().toISOString()),
+    publishedAt: valueOrFallback(publishedAt, ""),
     description: valueOrFallback(dto.description, ""),
     isCurrent: dto.is_current ?? dto.isCurrent ?? false,
   };

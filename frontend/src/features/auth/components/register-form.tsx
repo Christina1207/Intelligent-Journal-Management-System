@@ -1,243 +1,316 @@
 "use client";
 
-import * as React from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ArrowRight, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useForm, type UseFormReturn } from "react-hook-form";
+
+import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import { Notice } from "@/components/common/notice";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/features/auth/hooks/use-auth";
+import {
+  registerSchema,
+  type RegisterFormValues,
+} from "@/features/auth/schemas";
+import { withNextPath } from "@/features/auth/utils/safe-next-path";
 
 import { getAuthFieldErrors, getAuthFormError } from "./auth-form-errors";
-import { useAuth } from "@/features/auth/hooks/use-auth";
+import { PasswordInput } from "./password-input";
 
-const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
+const registerFieldNames = new Set<keyof RegisterFormValues>([
+  "first_name",
+  "last_name",
+  "username",
+  "email",
+  "password",
+  "password_confirm",
+  "orcid",
+  "affiliation",
+  "country",
+]);
 
-function getSafeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/author";
-  }
-
-  return value;
-}
-
-export function RegisterForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { register } = useAuth();
-
-  const [formError, setFormError] = React.useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>(
-    {},
-  );
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-
-    const payload = {
-      username: String(formData.get("username") ?? "").trim(),
-      email: String(formData.get("email") ?? "").trim(),
-      password: String(formData.get("password") ?? ""),
-      password_confirm: String(formData.get("password_confirm") ?? ""),
-      first_name: String(formData.get("first_name") ?? "").trim(),
-      last_name: String(formData.get("last_name") ?? "").trim(),
-      orcid: String(formData.get("orcid") ?? "").trim(),
-      affiliation: String(formData.get("affiliation") ?? "").trim(),
-      country: String(formData.get("country") ?? "").trim(),
-    };
-
-    const nextFieldErrors: Record<string, string> = {};
-
-    if (payload.password !== payload.password_confirm) {
-      nextFieldErrors.password_confirm = "Passwords do not match.";
-    }
-
-    if (payload.orcid && !orcidPattern.test(payload.orcid)) {
-      nextFieldErrors.orcid =
-        "ORCID must use the format 0000-0000-0000-0000. The final character may be X.";
-    }
-
-    if (Object.keys(nextFieldErrors).length > 0) {
-      setFieldErrors(nextFieldErrors);
-      setFormError("Please fix the highlighted fields.");
-      return;
-    }
-
-    setFormError(null);
-    setFieldErrors({});
-    setIsSubmitting(true);
-
-    try {
-      await register(payload);
-      router.replace(getSafeNextPath(searchParams.get("next")));
-    } catch (error) {
-      setFormError(getAuthFormError(error));
-      setFieldErrors(getAuthFieldErrors(error));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-4 py-12">
-      <div>
-        <Link href="/" className="text-sm font-medium text-slate-600">
-          ← Back to journal
-        </Link>
-
-        <h1 className="mt-8 text-3xl font-bold tracking-tight text-slate-950">
-          Create an author account
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Register to submit manuscripts and track your editorial progress.
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-        {formError ? (
-          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {formError}
-          </div>
-        ) : null}
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <TextField
-            name="first_name"
-            label="First name"
-            autoComplete="given-name"
-            error={fieldErrors.first_name}
-            required
-          />
-          <TextField
-            name="last_name"
-            label="Last name"
-            autoComplete="family-name"
-            error={fieldErrors.last_name}
-            required
-          />
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <TextField
-            name="username"
-            label="Username"
-            autoComplete="username"
-            error={fieldErrors.username}
-            required
-          />
-          <TextField
-            name="email"
-            label="Email"
-            type="email"
-            autoComplete="email"
-            error={fieldErrors.email}
-            required
-          />
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <TextField
-            name="password"
-            label="Password"
-            type="password"
-            autoComplete="new-password"
-            error={fieldErrors.password}
-            required
-          />
-          <TextField
-            name="password_confirm"
-            label="Confirm password"
-            type="password"
-            autoComplete="new-password"
-            error={fieldErrors.password_confirm}
-            required
-          />
-        </div>
-
-        <TextField
-          name="orcid"
-          label="ORCID"
-          placeholder="0000-0000-0000-0000"
-          error={fieldErrors.orcid}
-        />
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <TextField
-            name="affiliation"
-            label="Affiliation"
-            placeholder="University or research institution"
-            error={fieldErrors.affiliation}
-          />
-          <TextField
-            name="country"
-            label="Country"
-            autoComplete="country-name"
-            error={fieldErrors.country}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Creating account..." : "Create account"}
-        </button>
-      </form>
-
-      <p className="mt-6 text-center text-sm text-slate-600">
-        Already registered?{" "}
-        <Link
-          href={`/login${
-            searchParams.get("next")
-              ? `?next=${encodeURIComponent(getSafeNextPath(searchParams.get("next")))}`
-              : ""
-          }`}
-          className="font-medium text-slate-950 hover:underline"
-        >
-          Login
-        </Link>
-      </p>
-    </div>
-  );
-}
-
-type TextFieldProps = {
-  name: string;
+type RegistrationFieldProps = {
+  form: UseFormReturn<RegisterFormValues>;
+  name: keyof RegisterFormValues;
   label: string;
-  type?: string;
-  placeholder?: string;
+  type?: "text" | "email";
   autoComplete?: string;
-  error?: string;
+  placeholder?: string;
+  description?: string;
   required?: boolean;
 };
 
-function TextField({
+function RegistrationField({
+  form,
   name,
   label,
   type = "text",
-  placeholder,
   autoComplete,
-  error,
+  placeholder,
+  description,
   required,
-}: TextFieldProps) {
+}: RegistrationFieldProps) {
+  const error = form.formState.errors[name]?.message;
+
   return (
-    <div>
-      <label
-        htmlFor={name}
-        className="block text-sm font-medium text-slate-700"
-      >
-        {label}
-      </label>
-      <input
+    <FormField
+      htmlFor={name}
+      label={label}
+      description={description}
+      error={error}
+      required={required}
+    >
+      <Input
         id={name}
-        name={name}
         type={type}
-        placeholder={placeholder}
         autoComplete={autoComplete}
-        required={required}
-        className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
+        placeholder={placeholder}
+        aria-invalid={Boolean(error)}
+        aria-describedby={getFormFieldDescription({
+          id: name,
+          hasDescription: Boolean(description),
+          hasError: Boolean(error),
+        })}
+        {...form.register(name)}
       />
-      {error ? <p className="mt-1 text-sm text-red-600">{error}</p> : null}
+    </FormField>
+  );
+}
+
+export function RegisterForm({ nextPath }: { nextPath: string }) {
+  const router = useRouter();
+  const { register } = useAuth();
+  const form = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      first_name: "",
+      last_name: "",
+      username: "",
+      email: "",
+      password: "",
+      password_confirm: "",
+      orcid: "",
+      affiliation: "",
+      country: "",
+    },
+  });
+
+  const formError = form.formState.errors.root?.message;
+  const passwordError = form.formState.errors.password?.message;
+  const passwordConfirmationError =
+    form.formState.errors.password_confirm?.message;
+
+  async function handleSubmit(values: RegisterFormValues) {
+    form.clearErrors();
+
+    try {
+      await register({
+        ...values,
+        orcid: values.orcid.toUpperCase(),
+      });
+      router.replace(nextPath);
+    } catch (error) {
+      const backendErrors = getAuthFieldErrors(error);
+
+      for (const [field, message] of Object.entries(backendErrors)) {
+        if (registerFieldNames.has(field as keyof RegisterFormValues)) {
+          form.setError(field as keyof RegisterFormValues, {
+            type: "server",
+            message,
+          });
+        }
+      }
+
+      form.setError("root", {
+        type: "server",
+        message: getAuthFormError(error),
+      });
+    }
+  }
+
+  return (
+    <div className="w-full">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold tracking-[0.12em] text-accent uppercase">
+          Author registration
+        </p>
+        <h1 className="mt-3 text-4xl leading-tight font-semibold tracking-tight text-foreground">
+          Create your account
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-text-secondary">
+          Register once to submit manuscripts and track their progress through
+          the journal workflow.
+        </p>
+      </div>
+
+      <form
+        onSubmit={form.handleSubmit(handleSubmit)}
+        className="mt-8 grid gap-7"
+        noValidate
+      >
+        {formError ? (
+          <Notice
+            tone="destructive"
+            title="We could not create your account"
+            description={formError}
+          />
+        ) : null}
+
+        <fieldset className="grid gap-5">
+          <legend className="font-heading text-xl font-semibold text-foreground">
+            Account details
+          </legend>
+          <p className="-mt-3 text-sm leading-6 text-muted-foreground">
+            These details identify you when signing in and receiving journal
+            correspondence.
+          </p>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <RegistrationField
+              form={form}
+              name="first_name"
+              label="First name"
+              autoComplete="given-name"
+              required
+            />
+            <RegistrationField
+              form={form}
+              name="last_name"
+              label="Last name"
+              autoComplete="family-name"
+              required
+            />
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <RegistrationField
+              form={form}
+              name="username"
+              label="Username"
+              autoComplete="username"
+              description="Used to sign in to your author account."
+              required
+            />
+            <RegistrationField
+              form={form}
+              name="email"
+              label="Email"
+              type="email"
+              autoComplete="email"
+              description="Used for submission and decision notifications."
+              required
+            />
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <FormField
+              htmlFor="password"
+              label="Password"
+              description="Use at least 8 characters. Avoid common, entirely numeric, or personally similar passwords."
+              error={passwordError}
+              required
+            >
+              <PasswordInput
+                id="password"
+                autoComplete="new-password"
+                aria-invalid={Boolean(passwordError)}
+                aria-describedby={getFormFieldDescription({
+                  id: "password",
+                  hasDescription: true,
+                  hasError: Boolean(passwordError),
+                })}
+                {...form.register("password")}
+              />
+            </FormField>
+            <FormField
+              htmlFor="password_confirm"
+              label="Confirm password"
+              error={passwordConfirmationError}
+              required
+            >
+              <PasswordInput
+                id="password_confirm"
+                autoComplete="new-password"
+                aria-invalid={Boolean(passwordConfirmationError)}
+                aria-describedby={getFormFieldDescription({
+                  id: "password_confirm",
+                  hasError: Boolean(passwordConfirmationError),
+                })}
+                {...form.register("password_confirm")}
+              />
+            </FormField>
+          </div>
+        </fieldset>
+
+        <fieldset className="grid gap-5 border-t border-border pt-7">
+          <legend className="font-heading text-xl font-semibold text-foreground">
+            Researcher details
+          </legend>
+          <p className="-mt-3 text-sm leading-6 text-muted-foreground">
+            Optional details improve manuscript metadata and can be completed
+            later from your profile.
+          </p>
+
+          <RegistrationField
+            form={form}
+            name="orcid"
+            label="ORCID"
+            placeholder="0000-0000-0000-0000"
+            description="Your 16-digit researcher identifier, when available."
+          />
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <RegistrationField
+              form={form}
+              name="affiliation"
+              label="Affiliation"
+              autoComplete="organization"
+              placeholder="University or research institution"
+            />
+            <RegistrationField
+              form={form}
+              name="country"
+              label="Country"
+              autoComplete="country-name"
+            />
+          </div>
+        </fieldset>
+
+        <Notice
+          tone="info"
+          title="What happens after registration?"
+          description="Your author workspace opens immediately. If you arrived from “Submit Manuscript,” you will return directly to the submission form."
+        />
+
+        <Button
+          type="submit"
+          variant="accent"
+          size="touch"
+          className="w-full sm:w-fit sm:min-w-48"
+          disabled={form.formState.isSubmitting}
+        >
+          <UserPlus data-icon="inline-start" aria-hidden="true" />
+          {form.formState.isSubmitting
+            ? "Creating account..."
+            : "Create author account"}
+        </Button>
+      </form>
+
+      <div className="mt-8 border-t border-border pt-6">
+        <p className="text-sm text-text-secondary">
+          Already registered?{" "}
+          <Link
+            href={withNextPath("/login", nextPath)}
+            className="inline-flex items-center gap-1 font-semibold text-accent underline-offset-4 hover:underline"
+          >
+            Sign in
+            <ArrowRight className="size-3.5" aria-hidden="true" />
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

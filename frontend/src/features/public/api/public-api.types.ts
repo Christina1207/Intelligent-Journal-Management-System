@@ -36,6 +36,7 @@ export type PublicArticleApiDto = {
   views?: number;
   downloads?: number;
   license?: string;
+  license_url?: string;
   volume?: string | null;
   issue?: string | null;
   issue_slug?: string | null;
@@ -43,6 +44,16 @@ export type PublicArticleApiDto = {
   received_at?: string | null;
   accepted_at?: string | null;
   affiliations?: string[];
+  author_details?: PublicArticleAuthorApiDto[];
+};
+
+export type PublicArticleAuthorApiDto = {
+  full_name: string;
+  orcid?: string;
+  affiliation?: string;
+  country?: string;
+  order?: number;
+  is_corresponding?: boolean;
 };
 
 export type PublicSectionApiDto = {
@@ -101,4 +112,5 @@ export type PublicArticleListQuery = {
   language?: string;
   ordering?: string;
   page?: string;
+  pageSize?: string;
 };

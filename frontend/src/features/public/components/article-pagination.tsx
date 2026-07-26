@@ -1,87 +1,144 @@
-import Link from "next/link";
-import type { ArticleSearchParams } from "../utils/article-search";
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import Link from "next/link"
+
+import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+import type { ArticleSearchParams } from "../utils/article-search"
 
 type ArticlePaginationProps = {
-  currentPage: number;
-  totalPages: number;
-  params: ArticleSearchParams;
-};
+  currentPage: number
+  totalPages: number
+  params?: ArticleSearchParams
+  basePath?: string
+}
 
-function buildPageHref(params: ArticleSearchParams, page: number) {
-  const searchParams = new URLSearchParams();
+function buildPageHref(
+  params: ArticleSearchParams,
+  page: number,
+  basePath: string
+) {
+  const searchParams = new URLSearchParams()
 
   Object.entries(params).forEach(([key, value]) => {
-    if (!value || value === "all") {
-      return;
+    if (!value || value === "all" || key === "page") {
+      return
     }
 
-    if (key === "page") {
-      return;
-    }
-
-    searchParams.set(key, value);
-  });
+    searchParams.set(key, value)
+  })
 
   if (page > 1) {
-    searchParams.set("page", page.toString());
+    searchParams.set("page", page.toString())
   }
 
-  const queryString = searchParams.toString();
+  const queryString = searchParams.toString()
+  return queryString ? `${basePath}?${queryString}` : basePath
+}
 
-  return queryString ? `/articles?${queryString}` : "/articles";
+function getVisiblePages(currentPage: number, totalPages: number) {
+  return Array.from(
+    new Set([
+      1,
+      totalPages,
+      currentPage - 1,
+      currentPage,
+      currentPage + 1,
+    ])
+  )
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((first, second) => first - second)
 }
 
 export function ArticlePagination({
   currentPage,
   totalPages,
-  params,
+  params = {},
+  basePath = "/articles",
 }: ArticlePaginationProps) {
   if (totalPages <= 1) {
-    return null;
+    return null
   }
 
-  const previousPage = currentPage - 1;
-  const nextPage = currentPage + 1;
+  const pages = getVisiblePages(currentPage, totalPages)
 
   return (
     <nav
-      className="mt-10 flex items-center justify-between border-t pt-6"
+      className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6"
       aria-label="Article pagination"
     >
-      <div>
-        {currentPage > 1 ? (
-          <Link
-            href={buildPageHref(params, previousPage)}
-            className="rounded-md border px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Previous
-          </Link>
-        ) : (
-          <span className="rounded-md border px-4 py-2 text-sm font-medium text-slate-300">
-            Previous
-          </span>
-        )}
-      </div>
+      {currentPage > 1 ? (
+        <Link
+          href={buildPageHref(params, currentPage - 1, basePath)}
+          className={buttonVariants({ variant: "outline", size: "touch" })}
+          rel="prev"
+        >
+          <ChevronLeft data-icon="inline-start" aria-hidden="true" />
+          Previous
+        </Link>
+      ) : (
+        <span
+          className={cn(
+            buttonVariants({ variant: "outline", size: "touch" }),
+            "cursor-not-allowed opacity-45"
+          )}
+          aria-disabled="true"
+        >
+          <ChevronLeft data-icon="inline-start" aria-hidden="true" />
+          Previous
+        </span>
+      )}
 
-      <p className="text-sm text-slate-600">
-        Page <span className="font-medium text-slate-950">{currentPage}</span>{" "}
-        of <span className="font-medium text-slate-950">{totalPages}</span>
-      </p>
+      <ol className="order-3 flex w-full items-center justify-center gap-1 sm:order-none sm:w-auto">
+        {pages.map((page, index) => {
+          const previousPage = pages[index - 1]
+          const showGap = previousPage && page - previousPage > 1
 
-      <div>
-        {currentPage < totalPages ? (
-          <Link
-            href={buildPageHref(params, nextPage)}
-            className="rounded-md border px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Next
-          </Link>
-        ) : (
-          <span className="rounded-md border px-4 py-2 text-sm font-medium text-slate-300">
-            Next
-          </span>
-        )}
-      </div>
+          return (
+            <li key={page} className="flex items-center gap-1">
+              {showGap ? (
+                <span className="px-1 text-muted-foreground" aria-hidden="true">
+                  …
+                </span>
+              ) : null}
+              <Link
+                href={buildPageHref(params, page, basePath)}
+                aria-current={page === currentPage ? "page" : undefined}
+                aria-label={`Page ${page}`}
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "icon-touch" }),
+                  page === currentPage &&
+                    "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                )}
+              >
+                {page}
+              </Link>
+            </li>
+          )
+        })}
+      </ol>
+
+      {currentPage < totalPages ? (
+        <Link
+          href={buildPageHref(params, currentPage + 1, basePath)}
+          className={buttonVariants({ variant: "outline", size: "touch" })}
+          rel="next"
+        >
+          Next
+          <ChevronRight data-icon="inline-end" aria-hidden="true" />
+        </Link>
+      ) : (
+        <span
+          className={cn(
+            buttonVariants({ variant: "outline", size: "touch" }),
+            "cursor-not-allowed opacity-45"
+          )}
+          aria-disabled="true"
+        >
+          Next
+          <ChevronRight data-icon="inline-end" aria-hidden="true" />
+        </span>
+      )}
     </nav>
-  );
+  )
 }

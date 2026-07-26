@@ -1,24 +1,25 @@
-import * as React from "react";
-
 import { AuthorShell } from "@/components/layout/author-shell";
 import { AuthGuard } from "@/features/auth/components/auth-guard";
+import { getPublicJournalSafe } from "@/features/public/api/public-api";
 
-export default function AuthorLayout({
+export default async function AuthorLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const journal = await getPublicJournalSafe();
+  const journalName = journal?.name.trim() || "Journal publishing portal";
+  const journalShortName =
+    journal?.shortName.trim() || journal?.name.trim() || "Journal";
+
   return (
-    <React.Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-          Loading author area...
-        </div>
-      }
-    >
-      <AuthGuard requiredRole="AUTHOR">
-        <AuthorShell>{children}</AuthorShell>
-      </AuthGuard>
-    </React.Suspense>
+    <AuthGuard requiredRole="AUTHOR">
+      <AuthorShell
+        journalName={journalName}
+        journalShortName={journalShortName}
+      >
+        {children}
+      </AuthorShell>
+    </AuthGuard>
   );
 }

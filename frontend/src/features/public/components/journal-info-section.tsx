@@ -1,97 +1,121 @@
-import Link from "next/link";
-import type { JournalInfo } from "../types";
+import {
+  ArrowRight,
+  BookMarked,
+  Building2,
+  CalendarRange,
+  Scale,
+  ShieldCheck,
+} from "lucide-react"
+import Link from "next/link"
+
+import { buttonVariants } from "@/components/ui/button"
+
+import type { JournalInfo } from "../types"
+import { submissionLoginHref } from "./public-navigation"
 
 type JournalInfoSectionProps = {
-  journal: JournalInfo;
-};
-
-const trustItems = [
-  "Peer-reviewed publication process",
-  "Open access to published research",
-  "Article metadata, DOI, and PDF access",
-  "Section-based scientific organization",
-];
+  journal: JournalInfo
+}
 
 export function JournalInfoSection({ journal }: JournalInfoSectionProps) {
+  const facts = [
+    journal.publisher
+      ? { label: "Publisher", value: journal.publisher, icon: Building2 }
+      : null,
+    journal.issn
+      ? { label: "ISSN", value: journal.issn, icon: BookMarked }
+      : null,
+    journal.peerReviewPolicy
+      ? {
+          label: "Peer review",
+          value: journal.peerReviewPolicy,
+          icon: ShieldCheck,
+        }
+      : null,
+    journal.publicationFrequency
+      ? {
+          label: "Publication schedule",
+          value: journal.publicationFrequency,
+          icon: CalendarRange,
+        }
+      : null,
+    journal.accessPolicy
+      ? { label: "Access", value: journal.accessPolicy, icon: Scale }
+      : null,
+  ].filter(Boolean)
+
   return (
     <section
-      className="bg-white py-16 sm:py-20"
-      aria-labelledby="journal-title"
+      className="border-t border-border bg-surface-elevated py-12 sm:py-16"
+      aria-labelledby="journal-information-title"
     >
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:px-8">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            About the Journal
+          <p className="text-xs font-semibold tracking-[0.14em] text-accent uppercase">
+            Journal information
           </p>
-
           <h2
-            id="journal-title"
-            className="mt-2 text-3xl font-bold tracking-tight text-slate-950"
+            id="journal-information-title"
+            className="mt-2 text-3xl leading-tight font-semibold tracking-tight text-foreground"
           >
-            A public portal for scientific publishing.
+            About {journal.shortName || journal.name}
           </h2>
+          {journal.description ? (
+            <p className="mt-4 max-w-xl text-sm leading-7 text-text-secondary" dir="auto">
+              {journal.description}
+            </p>
+          ) : null}
 
-          <p className="mt-5 leading-7 text-slate-600">
-            {journal.name} provides public access to peer-reviewed articles,
-            organized by section and supported by editorial and publishing
-            workflows.
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-2">
             <Link
               href="/about"
-              className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+              className={buttonVariants({ variant: "default", size: "touch" })}
             >
-              Learn About the Journal
+              About the journal
+              <ArrowRight data-icon="inline-end" aria-hidden="true" />
             </Link>
-
             <Link
               href="/author-guidelines"
-              className="rounded-md border px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className={buttonVariants({ variant: "outline", size: "touch" })}
             >
-              Author Guidelines
+              Author guidelines
+            </Link>
+            <Link
+              href={submissionLoginHref}
+              className={buttonVariants({ variant: "ghost", size: "touch" })}
+            >
+              Submit manuscript
             </Link>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {trustItems.map((item) => (
-            <div key={item} className="rounded-2xl border bg-slate-50 p-5">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-bold text-slate-950 shadow-sm">
-                ✓
-              </div>
+        {facts.length > 0 ? (
+          <dl className="grid gap-x-8 gap-y-5 rounded-xl border border-border bg-card p-5 shadow-xs sm:grid-cols-2">
+            {facts.map((fact) => {
+              if (!fact) {
+                return null
+              }
 
-              <h3 className="font-semibold text-slate-950">{item}</h3>
-            </div>
-          ))}
-
-          <div className="rounded-2xl border bg-slate-950 p-5 text-white sm:col-span-2">
-            <h3 className="font-semibold">Journal Metadata</h3>
-
-            <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-slate-300">ISSN</dt>
-                <dd className="mt-1 font-medium">{journal.issn}</dd>
-              </div>
-
-              <div>
-                <dt className="text-slate-300">License</dt>
-                <dd className="mt-1 font-medium">{journal.license}</dd>
-              </div>
-
-              <div>
-                <dt className="text-slate-300">Publisher</dt>
-                <dd className="mt-1 font-medium">{journal.publisher}</dd>
-              </div>
-
-              <div>
-                <dt className="text-slate-300">Access</dt>
-                <dd className="mt-1 font-medium">{journal.accessPolicy}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
+              const Icon = fact.icon
+              return (
+                <div key={fact.label} className="flex gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+                    <Icon className="size-4" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <dt className="text-xs font-medium text-muted-foreground">
+                      {fact.label}
+                    </dt>
+                    <dd className="mt-1 text-sm leading-5 text-foreground" dir="auto">
+                      {fact.value}
+                    </dd>
+                  </div>
+                </div>
+              )
+            })}
+          </dl>
+        ) : null}
       </div>
     </section>
-  );
+  )
 }

@@ -1,39 +1,47 @@
-import type { EditorialBoardMember } from "../types";
+import { Mail } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+
+import type { EditorialBoardMember } from "../types"
 
 type EditorialMemberCardProps = {
-  member: EditorialBoardMember;
-};
+  member: EditorialBoardMember
+}
 
 export function EditorialMemberCard({ member }: EditorialMemberCardProps) {
   return (
-    <article className="rounded-2xl border bg-white p-6 shadow-sm">
-      <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+    <article className="rounded-xl border border-border bg-card p-5 shadow-xs">
+      <p className="text-xs font-semibold tracking-[0.12em] text-accent uppercase">
         {member.role}
       </p>
+      <h2 className="mt-2 text-xl font-semibold text-foreground" dir="auto">
+        {member.name}
+      </h2>
+      {member.affiliation ? (
+        <p className="mt-2 text-sm leading-6 text-text-secondary" dir="auto">
+          {member.affiliation}
+        </p>
+      ) : null}
 
-      <h2 className="mt-3 text-xl font-bold text-slate-950">{member.name}</h2>
-
-      <p className="mt-2 text-sm text-slate-600">{member.affiliation}</p>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {member.expertise.map((item) => (
-          <span
-            key={item}
-            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
-          >
-            {item}
-          </span>
-        ))}
-      </div>
+      {member.expertise.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Expertise">
+          {member.expertise.map((item) => (
+            <Badge key={item} variant="secondary" dir="auto">
+              {item}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
 
       {member.email ? (
         <a
           href={`mailto:${member.email}`}
-          className="mt-5 inline-flex text-sm font-semibold text-slate-950 underline-offset-4 hover:underline"
+          className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-accent underline-offset-4 hover:underline"
         >
+          <Mail className="size-4" aria-hidden="true" />
           Contact
         </a>
       ) : null}
     </article>
-  );
+  )
 }

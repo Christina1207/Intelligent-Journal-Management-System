@@ -1,144 +1,209 @@
-import Link from "next/link";
-import type { PublicSection } from "../types";
-import type { ArticleSearchParams } from "../utils/article-search";
+import { Search, SlidersHorizontal, X } from "lucide-react"
+import Link from "next/link"
+
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
+
+import type { PublicSection } from "../types"
+import type { ArticleSearchParams } from "../utils/article-search"
 
 type ArticleSearchFiltersProps = {
-  sections: PublicSection[];
-  years: string[];
-  params: ArticleSearchParams;
-};
+  sections: PublicSection[]
+  years: string[]
+  params: ArticleSearchParams
+}
+
+function buildFilterRemovalHref(
+  params: ArticleSearchParams,
+  keyToRemove: keyof ArticleSearchParams
+) {
+  const query = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (
+      key === keyToRemove ||
+      key === "page" ||
+      !value ||
+      value === "all" ||
+      (key === "sort" && value === "newest")
+    ) {
+      return
+    }
+
+    query.set(key, value)
+  })
+
+  const queryString = query.toString()
+  return queryString ? `/articles?${queryString}` : "/articles"
+}
 
 export function ArticleSearchFilters({
   sections,
   years,
   params,
 }: ArticleSearchFiltersProps) {
+  const activeFilters = [
+    params.search?.trim()
+      ? {
+          key: "search" as const,
+          label: `Search: ${params.search.trim()}`,
+        }
+      : null,
+    params.section && params.section !== "all"
+      ? {
+          key: "section" as const,
+          label:
+            sections.find((section) => section.slug === params.section)?.name ??
+            params.section,
+        }
+      : null,
+    params.year && params.year !== "all"
+      ? { key: "year" as const, label: params.year }
+      : null,
+    params.language && params.language !== "all"
+      ? { key: "language" as const, label: params.language }
+      : null,
+    params.sort && params.sort !== "newest"
+      ? {
+          key: "sort" as const,
+          label: `Sort: ${params.sort.replaceAll("_", " ")}`,
+        }
+      : null,
+  ].filter(Boolean)
+
   return (
-    <form
-      action="/articles"
-      method="GET"
-      role="search"
-      className="rounded-2xl border bg-white p-5 shadow-sm"
-    >
-      <div>
-        <label
-          htmlFor="article-search"
-          className="text-sm font-medium text-slate-700"
+    <div className="space-y-4">
+      <form action="/articles" method="GET" role="search">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5">
+          <Label htmlFor="article-search">Search published research</Label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                id="article-search"
+                name="search"
+                type="search"
+                defaultValue={params.search ?? ""}
+                placeholder="Title, author, abstract, keyword, or DOI"
+                className="pl-9"
+              />
+            </div>
+            <Button type="submit" variant="accent" size="touch">
+              <Search data-icon="inline-start" aria-hidden="true" />
+              Search
+            </Button>
+          </div>
+
+          <div className="mt-5 flex items-center gap-2 border-t border-border/70 pt-4 text-sm font-semibold text-foreground">
+            <SlidersHorizontal className="size-4 text-accent" aria-hidden="true" />
+            Refine results
+          </div>
+
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-2">
+              <Label htmlFor="section-filter">Section</Label>
+              <Select
+                id="section-filter"
+                name="section"
+                defaultValue={params.section ?? "all"}
+              >
+                <option value="all">All sections</option>
+                {sections.map((section) => (
+                  <option key={section.id} value={section.slug}>
+                    {section.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="year-filter">Year</Label>
+              <Select
+                id="year-filter"
+                name="year"
+                defaultValue={params.year ?? "all"}
+              >
+                <option value="all">All years</option>
+                {years.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="language-filter">Language</Label>
+              <Select
+                id="language-filter"
+                name="language"
+                defaultValue={params.language ?? "all"}
+              >
+                <option value="all">All languages</option>
+                <option value="English">English</option>
+                <option value="Arabic">Arabic</option>
+                <option value="French">French</option>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="sort-filter">Sort by</Label>
+              <Select
+                id="sort-filter"
+                name="sort"
+                defaultValue={params.sort ?? "newest"}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="most_viewed">Most viewed</option>
+                <option value="most_downloaded">Most downloaded</option>
+                <option value="title">Title A–Z</option>
+              </Select>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="submit" variant="default" size="touch">
+              Apply filters
+            </Button>
+            <Link
+              href="/articles"
+              className={buttonVariants({ variant: "ghost", size: "touch" })}
+            >
+              Reset
+            </Link>
+          </div>
+        </div>
+      </form>
+
+      {activeFilters.length > 0 ? (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          aria-label="Active article filters"
         >
-          Search articles
-        </label>
-        <input
-          id="article-search"
-          name="search"
-          type="search"
-          defaultValue={params.search ?? ""}
-          placeholder="Title, author, keyword, abstract, or DOI..."
-          className="mt-2 min-h-11 w-full rounded-lg border px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-        />
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label
-            htmlFor="section-filter"
-            className="text-sm font-medium text-slate-700"
-          >
-            Section
-          </label>
-          <select
-            id="section-filter"
-            name="section"
-            defaultValue={params.section ?? "all"}
-            className="mt-2 min-h-11 w-full rounded-lg border bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          >
-            <option value="all">All sections</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.slug}>
-                {section.name}
-              </option>
-            ))}
-          </select>
+          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Active filters
+          </span>
+          {activeFilters.map((filter) =>
+            filter ? (
+              <Link
+                key={filter.key}
+                href={buildFilterRemovalHref(params, filter.key)}
+                className="inline-flex min-h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-text-secondary hover:border-accent hover:text-foreground"
+                aria-label={`Remove ${filter.label} filter`}
+              >
+                {filter.label}
+                <X className="size-3.5" aria-hidden="true" />
+              </Link>
+            ) : null
+          )}
         </div>
-
-        <div>
-          <label
-            htmlFor="year-filter"
-            className="text-sm font-medium text-slate-700"
-          >
-            Year
-          </label>
-          <select
-            id="year-filter"
-            name="year"
-            defaultValue={params.year ?? "all"}
-            className="mt-2 min-h-11 w-full rounded-lg border bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          >
-            <option value="all">All years</option>
-            {years.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="language-filter"
-            className="text-sm font-medium text-slate-700"
-          >
-            Language
-          </label>
-          <select
-            id="language-filter"
-            name="language"
-            defaultValue={params.language ?? "all"}
-            className="mt-2 min-h-11 w-full rounded-lg border bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          >
-            <option value="all">All languages</option>
-            <option value="english">English</option>
-            <option value="arabic">Arabic</option>
-            <option value="french">French</option>
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="sort-filter"
-            className="text-sm font-medium text-slate-700"
-          >
-            Sort by
-          </label>
-          <select
-            id="sort-filter"
-            name="sort"
-            defaultValue={params.sort ?? "newest"}
-            className="mt-2 min-h-11 w-full rounded-lg border bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="most_viewed">Most viewed</option>
-            <option value="most_downloaded">Most downloaded</option>
-            <option value="title">Title A–Z</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <button
-          type="submit"
-          className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-        >
-          Apply filters
-        </button>
-
-        <Link
-          href="/articles"
-          className="rounded-lg border px-5 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          Clear filters
-        </Link>
-      </div>
-    </form>
-  );
+      ) : null}
+    </div>
+  )
 }

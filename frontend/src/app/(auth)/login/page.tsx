@@ -1,21 +1,22 @@
-import * as React from "react";
+import type { Metadata } from "next";
 
 import { LoginForm } from "@/features/auth/components/login-form";
+import { getSafeNextPath } from "@/features/auth/utils/safe-next-path";
 
-export const metadata = {
-  title: "Login",
+export const metadata: Metadata = {
+  title: "Author Login",
+  description: "Sign in to manage journal submissions and author tasks.",
 };
 
-export default function LoginPage() {
-  return (
-    <React.Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-          Loading login...
-        </div>
-      }
-    >
-      <LoginForm />
-    </React.Suspense>
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const nextValue = (await searchParams).next;
+  const nextPath = getSafeNextPath(
+    typeof nextValue === "string" ? nextValue : null,
   );
+
+  return <LoginForm nextPath={nextPath} />;
 }
