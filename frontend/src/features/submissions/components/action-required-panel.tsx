@@ -1,7 +1,12 @@
 import Link from "next/link";
+import { ArrowRight, CircleCheck, FilePenLine } from "lucide-react";
 
-import type { AuthorDashboardActionItem } from "@/features/submissions/types";
+import { Notice } from "@/components/common/notice";
+import { SectionHeader } from "@/components/common/section-header";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
+import type { AuthorDashboardActionItem } from "@/features/submissions/types";
 
 type ActionRequiredPanelProps = {
   items: AuthorDashboardActionItem[];
@@ -9,46 +14,61 @@ type ActionRequiredPanelProps = {
 
 export function ActionRequiredPanel({ items }: ActionRequiredPanelProps) {
   return (
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">
-            Action required
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Manuscripts that need your attention.
-          </p>
-        </div>
-      </div>
+    <section aria-labelledby="action-required-heading">
+      <SectionHeader
+        title="Action required"
+        titleId="action-required-heading"
+        description="Manuscripts waiting for a response from you."
+      />
 
       {items.length === 0 ? (
-        <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500">
-          You have no pending author tasks.
-        </div>
+        <Notice
+          className="mt-4"
+          tone="success"
+          icon={CircleCheck}
+          title="You are up to date"
+          description="No submissions currently require action from you."
+        />
       ) : (
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 grid gap-3">
           {items.map((item) => (
-            <div
+            <Card
               key={item.id}
-              className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="border-status-action-border bg-status-action-subtle"
             >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-medium text-slate-950">{item.title}</h3>
-                  <SubmissionStatusBadge status={item.status} />
+              <CardHeader className="flex-row items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-status-action-border bg-background/75 text-status-action-foreground">
+                  <FilePenLine className="size-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3
+                      className="font-heading font-medium text-foreground"
+                      dir="auto"
+                    >
+                      {item.title}
+                    </h3>
+                    <SubmissionStatusBadge status={item.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    {item.section} · Revised files and a point-by-point response
+                    are required.
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  {item.section} · Revision upload required
-                </p>
-              </div>
-
-              <Link
-                href={`/author/submissions/${item.id}`}
-                className="inline-flex justify-center rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
-                Upload revision
-              </Link>
-            </div>
+              </CardHeader>
+              <CardContent className="flex justify-end">
+                <Link
+                  href={`/author/submissions/${item.id}#revision-upload`}
+                  className={buttonVariants({
+                    variant: "default",
+                    size: "touch",
+                  })}
+                >
+                  Review request
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

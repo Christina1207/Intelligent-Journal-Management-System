@@ -1,344 +1,284 @@
 "use client";
 
-import * as React from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Controller, useForm } from "react-hook-form";
+import { FilePenLine, LoaderCircle, Send } from "lucide-react";
 
+import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import { Notice } from "@/components/common/notice";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { uploadRevisedManuscript } from "@/features/submissions/api/submissions-api";
+import { ManuscriptFileField } from "@/features/submissions/components/manuscript-file-field";
+import { submissionQueryKeys } from "@/features/submissions/query-keys";
+import {
+  revisionUploadSchema,
+  type RevisionUploadFormValues,
+} from "@/features/submissions/revision-upload-schema";
 import { ApiError } from "@/lib/api/errors";
-
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 type RevisionUploadFormProps = {
   submissionId: string;
 };
 
-type FormErrors = Partial<
-  Record<"file" | "blinded_file" | "response_to_reviewers", string>
->;
+const revisionFields = new Set<keyof RevisionUploadFormValues>([
+  "file",
+  "blinded_file",
+  "response_to_reviewers",
+]);
 
-function isPdfFile(file: File) {
+export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
+  const queryClient = useQueryClient();
+  const [serverError, setServerError] = useState<string | null>(null);
+  const form = useForm<RevisionUploadFormValues>({
+    resolver: zodResolver(revisionUploadSchema),
+    mode: "onTouched",
+    defaultValues: {
+      file: null,
+      blinded_file: null,
+      response_to_reviewers: "",
+    },
+  });
+  const uploadMutation = useMutation({
+    mutationFn: uploadRevision,
+    onMutate: () => {
+      setServerError(null);
+    },
+    onSuccess: async () => {
+      form.reset();
+      setServerError(null);
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.detail(submissionId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.versions(submissionId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.dashboard(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.lists(),
+        }),
+      ]);
+    },
+    onError: (error) => {
+      const apiErrors = getApiFieldErrors(error);
+
+      Object.entries(apiErrors).forEach(([field, message]) => {
+        if (revisionFields.has(field as keyof RevisionUploadFormValues)) {
+          form.setError(field as keyof RevisionUploadFormValues, {
+            type: "server",
+            message,
+          });
+        }
+      });
+
+      setServerError(getGeneralErrorMessage(error));
+    },
+  });
+
+  function uploadRevision(values: RevisionUploadFormValues) {
+    if (!values.file || !values.blinded_file) {
+      throw new Error("Choose both revised manuscript PDFs.");
+    }
+
+    return uploadRevisedManuscript(submissionId, {
+      file: values.file,
+      blinded_file: values.blinded_file,
+      response_to_reviewers: values.response_to_reviewers.trim(),
+    });
+  }
+
+  const isSubmitting = uploadMutation.isPending;
   return (
-    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+    <Card className="border-status-action-border">
+      <CardHeader className="border-b border-status-action-border bg-status-action-subtle">
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <FilePenLine
+            className="size-5 text-status-action-foreground"
+            aria-hidden="true"
+          />
+          Upload revised manuscript
+        </CardTitle>
+        <p className="text-sm leading-6 text-text-secondary">
+          Replace both PDFs and include a detailed response. The revision
+          remains part of this submission&apos;s version history.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {serverError ? (
+          <Notice
+            className="mb-5"
+            tone="destructive"
+            title="Revision upload failed"
+            description={serverError}
+          />
+        ) : null}
+
+        {isSubmitting ? (
+          <Notice
+            className="mb-5 [&_svg]:animate-spin"
+            tone="info"
+            icon={LoaderCircle}
+            title="Uploading revised files"
+            description="Keep this page open until the journal confirms the new version."
+          />
+        ) : null}
+
+        <form
+          onSubmit={form.handleSubmit((values) =>
+            uploadMutation.mutate(values),
+          )}
+          className="grid gap-6"
+          noValidate
+        >
+          <Controller
+            control={form.control}
+            name="file"
+            render={({ field, fieldState }) => (
+              <ManuscriptFileField
+                id="revision-full-manuscript"
+                label="Full revised manuscript PDF"
+                description="May include author names, affiliations, acknowledgements, and identifying details. PDF only, maximum 50 MB."
+                value={field.value}
+                error={fieldState.error?.message}
+                disabled={isSubmitting}
+                onChange={(file) => {
+                  form.clearErrors("file");
+                  setServerError(null);
+                  field.onChange(file);
+                }}
+              />
+            )}
+          />
+
+          <ManuscriptFileFieldController
+            form={form}
+            disabled={isSubmitting}
+          />
+
+          <FormField
+            htmlFor="response-to-reviewers"
+            label="Point-by-point response to reviewers"
+            description="Required, 20–20,000 characters. Address each released comment and identify the corresponding manuscript change."
+            error={form.formState.errors.response_to_reviewers?.message}
+            required
+          >
+            <Textarea
+              id="response-to-reviewers"
+              rows={10}
+              disabled={isSubmitting}
+              dir="auto"
+              placeholder={"Reviewer 1, comment 1:\nResponse:\nChange made:"}
+              aria-invalid={Boolean(
+                form.formState.errors.response_to_reviewers,
+              )}
+              aria-describedby={getFormFieldDescription({
+                id: "response-to-reviewers",
+                hasDescription: true,
+                hasError: Boolean(
+                  form.formState.errors.response_to_reviewers,
+                ),
+              })}
+              {...form.register("response_to_reviewers", {
+                onChange: () => {
+                  form.clearErrors("response_to_reviewers");
+                  setServerError(null);
+                },
+              })}
+            />
+          </FormField>
+
+          <div className="flex justify-end border-t border-border pt-5">
+            <Button
+              type="submit"
+              variant="default"
+              size="touch"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <LoaderCircle className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Send aria-hidden="true" />
+              )}
+              {isSubmitting ? "Uploading revision…" : "Submit revision"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
-function getApiFieldErrors(error: unknown): FormErrors {
-  if (!(error instanceof ApiError)) {
-    return {};
-  }
+function ManuscriptFileFieldController({
+  form,
+  disabled,
+}: {
+  form: ReturnType<typeof useForm<RevisionUploadFormValues>>;
+  disabled: boolean;
+}) {
+  return (
+    <Controller
+      control={form.control}
+      name="blinded_file"
+      render={({ field, fieldState }) => (
+        <ManuscriptFileField
+          id="revision-blinded-manuscript"
+          label="Blinded revised manuscript PDF"
+          description="Remove author names, affiliations, acknowledgements, identifying self-references, and document metadata. The frontend cannot verify anonymity. PDF only, maximum 50 MB."
+          value={field.value}
+          error={fieldState.error?.message}
+          disabled={disabled}
+          onChange={(file) => {
+            form.clearErrors("blinded_file");
+            field.onChange(file);
+          }}
+        />
+      )}
+    />
+  );
+}
+
+function getApiFieldErrors(error: unknown) {
+  const errors: Partial<Record<keyof RevisionUploadFormValues, string>> = {};
 
   if (
+    !(error instanceof ApiError) ||
+    !error.details ||
     typeof error.details !== "object" ||
-    error.details === null ||
     Array.isArray(error.details)
   ) {
-    return {};
+    return errors;
   }
 
-  const errors: FormErrors = {};
-
-  for (const [field, value] of Object.entries(error.details)) {
-    if (Array.isArray(value)) {
-      errors[field as keyof FormErrors] = value.map(String).join(" ");
-    } else if (typeof value === "string") {
-      errors[field as keyof FormErrors] = value;
+  Object.entries(error.details).forEach(([field, value]) => {
+    if (!revisionFields.has(field as keyof RevisionUploadFormValues)) {
+      return;
     }
-  }
+
+    const message = Array.isArray(value)
+      ? value.map(String).join(" ")
+      : typeof value === "string"
+        ? value
+        : null;
+
+    if (message) {
+      errors[field as keyof RevisionUploadFormValues] = message;
+    }
+  });
 
   return errors;
 }
 
 function getGeneralErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
+  if (error instanceof ApiError || error instanceof Error) {
     return error.message;
   }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Something went wrong. Please try again.";
-}
-
-export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
-  const queryClient = useQueryClient();
-
-  const [file, setFile] = React.useState<File | null>(null);
-  const [blindedFile, setBlindedFile] = React.useState<File | null>(null);
-  const [responseToReviewers, setResponseToReviewers] = React.useState("");
-  const [formError, setFormError] = React.useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = React.useState<FormErrors>({});
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(
-    null,
-  );
-
-  const uploadMutation = useMutation({
-    mutationFn: () => {
-      if (!file) {
-        throw new Error("Please upload the revised manuscript PDF.");
-      }
-
-      if (!blindedFile) {
-        throw new Error("Please upload the blinded manuscript PDF.");
-      }
-
-      return uploadRevisedManuscript(submissionId, {
-        file,
-        blinded_file: blindedFile,
-        response_to_reviewers: responseToReviewers.trim(),
-      });
-    },
-    onSuccess: async () => {
-      setFile(null);
-      setBlindedFile(null);
-      setResponseToReviewers("");
-      setFormError(null);
-      setFieldErrors({});
-      setSuccessMessage("Revised manuscript uploaded successfully.");
-
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["submission-detail", submissionId],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["submission-versions", submissionId],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["author-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["author-submissions"] }),
-      ]);
-    },
-    onError: (error) => {
-      setSuccessMessage(null);
-      setFormError(getGeneralErrorMessage(error));
-      setFieldErrors(getApiFieldErrors(error));
-    },
-  });
-
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0] ?? null;
-    setFile(selectedFile);
-
-    setSuccessMessage(null);
-
-    if (!selectedFile) {
-      return;
-    }
-
-    setFieldErrors((currentErrors) => {
-      const nextErrors = { ...currentErrors };
-      delete nextErrors.file;
-      return nextErrors;
-    });
-  }
-
-  function handleBlindedFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0] ?? null;
-    setBlindedFile(selectedFile);
-
-    setSuccessMessage(null);
-
-    if (!selectedFile) {
-      return;
-    }
-
-    setFieldErrors((currentErrors) => {
-      const nextErrors = { ...currentErrors };
-      delete nextErrors.blinded_file;
-      return nextErrors;
-    });
-  }
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const errors: FormErrors = {};
-
-    if (!file) {
-      errors.file = "Please upload the revised manuscript PDF.";
-    } else if (!isPdfFile(file)) {
-      errors.file = "Only PDF files are accepted.";
-    } else if (file.size > MAX_FILE_SIZE_BYTES) {
-      errors.file = "The revised manuscript must be 50MB or smaller.";
-    }
-
-    if (!blindedFile) {
-      errors.blinded_file = "Please upload the blinded manuscript PDF.";
-    } else if (!isPdfFile(blindedFile)) {
-      errors.blinded_file = "Only PDF files are accepted.";
-    } else if (blindedFile.size > MAX_FILE_SIZE_BYTES) {
-      errors.blinded_file = "The blinded manuscript must be 50MB or smaller.";
-    }
-
-    if (!responseToReviewers.trim()) {
-      errors.response_to_reviewers =
-        "Provide a point-by-point response to the reviewer comments.";
-    } else if (responseToReviewers.trim().length < 20) {
-      errors.response_to_reviewers =
-        "The response must contain at least 20 characters.";
-    }
-
-    setFormError(null);
-    setSuccessMessage(null);
-    setFieldErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      setFormError("Please fix the highlighted fields before uploading.");
-      return;
-    }
-
-    uploadMutation.mutate();
-  }
-
-  const isSubmitting = uploadMutation.isPending;
-
-  return (
-    <section className="rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-950">
-        Revision required
-      </h2>
-      <p className="mt-1 text-sm leading-6 text-slate-700">
-        The editor has requested a revised manuscript. Upload updated full and
-        blinded PDFs and explain how you addressed the reviewer comments.
-      </p>
-
-      {formError ? (
-        <div className="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {formError}
-        </div>
-      ) : null}
-
-      {successMessage ? (
-        <div className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {successMessage}
-        </div>
-      ) : null}
-
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-        <div>
-          <label
-            htmlFor="revision-file"
-            className="block text-sm font-medium text-slate-700"
-          >
-            Full manuscript PDF - may contain author names, affiliations and
-            acknowledgements.
-          </label>
-          <input
-            id="revision-file"
-            name="file"
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={handleFileChange}
-            className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
-          />
-          {fieldErrors.file ? (
-            <p className="mt-1 text-sm text-red-600">{fieldErrors.file}</p>
-          ) : (
-            <p className="mt-1 text-xs text-slate-600">
-              PDF only. Maximum file size: 50MB.
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label
-            htmlFor="revision-blinded-file"
-            className="block text-sm font-medium text-slate-700"
-          >
-            Blinded manuscript PDF - must remove author names, affiliations,
-            acknowledgements and identifying metadata.
-          </label>
-          <input
-            id="revision-blinded-file"
-            name="blinded_file"
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={handleBlindedFileChange}
-            className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
-          />
-          {fieldErrors.blinded_file ? (
-            <p className="mt-1 text-sm text-red-600">
-              {fieldErrors.blinded_file}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-slate-600">
-              PDF only. Maximum file size: 50MB.
-            </p>
-          )}
-        </div>
-
-        {file ? (
-          <div className="rounded-lg border bg-white p-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-950">{file.name}</p>
-            <p className="mt-1 text-slate-500">
-              {(file.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-          </div>
-        ) : null}
-
-        {blindedFile ? (
-          <div className="rounded-lg border bg-white p-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-950">{blindedFile.name}</p>
-            <p className="mt-1 text-slate-500">
-              {(blindedFile.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-          </div>
-        ) : null}
-
-        <div>
-          <label
-            htmlFor="response-to-reviewers"
-            className="block text-sm font-medium text-slate-700"
-          >
-            Response to reviewers
-          </label>
-          <textarea
-            id="response-to-reviewers"
-            name="response_to_reviewers"
-            rows={8}
-            required
-            value={responseToReviewers}
-            disabled={isSubmitting}
-            onChange={(event) => {
-              setResponseToReviewers(event.target.value);
-              setSuccessMessage(null);
-
-              setFieldErrors((currentErrors) => {
-                const nextErrors = { ...currentErrors };
-                delete nextErrors.response_to_reviewers;
-                return nextErrors;
-              });
-            }}
-            placeholder={`Provide a point-by-point response, for example:
-
-          Reviewer 1, Comment 1:
-          Response:
-          Change made in manuscript:
-
-          Reviewer 2, Comment 1:
-          Response:
-          Change made in manuscript:`}
-            className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-60"
-          />
-          {fieldErrors.response_to_reviewers ? (
-            <p className="mt-1 text-sm text-red-600">
-              {fieldErrors.response_to_reviewers}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-slate-600">
-              Required. Respond to each reviewer separately without including
-              confidential or identifying information.
-            </p>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="inline-flex rounded-md bg-slate-950 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Uploading revision..." : "Upload revised manuscript"}
-        </button>
-      </form>
-    </section>
-  );
+  return "The journal could not receive this revision. Please try again.";
 }

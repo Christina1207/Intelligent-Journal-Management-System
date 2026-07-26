@@ -1,71 +1,91 @@
 import Link from "next/link";
+import { ArrowRight, FileText } from "lucide-react";
 
-import type { AuthorDashboardSubmission } from "@/features/submissions/types";
+import { EmptyState } from "@/components/common/empty-state";
+import { SectionHeader } from "@/components/common/section-header";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
+import { formatSubmissionDate } from "@/features/submissions/submission-formatters";
+import type { AuthorDashboardSubmission } from "@/features/submissions/types";
 
 type RecentSubmissionsListProps = {
   submissions: AuthorDashboardSubmission[];
 };
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
-}
-
 export function RecentSubmissionsList({
   submissions,
 }: RecentSubmissionsListProps) {
   return (
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">
-            Recent submissions
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Your latest manuscript activity.
-          </p>
-        </div>
-
-        <Link
-          href="/author/submissions"
-          className="text-sm font-medium text-slate-700 hover:text-slate-950"
-        >
-          View all
-        </Link>
-      </div>
+    <section aria-labelledby="recent-submissions-heading">
+      <SectionHeader
+        title="Recent submissions"
+        titleId="recent-submissions-heading"
+        description="Your latest manuscript activity."
+        action={
+          <Link
+            href="/author/submissions"
+            className={buttonVariants({ variant: "ghost", size: "touch" })}
+          >
+            View all
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        }
+      />
 
       {submissions.length === 0 ? (
-        <div className="mt-5 rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500">
-          You have not submitted any manuscripts yet.
-        </div>
-      ) : (
-        <div className="mt-5 divide-y">
-          {submissions.map((submission) => (
+        <EmptyState
+          className="mt-4"
+          icon={<FileText aria-hidden="true" />}
+          title="No submissions yet"
+          description="Start a new manuscript when you are ready to submit work to the journal."
+          action={
             <Link
-              key={submission.id}
-              href={`/author/submissions/${submission.id}`}
-              className="block py-4 transition hover:bg-slate-50"
+              href="/author/submissions/new"
+              className={buttonVariants({ variant: "accent", size: "touch" })}
             >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <h3 className="truncate font-medium text-slate-950">
-                    {submission.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {submission.section} · Submitted{" "}
-                    {formatDate(submission.submitted_at)}
-                  </p>
-                </div>
-
-                <SubmissionStatusBadge status={submission.status} />
-              </div>
+              New submission
             </Link>
-          ))}
-        </div>
+          }
+        />
+      ) : (
+        <Card className="mt-4 py-0">
+          <CardContent className="divide-y divide-border p-0">
+            {submissions.map((submission) => {
+              const submittedDate = formatSubmissionDate(
+                submission.submitted_at,
+              );
+
+              return (
+                <Link
+                  key={submission.id}
+                  href={`/author/submissions/${submission.id}`}
+                  className="group flex min-h-20 flex-col gap-3 px-4 py-4 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/40 sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0">
+                    <h3
+                      className="line-clamp-2 font-heading font-medium text-foreground"
+                      dir="auto"
+                    >
+                      {submission.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {submission.section}
+                      {submittedDate ? ` · Submitted ${submittedDate}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 sm:ml-auto">
+                    <SubmissionStatusBadge status={submission.status} />
+                    <ArrowRight
+                      className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </Link>
+              );
+            })}
+          </CardContent>
+        </Card>
       )}
     </section>
   );

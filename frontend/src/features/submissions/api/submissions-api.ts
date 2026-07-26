@@ -23,6 +23,25 @@ export function getMySubmissions(page = 1) {
   );
 }
 
+export async function getAllMySubmissions() {
+  const firstPage = await getMySubmissions();
+  const results = [...firstPage.results];
+  let nextPageUrl = firstPage.next;
+  const visitedUrls = new Set<string>();
+
+  while (nextPageUrl && !visitedUrls.has(nextPageUrl)) {
+    visitedUrls.add(nextPageUrl);
+    const page = await apiClient.get<AuthorSubmissionsResponse>(nextPageUrl);
+    results.push(...page.results);
+    nextPageUrl = page.next;
+  }
+
+  return {
+    count: results.length,
+    results,
+  };
+}
+
 export function getSubmissionDetail(submissionId: string) {
   return apiClient.get<SubmissionDetail>(`/submissions/${submissionId}/`);
 }

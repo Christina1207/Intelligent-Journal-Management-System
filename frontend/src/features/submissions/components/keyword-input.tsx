@@ -1,6 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { Plus, X } from "lucide-react";
+
+import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const MAX_KEYWORDS = 8;
 
@@ -25,26 +31,23 @@ export function KeywordInput({
 
   function commitDraft() {
     const candidates = draft.split(",").map(normalizeKeyword).filter(Boolean);
-
-    if (candidates.length === 0) {
-      setDraft("");
-      return;
-    }
-
     const nextKeywords = [...value];
 
-    for (const candidate of candidates) {
-      const duplicate = nextKeywords.some(
+    candidates.forEach((candidate) => {
+      const isDuplicate = nextKeywords.some(
         (keyword) =>
           keyword.toLocaleLowerCase() === candidate.toLocaleLowerCase(),
       );
 
-      if (!duplicate && nextKeywords.length < MAX_KEYWORDS) {
+      if (!isDuplicate && nextKeywords.length < MAX_KEYWORDS) {
         nextKeywords.push(candidate);
       }
+    });
+
+    if (nextKeywords.length !== value.length) {
+      onChange(nextKeywords);
     }
 
-    onChange(nextKeywords);
     setDraft("");
   }
 
@@ -53,43 +56,39 @@ export function KeywordInput({
   }
 
   return (
-    <div>
-      <label
-        htmlFor="keyword-input"
-        className="block text-sm font-medium text-slate-700"
-      >
-        Keywords
-      </label>
-
-      <p className="mt-1 text-xs text-slate-500">
-        Provide 3–8 scholarly keywords. Press Enter or use commas to add them.
-      </p>
-
+    <FormField
+      htmlFor="keyword-input"
+      label="Keywords"
+      description="Provide 3–8 distinct scholarly keywords. Press Enter or type a comma to add each one."
+      error={error}
+      required
+    >
       {value.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" aria-label="Added keywords">
           {value.map((keyword) => (
-            <span
+            <Badge
               key={keyword}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
+              variant="secondary"
+              className="h-auto gap-1 rounded-md py-1 pr-1 pl-2"
+              dir="auto"
             >
               {keyword}
-
               <button
                 type="button"
                 onClick={() => removeKeyword(keyword)}
                 disabled={disabled}
                 aria-label={`Remove ${keyword}`}
-                className="font-medium text-slate-500 hover:text-red-600 disabled:cursor-not-allowed"
+                className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
-                ×
+                <X className="size-3.5" aria-hidden="true" />
               </button>
-            </span>
+            </Badge>
           ))}
         </div>
       ) : null}
 
-      <div className="mt-3 flex gap-2">
-        <input
+      <div className="flex gap-2">
+        <Input
           id="keyword-input"
           type="text"
           value={draft}
@@ -112,41 +111,35 @@ export function KeywordInput({
             }
           }}
           aria-invalid={Boolean(error)}
-          aria-describedby="keyword-help"
+          aria-describedby={getFormFieldDescription({
+            id: "keyword-input",
+            hasDescription: true,
+            hasError: Boolean(error),
+          })}
           placeholder={
             value.length >= MAX_KEYWORDS
               ? "Maximum reached"
               : "e.g. semantic similarity"
           }
-          className="block min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:bg-slate-50"
         />
-
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="touch"
           onClick={commitDraft}
           disabled={
             disabled ||
             value.length >= MAX_KEYWORDS ||
             normalizeKeyword(draft).length === 0
           }
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
+          <Plus aria-hidden="true" />
           Add
-        </button>
+        </Button>
       </div>
-
-      <div
-        id="keyword-help"
-        className="mt-2 flex justify-between gap-4 text-xs"
-      >
-        <span className={error ? "text-red-600" : "text-slate-500"}>
-          {error ?? "These remain separate from AI-generated topic keywords."}
-        </span>
-
-        <span className="shrink-0 text-slate-500">
-          {value.length}/{MAX_KEYWORDS}
-        </span>
-      </div>
-    </div>
+      <p className="text-right text-xs text-muted-foreground">
+        {value.length}/{MAX_KEYWORDS}
+      </p>
+    </FormField>
   );
 }
