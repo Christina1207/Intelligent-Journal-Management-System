@@ -112,7 +112,25 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 
     "COMPONENT_SPLIT_REQUEST": True,
-
+    "ENUM_NAME_OVERRIDES": {
+        "RoleNameEnum": "apps.accounts.models.Role.RoleName",
+        "ReviewerSyncStatusEnum": (
+            "apps.accounts.models.ReviewerProfile.SyncStatus"
+        ),
+        "IssueStatusEnum": "apps.journals.models.Issue.Status",
+        "PublishedArticleStatusEnum": (
+            "apps.publishing.models.PublishedArticle.Status"
+        ),
+        "SubmissionStatusEnum": (
+            "apps.submissions.models.Submission.Status"
+        ),
+        "ReviewerAssignmentStatusEnum": (
+            "apps.workflow.models.ReviewerAssignment.Status"
+        ),
+        "TriageStatusEnum": (
+            "apps.workflow.models.TriageAssessment.Status"
+        ),
+    },
     "SECURITY": [
         {
             "BearerAuth": [],
@@ -157,8 +175,8 @@ CELERY_BEAT_SCHEDULE = {
 
     },
     "expire-pending-reviewer-assignments": {
-        "task": "apps.accounts.tasks.expire_pending_reviewer_assignments",
-        "schedule": crontab(hour=3, minute=0),  # Daily at 3am
+        "task": "apps.reviews.tasks.expire_pending_reviewer_assignments",
+        "schedule": crontab(hour=3, minute=0),
     },
     "check-section-clustering": {
         "task": "apps.journals.tasks.check_and_trigger_section_clustering",

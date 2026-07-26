@@ -6,193 +6,9 @@ from pgvector.django import VectorField
 # ISO 639-1 language codes
 # Format: ("code", "Display Name") — e.g. ("en", "English")
 LANGUAGE_CHOICES = [
-    # Top 20 Most Used Languages First
     ("en", "English"),
-    ("zh", "Chinese"),
-    ("hi", "Hindi"),
-    ("es", "Spanish"),
     ("ar", "Arabic"),
     ("fr", "French"),
-    ("bn", "Bengali"),
-    ("pt", "Portuguese"),
-    ("id", "Indonesian"),
-    ("ur", "Urdu"),
-    ("ru", "Russian"),
-    ("de", "German"),
-    ("ja", "Japanese"),
-    ("mr", "Marathi"),
-    ("vi", "Vietnamese"),
-    ("te", "Telugu"),
-    ("sw", "Swahili"),
-    ("ha", "Hausa"),
-    ("tr", "Turkish"),
-    ("tl", "Tagalog"),
-    ("ta", "Tamil"),
-    ("ko", "Korean"),
-    ("am", "Amharic"),
-    ("th", "Thai"),
-    ("jv", "Javanese"),
-    ("it", "Italian"),
-    ("gu", "Gujarati"),
-    ("kn", "Kannada"),
-    ("yo", "Yoruba"),
-
-    # Remaining ISO 639-1 Languages (Alphabetical)
-    ("aa", "Afar"),
-    ("ab", "Abkhazian"),
-    ("ae", "Avestan"),
-    ("af", "Afrikaans"),
-    ("ak", "Akan"),
-    ("an", "Aragonese"),
-    ("as", "Assamese"),
-    ("av", "Avaric"),
-    ("ay", "Aymara"),
-    ("az", "Azerbaijani"),
-    ("ba", "Bashkir"),
-    ("be", "Belarusian"),
-    ("bg", "Bulgarian"),
-    ("bh", "Bihari languages"),
-    ("bi", "Bislama"),
-    ("bm", "Bambara"),
-    ("bo", "Tibetan"),
-    ("br", "Breton"),
-    ("bs", "Bosnian"),
-    ("ca", "Catalan"),
-    ("ce", "Chechen"),
-    ("ch", "Chamorro"),
-    ("co", "Corsican"),
-    ("cr", "Cree"),
-    ("cs", "Czech"),
-    ("cu", "Church Slavic"),
-    ("cv", "Chuvash"),
-    ("cy", "Welsh"),
-    ("da", "Danish"),
-    ("dv", "Divehi"),
-    ("dz", "Dzongkha"),
-    ("ee", "Ewe"),
-    ("el", "Greek"),
-    ("eo", "Esperanto"),
-    ("et", "Estonian"),
-    ("eu", "Basque"),
-    ("fa", "Persian"),
-    ("ff", "Fulah"),
-    ("fi", "Finnish"),
-    ("fj", "Fijian"),
-    ("fo", "Faroese"),
-    ("fy", "Western Frisian"),
-    ("ga", "Irish"),
-    ("gd", "Scottish Gaelic"),
-    ("gl", "Galician"),
-    ("gn", "Guarani"),
-    ("gv", "Manx"),
-    ("he", "Hebrew"),
-    ("ho", "Hiri Motu"),
-    ("hr", "Croatian"),
-    ("ht", "Haitian"),
-    ("hu", "Hungarian"),
-    ("hy", "Armenian"),
-    ("hz", "Herero"),
-    ("ia", "Interlingua"),
-    ("ie", "Interlingue"),
-    ("ig", "Igbo"),
-    ("ii", "Sichuan Yi"),
-    ("ik", "Inupiaq"),
-    ("io", "Ido"),
-    ("is", "Icelandic"),
-    ("iu", "Inuktitut"),
-    ("ka", "Georgian"),
-    ("kg", "Kongo"),
-    ("ki", "Kikuyu"),
-    ("kj", "Kuanyama"),
-    ("kk", "Kazakh"),
-    ("kl", "Kalaallisut"),
-    ("km", "Central Khmer"),
-    ("kr", "Kanuri"),
-    ("ks", "Kashmiri"),
-    ("ku", "Kurdish"),
-    ("kv", "Komi"),
-    ("kw", "Cornish"),
-    ("ky", "Kirghiz"),
-    ("la", "Latin"),
-    ("lb", "Luxembourgish"),
-    ("lg", "Ganda"),
-    ("li", "Limburgish"),
-    ("ln", "Lingala"),
-    ("lo", "Lao"),
-    ("lt", "Lithuanian"),
-    ("lu", "Luba-Katanga"),
-    ("lv", "Latvian"),
-    ("mg", "Malagasy"),
-    ("mh", "Marshallese"),
-    ("mi", "Maori"),
-    ("mk", "Macedonian"),
-    ("ml", "Malayalam"),
-    ("mn", "Mongolian"),
-    ("ms", "Malay"),
-    ("mt", "Maltese"),
-    ("my", "Burmese"),
-    ("na", "Nauru"),
-    ("nb", "Norwegian Bokmål"),
-    ("nd", "North Ndebele"),
-    ("ne", "Nepali"),
-    ("ng", "Ndonga"),
-    ("nl", "Dutch"),
-    ("nn", "Norwegian Nynorsk"),
-    ("no", "Norwegian"),
-    ("nr", "South Ndebele"),
-    ("nv", "Navajo"),
-    ("ny", "Chichewa"),
-    ("oc", "Occitan"),
-    ("oj", "Ojibwe"),
-    ("om", "Oromo"),
-    ("or", "Oriya"),
-    ("os", "Ossetian"),
-    ("pa", "Panjabi"),
-    ("pi", "Pali"),
-    ("pl", "Polish"),
-    ("ps", "Pushto"),
-    ("qu", "Quechua"),
-    ("rm", "Romansh"),
-    ("rn", "Rundi"),
-    ("ro", "Romanian"),
-    ("rw", "Kinyarwanda"),
-    ("sa", "Sanskrit"),
-    ("sc", "Sardinian"),
-    ("sd", "Sindhi"),
-    ("se", "Northern Sami"),
-    ("sg", "Sango"),
-    ("sh", "Serbo-Croatian"),
-    ("si", "Sinhala"),
-    ("sk", "Slovak"),
-    ("sl", "Slovenian"),
-    ("sm", "Samoan"),
-    ("sn", "Shona"),
-    ("so", "Somali"),
-    ("sq", "Albanian"),
-    ("sr", "Serbian"),
-    ("ss", "Swati"),
-    ("st", "Sotho, Southern"),
-    ("su", "Sundanese"),
-    ("sv", "Swedish"),
-    ("tg", "Tajik"),
-    ("ti", "Tigrinya"),
-    ("tk", "Turkmen"),
-    ("tn", "Tswana"),
-    ("to", "Tonga"),
-    ("ts", "Tsonga"),
-    ("tt", "Tatar"),
-    ("tw", "Twi"),
-    ("ty", "Tahitian"),
-    ("ug", "Uighur"),
-    ("uk", "Ukrainian"),
-    ("uz", "Uzbek"),
-    ("ve", "Venda"),
-    ("vo", "Volapük"),
-    ("wa", "Walloon"),
-    ("wo", "Wolof"),
-    ("xh", "Xhosa"),
-    ("za", "Chuang"),
-    ("zu", "Zulu"),
 ]
 
 
@@ -201,17 +17,19 @@ class Submission(models.Model):
         SUBMITTED     = "SUBMITTED",     "Submitted"
         ASSIGNED      = "ASSIGNED",      "Assigned"
         UNDER_REVIEW  = "UNDER_REVIEW",  "Under Review"
-        SUSPENDED     = "SUSPENDED",     "Suspended"
         REVIEWED      = "REVIEWED",      "Reviewed"
         UNDER_REVISION = "UNDER_REVISION", "Under Revision"
-        REVISED       = "REVISED",       "Revised"
         ACCEPTED      = "ACCEPTED",      "Accepted"
         REJECTED      = "REJECTED",      "Rejected"
-    # TODO: should i add PUBLISHED?
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=500)
     abstract = models.TextField()
+    keywords = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Author-supplied scholarly keywords.",
+    )
     language = models.CharField(
         max_length=10,
         choices=LANGUAGE_CHOICES,
@@ -238,7 +56,6 @@ class Submission(models.Model):
         on_delete=models.PROTECT,
         related_name="submissions",
         # PROTECT: deactivating a section ≠ deleting its submissions
-        # suspension logic handled at the view/service layer, not DB cascade
     )
     # Use SubmissionAssignment as audit/history
     # Use Submission.assigned_editor as current active editor
@@ -267,6 +84,36 @@ class Submission(models.Model):
             models.Index(fields=['assigned_editor']),
         ]
 
+class SubmissionCoAuthor(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        related_name="coauthors",
+    )
+    full_name = models.CharField(max_length=255)
+    email = models.EmailField()
+    orcid = models.CharField(max_length=19, blank=True, default="")
+    affiliation = models.CharField(max_length=255, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="")
+    order = models.PositiveSmallIntegerField()
+
+    def __str__(self):
+        return f"{self.full_name} — {self.submission.title}"
+
+    class Meta:
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["submission", "order"],
+                name="unique_submission_coauthor_order",
+            ),
+        ]
+
 class SubmissionVersion(models.Model):
 
     class Decision(models.TextChoices):
@@ -283,7 +130,19 @@ class SubmissionVersion(models.Model):
                        related_name='versions',
                      )
     version_number = models.PositiveIntegerField()
-    file           = models.CharField(max_length=500, null=True, blank=True)  # MinIO object path
+    file = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Private MinIO object path for the full manuscript.",
+    )
+
+    blinded_file = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Private MinIO object path for the anonymized manuscript.",
+    )
     submitted_at   = models.DateTimeField(auto_now_add=True)
     decision       = models.CharField(
                        max_length=20,
@@ -299,6 +158,7 @@ class SubmissionVersion(models.Model):
                        blank=True,
                      )
     decision_letter = models.TextField(blank=True)
+    response_to_reviewers = models.TextField(blank=True, default="")
 
     class Meta:
         unique_together = [('submission', 'version_number')]

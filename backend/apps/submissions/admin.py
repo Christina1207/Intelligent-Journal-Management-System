@@ -1,9 +1,20 @@
 from django.contrib import admin
-from .models import Submission , SubmissionVersion
+from .models import Submission, SubmissionCoAuthor, SubmissionVersion
 
-
+class SubmissionCoAuthorInline(admin.TabularInline):
+    model = SubmissionCoAuthor
+    extra = 0
+    fields = [
+        "order",
+        "full_name",
+        "email",
+        "affiliation",
+        "orcid",
+        "country",
+    ]
 @admin.register(Submission)
 class SubmissionAdmin(admin.ModelAdmin):
+    inlines = [SubmissionCoAuthorInline]
     list_display = ["title", "author", "section", "status", "language", "submitted_at"]
     list_filter = ["status", "language", "section"]
     search_fields = ["title", "abstract", "author__username", "author__email"]
@@ -14,4 +25,5 @@ class SubmissionAdmin(admin.ModelAdmin):
 class SubmissionVersionAdmin(admin.ModelAdmin):
     list_display  = ['id', 'submission', 'version_number', 'decision', 'decided_by', 'decided_at', 'submitted_at']
     list_filter   = ['decision']
+    search_fields = ['submission__title', 'submission__author__username']
     raw_id_fields = ['submission', 'decided_by']

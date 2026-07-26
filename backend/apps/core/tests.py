@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+from apps.core.recommendations import RecommendationService
 from unittest.mock import MagicMock, call, patch
 
 from django.test import SimpleTestCase, override_settings
@@ -87,3 +90,118 @@ class StorageServiceTests(SimpleTestCase):
         self.assertTrue(url.startswith("http://minio:9000/journal-submissions/"))
         minio_class.assert_called_once()
         internal_client.presigned_get_object.assert_called_once()
+
+class RecommendationScoringTests(SimpleTestCase):
+    @patch.multiple(
+        "apps.core.recommendations",
+        REVIEWER_RECOMMENDATION_SEMANTIC_WEIGHT=0.85,
+        REVIEWER_RECOMMENDATION_KEYWORD_WEIGHT=0.15,
+    )
+    def test_scoring_exposes_semantic_and_keyword_evidence(self):
+        profile = SimpleNamespace(
+            user=SimpleNamespace(
+                id="reviewer-1",
+                first_name="Grace",
+                last_name="Hopper",
+                username="grace",
+                email="grace@example.com",
+                affiliation="Computing Institute",
+            ),
+            keywords=[
+                "machine learning",
+                "compiler design",
+            ],
+            biography="Researcher in computing.",
+            similarity=0.8,
+            active_assignment_count=1,
+            has_reviewed_before=True,
+        )
+
+        recommendation = (
+            RecommendationService._serialize_profile(
+                profile,
+                author_keywords=[
+                    "Machine Learning",
+                    "Peer Review",
+                ],
+                topic_keywords=[
+                    "Editorial Intelligence",
+                ],
+            )
+        )
+
+        # One of three unique manuscript keywords matched.
+        expected_keyword_score = 1 / 3
+        expected_score = (
+            0.85 * 0.8
+            + 0.15 * expected_keyword_score
+        )
+
+        self.assertAlmostEqual(
+            recommendation["keyword_overlap_score"],
+            expected_keyword_score,
+            places=4,
+        )
+        self.assertAlmostEqual(
+            recommendation["recommendation_score"],
+            expected_score,
+            places=4,
+        )
+        self.assertEqual(
+            recommendation["matched_author_keywords"],
+            ["Machine Learning"],
+        )
+        self.assertEqual(
+            recommendation["matched_topic_keywords"],
+            [],
+        )
+        self.assertEqual(
+            recommendation["active_assignment_count"],
+            1,
+        )
+        self.assertIn(
+            "85% semantic similarity",
+            recommendation["explanation"],
+        )
+        self.assertIn(
+            "Matched author keywords",
+            recommendation["explanation"],
+        )
+
+    def test_final_ranking_uses_score_then_workload(self):
+        recommendations = [
+            {
+                "full_name": "Semantic Only",
+                "recommendation_score": 0.68,
+                "active_assignment_count": 0,
+            },
+            {
+                "full_name": "Semantic And Keyword",
+                "recommendation_score": 0.79,
+                "active_assignment_count": 1,
+            },
+            {
+                "full_name": "Same Score Lower Workload",
+                "recommendation_score": 0.79,
+                "active_assignment_count": 0,
+            },
+        ]
+
+        ranked = (
+            RecommendationService._rank_recommendations(
+                recommendations,
+                limit=3,
+            )
+        )
+
+        self.assertEqual(
+            [
+                recommendation["full_name"]
+                for recommendation in ranked
+            ],
+            [
+                "Same Score Lower Workload",
+                "Semantic And Keyword",
+                "Semantic Only",
+            ],
+        )

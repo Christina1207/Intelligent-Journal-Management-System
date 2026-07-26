@@ -22,7 +22,9 @@ export function InfoContentSection({ sections }: InfoContentSectionProps) {
                 {section.title}
               </h3>
 
-              <p className="mt-4 leading-8 text-slate-700">{section.body}</p>
+              <p className="mt-4 whitespace-pre-line leading-8 text-slate-700">
+                {section.body}
+              </p>
 
               {section.items && section.items.length > 0 ? (
                 <ul className="mt-5 space-y-3">

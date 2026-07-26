@@ -3,10 +3,23 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import (
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 
-from .models import Role
+from .models import Role,ReviewerProfile
 from .tasks import generate_reviewer_expertise_embedding
-from .serializers import RegisterSerializer, UserProfileSerializer, ReviewerProfileSerializer
+from .serializers import (
+    CurrentUserProfileUpdateSerializer,
+    RegisterSerializer,
+    ReviewerProfileSerializer,
+    UserProfileSerializer,
+    RegistrationResponseSerializer,
+    DetailMessageSerializer,
+)
+from .services import ReviewerProfileService
 
 
 def get_tokens_for_user(user):
@@ -16,7 +29,12 @@ def get_tokens_for_user(user):
         "access": str(refresh.access_token),
     }
 
-
+@extend_schema(
+    tags=["Auth"],
+    auth=[],
+    request=RegisterSerializer,
+    responses={201: RegistrationResponseSerializer},
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_view(request):
@@ -33,14 +51,46 @@ def register_view(request):
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-@api_view(["GET"])
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Auth"],
+        responses={200: UserProfileSerializer},
+    ),
+    patch=extend_schema(
+        tags=["Auth"],
+        request=CurrentUserProfileUpdateSerializer,
+        responses={200: UserProfileSerializer},
+    ),
+)
+@api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def me_view(request):
-    serializer = UserProfileSerializer(request.user)
-    return Response(serializer.data)
+    if request.method == "GET":
+        serializer = UserProfileSerializer(request.user)
+        return Response(serializer.data)
+
+    serializer = CurrentUserProfileUpdateSerializer(
+        request.user,
+        data=request.data,
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    user = serializer.save()
+
+    return Response(UserProfileSerializer(user).data)
 
 
+@extend_schema(
+    tags=["Auth"],
+    request=ReviewerProfileSerializer,
+    responses={
+        200: ReviewerProfileSerializer,
+        400: OpenApiResponse(description="Invalid reviewer profile data."),
+        401: OpenApiResponse(description="Authentication credentials were not provided."),
+        403: OpenApiResponse(description="Only reviewers can update a reviewer profile."),
+    },
+    description="Update the authenticated reviewer's expertise profile.",
+)
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def reviewer_profile_update_view(request):
@@ -52,16 +102,32 @@ def reviewer_profile_update_view(request):
         from django.core.exceptions import PermissionDenied
         raise PermissionDenied("Only reviewers can update a reviewer profile.")
 
-    profile, _ = request.user.reviewer_profile.__class__.objects.get_or_create(
-        user=request.user
+    profile = ReviewerProfileService.get_or_create_profile(
+        request.user
     )
-    serializer = ReviewerProfileSerializer(profile, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    serializer = ReviewerProfileSerializer(
+        profile,
+        data=request.data,
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
 
+    profile = serializer.save(
+        expertise_embedding=None,
+        sync_status=ReviewerProfile.SyncStatus.PENDING,
+        last_synced_at=None,
+    )
 
+    return Response(
+        ReviewerProfileSerializer(profile).data,
+        status=status.HTTP_200_OK,
+    )
+
+@extend_schema(
+    tags=["Auth"],
+    request=None,
+    responses={202: DetailMessageSerializer},
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def sync_orcid_view(request):

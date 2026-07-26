@@ -59,3 +59,59 @@ class SectionManagementPermission(BasePermission):
             )
 
         return False
+class CanViewTopicAnalytics(BasePermission):
+    message = (
+        "Only section managers and journal-wide editorial "
+        "administrators can view topic analytics."
+    )
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if user.is_superuser:
+            return True
+
+        role_names = set(
+            user.roles.values_list("name", flat=True)
+        )
+
+        return bool(
+            role_names.intersection(
+                {
+                    Role.RoleName.SECTION_MANAGER,
+                    Role.RoleName.EDITOR_IN_CHIEF,
+                    Role.RoleName.ADMIN,
+                }
+            )
+        )
+    
+class CanViewJournalAnalytics(BasePermission):
+    message = (
+        "Only Editors-in-Chief and System Administrators "
+        "can view journal-wide analytics."
+    )
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if user.is_superuser:
+            return True
+
+        role_names = set(
+            user.roles.values_list("name", flat=True)
+        )
+
+        return bool(
+            role_names.intersection(
+                {
+                    Role.RoleName.EDITOR_IN_CHIEF,
+                    Role.RoleName.ADMIN,
+                }
+            )
+        )

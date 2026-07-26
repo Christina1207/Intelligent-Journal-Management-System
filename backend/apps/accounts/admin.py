@@ -12,23 +12,42 @@ class RoleAdmin(admin.ModelAdmin):
 @admin.register(ReviewerProfile)
 class ReviewerProfileAdmin(admin.ModelAdmin):
     list_display = ["user", "sync_status", "last_synced_at"]
-    list_filter = ["sync_status"]
-    search_fields = ["user__email", "user__username"]
+    list_filter = ["sync_status","sections"]
+    search_fields = ["user__email", "user__username","sections__name"]
     readonly_fields = ["expertise_embedding", "last_synced_at", "sync_status", "publications"]
+    filter_horizontal = ["sections"]
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ["username", "email", "first_name", "last_name", "status", "is_staff"]
-    list_filter = ["status", "is_staff", "roles"]
-    search_fields = ["username", "email", "first_name", "last_name", "orcid"]
+    list_display = [
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "is_active",
+        "is_staff",
+        "orcid",
+    ]
+    list_filter = ["is_active", "is_staff", "roles"]
+    search_fields = [
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "orcid",
+    ]
     ordering = ["username"]
 
-    # Extend the base fieldsets to include our custom fields
     fieldsets = BaseUserAdmin.fieldsets + (
         (
             "Profile",
             {
-                "fields": ("orcid", "affiliation", "country", "status", "roles"),
+                "fields": (
+                    "orcid",
+                    "affiliation",
+                    "country",
+                    "roles",
+                ),
             },
         ),
     )
@@ -37,7 +56,15 @@ class UserAdmin(BaseUserAdmin):
         (
             "Profile",
             {
-                "fields": ("email", "first_name", "last_name", "orcid", "affiliation", "country", "status", "roles"),
+                "fields": (
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "orcid",
+                    "affiliation",
+                    "country",
+                    "roles",
+                ),
             },
         ),
     )

@@ -1,6 +1,17 @@
-from rest_framework import serializers
+import re
+
 from django.contrib.auth.password_validation import validate_password
+from rest_framework import serializers
+
 from .models import ReviewerProfile, User, Role
+
+CURRENT_USER_PROFILE_UPDATE_FIELDS = (
+    "first_name",
+    "last_name",
+    "orcid",
+    "affiliation",
+    "country",
+)
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -60,27 +71,72 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class ReviewerProfileSerializer(serializers.ModelSerializer):
     """
-    Exposes reviewer expertise profile fields.
-    keywords and biography are writable by the reviewer.
-    publications, last_synced_at, sync_status are read-only (system-managed).
-    expertise_embedding is never exposed — internal vector field.
+    Exposes reviewer expertise data.
+
+    Sections are assigned by journal staff and are read-only to the
+    reviewer. Reviewers must not be able to approve themselves for a
+    journal section.
     """
+
+    sections = serializers.StringRelatedField(
+        many=True,
+        read_only=True,
+    )
 
     class Meta:
         model = ReviewerProfile
         fields = [
+            "sections",
             "keywords",
             "biography",
             "publications",
             "last_synced_at",
             "sync_status",
         ]
-        read_only_fields = ["publications", "last_synced_at", "sync_status"]
+        read_only_fields = [
+            "sections",
+            "publications",
+            "last_synced_at",
+            "sync_status",
+        ]
+    def validate_keywords(self, value):
+        normalized = []
+        seen = set()
+
+        for raw_keyword in value:
+            keyword = " ".join(raw_keyword.split())
+
+            if not keyword:
+                continue
+
+            normalized_key = keyword.casefold()
+
+            if normalized_key not in seen:
+                seen.add(normalized_key)
+                normalized.append(keyword)
+
+        if not 3 <= len(normalized) <= 20:
+            raise serializers.ValidationError(
+                "Provide between 3 and 20 distinct expertise keywords."
+            )
+
+        return normalized
+
+    def validate_biography(self, value):
+        biography = value.strip()
+
+        if len(biography) > 5000:
+            raise serializers.ValidationError(
+                "Biography must contain at most 5000 characters."
+            )
+
+        return biography
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
     roles = RoleSerializer(many=True, read_only=True)
     reviewer_profile = ReviewerProfileSerializer(read_only=True)
+    status = serializers.CharField(read_only=True)
 
     class Meta:
         model = User
@@ -97,4 +153,57 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "roles",
             "reviewer_profile",
         ]
-        read_only_fields = ["id", "status", "roles"]
+        read_only_fields = [
+            "id",
+            "username",
+            "email",
+            "status",
+            "roles",
+            "reviewer_profile",
+        ]
+
+
+class CurrentUserProfileUpdateSerializer(serializers.ModelSerializer):
+    allowed_fields = set(CURRENT_USER_PROFILE_UPDATE_FIELDS)
+
+    class Meta:
+        model = User
+        fields = CURRENT_USER_PROFILE_UPDATE_FIELDS
+
+    def to_internal_value(self, data):
+        if not hasattr(data, "keys"):
+            raise serializers.ValidationError("Expected an object of profile fields.")
+
+        unsupported_fields = set(data.keys()) - self.allowed_fields
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field cannot be updated here."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+
+        return super().to_internal_value(data)
+
+    def validate_orcid(self, value):
+        normalized_value = value.upper()
+        if normalized_value and not re.fullmatch(
+            r"\d{4}-\d{4}-\d{4}-\d{3}[\dX]",
+            normalized_value,
+        ):
+            raise serializers.ValidationError(
+                "ORCID must use the format 0000-0000-0000-0000."
+            )
+        return normalized_value
+class TokenPairSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+    access = serializers.CharField()
+
+
+class RegistrationResponseSerializer(serializers.Serializer):
+    user = UserProfileSerializer()
+    tokens = TokenPairSerializer()
+
+
+class DetailMessageSerializer(serializers.Serializer):
+    detail = serializers.CharField()

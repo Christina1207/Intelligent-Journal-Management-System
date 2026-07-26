@@ -1,13 +1,17 @@
-from django.urls import path
+from django.urls import include, path
 from apps.reviews.views import (
     AssignReviewerView,
+    AssignReviewersView,
+    CancelReviewerAssignmentView,
     MakeEditorDecisionView,
+    ReplaceReviewerAssignmentView,
     SubmissionReviewsView,
     ExpireAssignmentView,
     MyAssignmentsView,
     RespondToAssignmentView,
     SubmitReviewView,
     ReviewerManuscriptDownloadView,
+    ReviewerCandidateSearchView,
 )
 from apps.reviews.views import ReviewerRecommendationsView
 
@@ -16,6 +20,11 @@ editor_urlpatterns = [
         'submissions/<uuid:submission_id>/assign-reviewer/',
         AssignReviewerView.as_view(),
         name='assign-reviewer',
+    ),
+    path(
+        "submissions/<uuid:submission_id>/assign-reviewers/",
+        AssignReviewersView.as_view(),
+        name="assign-reviewers",
     ),
     path(
         'submissions/<uuid:submission_id>/reviews/',
@@ -28,6 +37,16 @@ editor_urlpatterns = [
         name='expire-assignment',
     ),
     path(
+        "assignments/<uuid:assignment_id>/cancel/",
+        CancelReviewerAssignmentView.as_view(),
+        name="cancel-assignment",
+    ),
+    path(
+        "assignments/<uuid:assignment_id>/replace/",
+        ReplaceReviewerAssignmentView.as_view(),
+        name="replace-assignment",
+    ),
+    path(
         'submissions/<uuid:submission_id>/reviewer-recommendations/',
         ReviewerRecommendationsView.as_view(),
         name='reviewer-recommendations',
@@ -36,6 +55,11 @@ editor_urlpatterns = [
         'submissions/<uuid:submission_id>/decision/',
         MakeEditorDecisionView.as_view(),
         name='submission-make-editor-decision',
+    ),
+    path(
+        "submissions/<uuid:submission_id>/reviewer-candidates/",
+        ReviewerCandidateSearchView.as_view(),
+        name="reviewer-candidates",
     ),
 ]
 
@@ -59,5 +83,26 @@ reviewer_urlpatterns = [
         'assignments/<uuid:assignment_id>/manuscript/',
         ReviewerManuscriptDownloadView.as_view(),
         name='reviewer-manuscript-download',
+    ),
+]
+
+urlpatterns = [
+    path(
+        "editor/",
+        include(
+            (
+                editor_urlpatterns,
+                "editor-reviews",
+            )
+        ),
+    ),
+    path(
+        "reviewer/",
+        include(
+            (
+                reviewer_urlpatterns,
+                "reviewer",
+            )
+        ),
     ),
 ]

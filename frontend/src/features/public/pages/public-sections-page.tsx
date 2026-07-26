@@ -2,21 +2,27 @@ import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
 import { PublicSectionCard } from "../components/public-section-card";
 import { SectionsOverviewHeader } from "../components/sections-overview-header";
-import {
-  allPublicArticles,
-  journalInfo,
-  publicSections,
-} from "../data/public-home.mock";
+import type { JournalInfo, PublicSection } from "../types";
 
-export function PublicSectionsPage() {
+type PublicSectionsPageProps = {
+  journal: JournalInfo;
+  sections: PublicSection[];
+  articleCount: number;
+};
+
+export function PublicSectionsPage({
+  journal,
+  sections,
+  articleCount,
+}: PublicSectionsPageProps) {
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <SectionsOverviewHeader
-          sectionCount={publicSections.length}
-          articleCount={allPublicArticles.length}
+          sectionCount={sections.length}
+          articleCount={articleCount}
         />
 
         <section
@@ -29,7 +35,7 @@ export function PublicSectionsPage() {
             </h2>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              {publicSections.map((section) => (
+              {sections.map((section) => (
                 <PublicSectionCard key={section.id} section={section} />
               ))}
             </div>
@@ -37,7 +43,7 @@ export function PublicSectionsPage() {
         </section>
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

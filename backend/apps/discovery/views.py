@@ -4,13 +4,14 @@ from rest_framework.views import APIView
 
 from .renderers import render_oai_response
 from .services import OAIProviderService
-
+from drf_spectacular.utils import extend_schema
 
 class OAIProviderView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
     http_method_names = ["get", "head", "options"]
 
+    @extend_schema(exclude=True)
     def get(self, request):
         service = OAIProviderService(request=request)
         response = service.handle()

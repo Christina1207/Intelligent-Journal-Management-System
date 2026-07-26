@@ -3,9 +3,16 @@ from decouple import config
 # Journal Policy
 REQUIRED_REVIEWS_COUNT = config('REQUIRED_REVIEWS_COUNT', default=2, cast=int)
 MAX_REVISION_ROUNDS             = config('MAX_REVISION_ROUNDS', default=3, cast=int)
+REVISION_REVIEW_DEADLINE_DAYS   = config('REVISION_REVIEW_DEADLINE_DAYS', default=14, cast=int)
 
 # Recommendations
 REVIEWER_RECOMMENDATION_COUNT   = config('REVIEWER_RECOMMENDATION_COUNT', default=5, cast=int)
+
+MAX_ACTIVE_REVIEWER_ASSIGNMENTS = config(
+    "MAX_ACTIVE_REVIEWER_ASSIGNMENTS",
+    default=3,
+    cast=int,
+)
 
 # Topic Modeling
 MIN_SUBMISSIONS_FOR_CLUSTERING  = config('MIN_SUBMISSIONS_FOR_CLUSTERING', default=3, cast=int) #TODO: change later
@@ -15,3 +22,19 @@ ORCID_REFRESH_INTERVAL_DAYS     = config('ORCID_REFRESH_INTERVAL_DAYS', default=
 
 # Celery
 CELERY_TASK_MAX_RETRIES         = config('CELERY_TASK_MAX_RETRIES', default=3, cast=int)
+
+MAX_REVIEWER_INVITATIONS_PER_BATCH = config(
+    "MAX_REVIEWER_INVITATIONS_PER_BATCH",
+    default=10,
+    cast=int,
+)
+REVIEWER_RECOMMENDATION_SEMANTIC_WEIGHT = config(
+    "REVIEWER_RECOMMENDATION_SEMANTIC_WEIGHT",
+    default=0.85,
+    cast=float,
+)
+REVIEWER_RECOMMENDATION_KEYWORD_WEIGHT = config(
+    "REVIEWER_RECOMMENDATION_KEYWORD_WEIGHT",
+    default=0.15,
+    cast=float,
+)

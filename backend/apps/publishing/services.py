@@ -2,12 +2,13 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.db import transaction
 from django.http import Http404
 from django.utils import timezone
-from django.utils.text import slugify
 
 from apps.accounts.models import Role
 from apps.core.storage import StorageService
 from apps.journals.models import JournalMetadataSettings
 from apps.submissions.models import Submission, SubmissionVersion
+from apps.common.slugging import build_unique_slug
+from apps.journals.models import Issue
 
 from .models import PublishedArticle, PublishedArticleAuthor
 
@@ -23,7 +24,7 @@ class PublishingService:
     @transaction.atomic
     def create_draft_from_submission(
         *,
-        editor,
+        actor,
         submission: Submission,
     ) -> PublishedArticle:
         """
@@ -36,15 +37,33 @@ class PublishingService:
             .get(pk=submission.pk)
         )
 
-        if not getattr(editor, "is_authenticated", False) or not editor.has_role(
-            Role.RoleName.SECTION_EDITOR
-        ):
-            raise PermissionDenied("Only section editors can create publishing drafts.")
+        role_names = set(
+            actor.roles.values_list("name", flat=True)
+        ) if getattr(actor, "is_authenticated", False) else set()
 
-        if submission.assigned_editor_id != editor.id:
+        has_global_access = (
+            getattr(actor, "is_superuser", False)
+            or Role.RoleName.EDITOR_IN_CHIEF in role_names
+            or Role.RoleName.ADMIN in role_names
+        )
+
+        manages_submission_section = (
+            Role.RoleName.SECTION_MANAGER in role_names
+            and submission.section.manager_id == actor.id
+        )
+
+        is_assigned_section_editor = (
+            Role.RoleName.SECTION_EDITOR in role_names
+            and submission.assigned_editor_id == actor.id
+        )
+
+        if not (
+            has_global_access
+            or manages_submission_section
+            or is_assigned_section_editor
+        ):
             raise PermissionDenied(
-                "Only the assigned section editor can create a publishing draft "
-                "for this submission."
+                "You cannot create a publishing draft for this submission."
             )
 
         if submission.status != Submission.Status.ACCEPTED:
@@ -97,21 +116,77 @@ class PublishingService:
 
     @staticmethod
     @transaction.atomic
-    def publish_article(article: PublishedArticle) -> PublishedArticle:
-        article = PublishedArticle.objects.select_for_update().get(pk=article.pk)
+    def publish_article(
+        article: PublishedArticle,
+    ) -> PublishedArticle:
+        article = (
+            PublishedArticle.objects
+            .select_for_update()
+            .get(pk=article.pk)
+        )
 
         if article.status == PublishedArticle.Status.PUBLISHED:
-            raise ValidationError("This article is already published.")
+            raise ValidationError(
+                "This article is already published."
+            )
 
         if article.status == PublishedArticle.Status.RETRACTED:
-            raise ValidationError("Retracted articles cannot be published.")
+            raise ValidationError(
+                "Retracted articles cannot be published."
+            )
 
         if article.status != PublishedArticle.Status.DRAFT:
-            raise ValidationError("Only draft articles can be published.")
+            raise ValidationError(
+                "Only draft articles can be published."
+            )
 
+        if article.publication_issue_id:
+            publication_issue = (
+                Issue.objects
+                .select_for_update()
+                .get(pk=article.publication_issue_id)
+            )
+        else:
+            publication_issue = (
+                Issue.objects
+                .select_for_update()
+                .filter(
+                    is_current=True,
+                    status=Issue.Status.PUBLISHED,
+                )
+                .first()
+            )
+
+            if publication_issue is None:
+                raise ValidationError(
+                    "Assign the article to a published issue or "
+                    "configure a current published issue before "
+                    "publishing."
+                )
+
+        if publication_issue.status != Issue.Status.PUBLISHED:
+            raise ValidationError(
+                "Articles can only be published in an issue with "
+                "status 'published'. Current issue status: "
+                f"'{publication_issue.status}'."
+            )
+
+        article.publication_issue = publication_issue
+        article.volume = publication_issue.volume
+        article.issue = publication_issue.number
         article.status = PublishedArticle.Status.PUBLISHED
         article.published_at = timezone.now()
-        article.save(update_fields=["status", "published_at", "updated_at"])
+
+        article.save(
+            update_fields=[
+                "publication_issue",
+                "volume",
+                "issue",
+                "status",
+                "published_at",
+                "updated_at",
+            ]
+        )
 
         return article
 
@@ -125,7 +200,7 @@ class PublishingService:
         if article.status != PublishedArticle.Status.PUBLISHED:
             raise Http404("Article not found.")
 
-        object_name = article.pdf_file.name if article.pdf_file else ""
+        object_name = (article.pdf_file or "").strip()
         if not object_name:
             raise Http404("Article PDF is not available.")
 
@@ -155,6 +230,11 @@ class PublishingService:
 
     @staticmethod
     def _extract_keywords(submission: Submission) -> list:
+        author_keywords = list(submission.keywords or [])
+
+        if author_keywords:
+            return author_keywords
+
         try:
             return list(submission.topic.keywords or [])
         except ObjectDoesNotExist:
@@ -184,17 +264,26 @@ class PublishingService:
                 "is_corresponding": True,
             },
         )
+        for coauthor in submission.coauthors.all():
+            PublishedArticleAuthor.objects.update_or_create(
+                article=article,
+                order=coauthor.order,
+                defaults={
+                    "full_name": coauthor.full_name,
+                    "email": coauthor.email,
+                    "orcid": coauthor.orcid,
+                    "affiliation": coauthor.affiliation,
+                    "country": coauthor.country,
+                    "is_corresponding": False,
+                },
+            )
+        
 
     @staticmethod
     def _generate_unique_slug(base_slug: str) -> str:
-        base = slugify(base_slug) or "article"
-        max_length = PublishedArticle._meta.get_field("slug").max_length
-        slug = base[:max_length]
-        suffix = 2
-
-        while PublishedArticle.objects.filter(slug=slug).exists():
-            suffix_text = f"-{suffix}"
-            slug = f"{base[: max_length - len(suffix_text)]}{suffix_text}"
-            suffix += 1
-
-        return slug
+        return build_unique_slug(
+            PublishedArticle.objects.all(),
+            base_slug,
+            fallback="article",
+            max_length=PublishedArticle._meta.get_field("slug").max_length,
+        )

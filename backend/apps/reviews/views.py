@@ -10,14 +10,41 @@ from apps.accounts.models import Role, User
 from apps.reviews.services import ReviewService
 from apps.reviews.serializers import (
     EditorDecisionSerializer,
+    EditorReviewWorkspaceSerializer,
     ReviewerAssignmentCreateSerializer,
+    ReviewerAssignmentsBulkCreateSerializer,
     ReviewerAssignmentResponseSerializer,
     ReviewerAssignmentSerializer,
     ReviewSubmitSerializer,
     ReviewSerializer,
     SubmissionVersionDecisionSerializer,
+    ReviewerCandidateSearchQuerySerializer,
+    ReviewerCandidateSerializer,
+    ReviewerAssignmentCancelSerializer,
+    ReviewerAssignmentReplaceSerializer,
+    EditorDecisionResponseSerializer,
+    ReviewerAssignmentReplacementResponseSerializer,
+    ReviewerAssignmentsBulkResponseSerializer,
+    ReviewerCandidateSearchResponseSerializer,
+    ReviewerManuscriptDownloadSerializer,
+    ReviewerRecommendationsResponseSerializer,
 )
-from config.constants import REVIEWER_RECOMMENDATION_COUNT
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    extend_schema,
+)
+
+from apps.reviews.selectors import (
+    assigned_editor_reviewer_assignment_or_404,
+    assigned_editor_submission_or_404,
+    reviewer_assignment_or_404,
+    reviewer_candidates_for,
+)
+from config.constants import (
+    REQUIRED_REVIEWS_COUNT,
+    REVIEWER_RECOMMENDATION_COUNT,
+)
 from apps.core.recommendations import RecommendationService
 from apps.core.storage import StorageService
 
@@ -28,10 +55,16 @@ from apps.core.storage import StorageService
 class AssignReviewerView(APIView):
     permission_classes = [IsAuthenticated]
 
+
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentCreateSerializer,
+        responses={201: ReviewerAssignmentSerializer},
+    )
     def post(self, request, submission_id):
-        submission = get_object_or_404(
-            Submission.objects.select_related('author', 'section'),
-            pk=submission_id,
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
         )
 
         serializer = ReviewerAssignmentCreateSerializer(data=request.data)
@@ -59,6 +92,87 @@ class AssignReviewerView(APIView):
         )
 
 
+class AssignReviewersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentsBulkCreateSerializer,
+        responses={
+            201: ReviewerAssignmentsBulkResponseSerializer,
+        },
+    )
+    def post(self, request, submission_id):
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
+        )
+
+        serializer = ReviewerAssignmentsBulkCreateSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        reviewer_ids = serializer.validated_data["reviewer_ids"]
+
+        reviewers = list(
+            User.objects
+            .filter(pk__in=reviewer_ids)
+            .prefetch_related("roles")
+        )
+
+        reviewers_by_id = {
+            reviewer.id: reviewer
+            for reviewer in reviewers
+        }
+
+        missing_reviewer_ids = [
+            str(reviewer_id)
+            for reviewer_id in reviewer_ids
+            if reviewer_id not in reviewers_by_id
+        ]
+
+        if missing_reviewer_ids:
+            raise ValidationError(
+                {
+                    "reviewer_ids": (
+                        "One or more selected reviewers do not exist."
+                    )
+                }
+            )
+
+        ordered_reviewers = [
+            reviewers_by_id[reviewer_id]
+            for reviewer_id in reviewer_ids
+        ]
+
+        assignments = ReviewService.assign_reviewers(
+            editor=request.user,
+            reviewers=ordered_reviewers,
+            submission=submission,
+            response_deadline=(
+                serializer.validated_data["response_deadline"]
+            ),
+            review_deadline=(
+                serializer.validated_data["review_deadline"]
+            ),
+        )
+
+        return Response(
+            {
+                "count": len(assignments),
+                "assignments": ReviewerAssignmentSerializer(
+                    assignments,
+                    many=True,
+                    context={
+                        "is_editor": True,
+                        "request": request,
+                    },
+                ).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 # ------------------------------------------------------------------ #
 #  EDITOR — VIEW REVIEWS FOR SUBMISSION                               #
 # ------------------------------------------------------------------ #
@@ -66,49 +180,174 @@ class AssignReviewerView(APIView):
 class SubmissionReviewsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        responses={200: EditorReviewWorkspaceSerializer},
+    )
     def get(self, request, submission_id):
-        submission = get_object_or_404(Submission.objects.select_related('assigned_editor'), pk=submission_id)
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
+        )
 
-        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
-            raise PermissionDenied("Only section editors can view submission reviews.")
-        
-        if submission.assigned_editor_id != request.user.id:
-            raise PermissionDenied(
-                "Only the assigned section editor can view reviews for this submission."
-            )
+        current_version = (
+            submission.versions
+            .order_by("-version_number")
+            .first()
+        )
 
-        if submission.status != Submission.Status.REVIEWED:
-            return Response(
-                {
-                    'available': False,
-                    'reason': 'Reviews are not available until all reviewers have submitted.',
-                    'reviews': [],
+        if current_version is None:
+            payload = {
+                "submission_id": submission.id,
+                "submission_status": submission.status,
+                "current_version": None,
+                "required_reviews": REQUIRED_REVIEWS_COUNT,
+                "progress": {
+                    "total_invitations": 0,
+                    "pending": 0,
+                    "accepted": 0,
+                    "declined": 0,
+                    "expired": 0,
+                    "cancelled": 0,
+                    "submitted": 0,
+                    "overdue": 0,
                 },
+                "assignments": [],
+                "reviews_available": False,
+                "reviews_unavailable_reason": (
+                    "This submission has no manuscript version."
+                ),
+                "reviews": [],
+                "can_make_decision": False,
+            }
+
+            return Response(
+                EditorReviewWorkspaceSerializer(
+                    payload,
+                    context={
+                        "is_editor": True,
+                        "request": request,
+                    },
+                ).data,
                 status=status.HTTP_200_OK,
             )
-        current_version = submission.versions.order_by('-version_number').first()
-        assignments = (
-            ReviewerAssignment.objects
-            .filter(
+
+        assignments = list(
+            ReviewerAssignment.objects.filter(
                 version=current_version,
-                status=ReviewerAssignment.Status.ACCEPTED,
             )
-            .select_related('review',"reviewer")
+            .select_related(
+                "review",
+                "reviewer",
+                "assigned_by",
+                "cancelled_by",
+                "version",
+                "version__submission",
+                "version__submission__section",
+            )
+            .order_by("assigned_at")
         )
+
+        status_counts = {
+            assignment_status: sum(
+                assignment.status == assignment_status
+                for assignment in assignments
+            )
+            for assignment_status in ReviewerAssignment.Status.values
+        }
+
+        accepted_count = status_counts[
+            ReviewerAssignment.Status.ACCEPTED
+        ]
+        submitted_count = sum(
+            hasattr(assignment, "review")
+            for assignment in assignments
+            if assignment.status == ReviewerAssignment.Status.ACCEPTED
+        )
+        overdue_count = sum(
+            assignment.is_overdue
+            for assignment in assignments
+        )
+
+        reviews_available = (
+            accepted_count >= REQUIRED_REVIEWS_COUNT
+            and submitted_count == accepted_count
+        )
+
+        if accepted_count < REQUIRED_REVIEWS_COUNT:
+            unavailable_reason = (
+                f"At least {REQUIRED_REVIEWS_COUNT} accepted reviewers "
+                f"are required. Currently accepted: {accepted_count}."
+            )
+        elif submitted_count < accepted_count:
+            remaining_count = accepted_count - submitted_count
+            unavailable_reason = (
+                f"Waiting for {remaining_count} accepted reviewer"
+                f"{'' if remaining_count == 1 else 's'} to submit."
+            )
+        else:
+            unavailable_reason = ""
 
         reviews = [
-            a.review for a in assignments
-            if hasattr(a, 'review')
+            assignment.review
+            for assignment in assignments
+            if (
+                reviews_available
+                and assignment.status
+                == ReviewerAssignment.Status.ACCEPTED
+                and hasattr(assignment, "review")
+            )
         ]
 
-        return Response(
-            {
-                'available': True,
-                'reviews': ReviewSerializer(reviews, many=True).data,
-            },
-            status=status.HTTP_200_OK,
+        can_make_decision = (
+            reviews_available
+            and submission.status == Submission.Status.REVIEWED
+            and current_version.decision
+            == current_version.Decision.PENDING
         )
 
+        payload = {
+            "submission_id": submission.id,
+            "submission_status": submission.status,
+            "current_version": current_version,
+            "required_reviews": REQUIRED_REVIEWS_COUNT,
+            "progress": {
+                "total_invitations": len(assignments),
+                "pending": status_counts[
+                    ReviewerAssignment.Status.PENDING
+                ],
+                "accepted": accepted_count,
+                "declined": status_counts[
+                    ReviewerAssignment.Status.DECLINED
+                ],
+                "expired": status_counts[
+                    ReviewerAssignment.Status.EXPIRED
+                ],
+                "cancelled": status_counts[
+                    ReviewerAssignment.Status.CANCELLED
+                ],
+                "submitted": submitted_count,
+                "overdue": overdue_count,
+            },
+            "assignments": assignments,
+            "reviews_available": reviews_available,
+            "reviews_unavailable_reason": unavailable_reason,
+            "reviews": reviews,
+            "can_make_decision": can_make_decision,
+        }
+
+        serializer = EditorReviewWorkspaceSerializer(
+            payload,
+            context={
+                "is_editor": True,
+                "request": request,
+            },
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
 # ------------------------------------------------------------------ #
 #  EDITOR — EXPIRE ASSIGNMENT                                         #
@@ -117,8 +356,16 @@ class SubmissionReviewsView(APIView):
 class ExpireAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=None,
+        responses={200: ReviewerAssignmentSerializer},
+    )
     def post(self, request, assignment_id):
-        assignment = get_object_or_404(ReviewerAssignment.objects.select_related("version__submission"), pk=assignment_id)
+        assignment = assigned_editor_reviewer_assignment_or_404(
+            editor=request.user,
+            assignment_id=assignment_id,
+        )
 
         assignment = ReviewService.mark_assignment_expired(
             editor=request.user,
@@ -140,14 +387,25 @@ class ExpireAssignmentView(APIView):
 
 class MyAssignmentsView(APIView):
     permission_classes = [IsAuthenticated]
-
+    
+    @extend_schema(
+        tags=["Reviewer"],
+        responses={
+            200: ReviewerAssignmentSerializer(many=True),
+        },
+    )
     def get(self, request):
         assignments = (
             ReviewerAssignment.objects
             .filter(reviewer=request.user)
             .select_related(
-                'version__submission__section',
-                'assigned_by',
+                "review",
+                "reviewer",
+                "version",
+                "version__submission",
+                "version__submission__section",
+                "assigned_by",
+                "cancelled_by",
             )
             .order_by('-assigned_at')
         )
@@ -169,10 +427,15 @@ class MyAssignmentsView(APIView):
 class RespondToAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Reviewer"],
+        request=ReviewerAssignmentResponseSerializer,
+        responses={200: ReviewerAssignmentSerializer},
+    )
     def post(self, request, assignment_id):
-        assignment = get_object_or_404(
-            ReviewerAssignment.objects.select_related('version__submission__section', 'reviewer'),
-            pk=assignment_id,
+        assignment = reviewer_assignment_or_404(
+            reviewer=request.user,
+            assignment_id=assignment_id,
         )
 
         serializer = ReviewerAssignmentResponseSerializer(data=request.data)
@@ -199,7 +462,11 @@ class RespondToAssignmentView(APIView):
 
 class SubmitReviewView(APIView):
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["Reviewer"],
+        request=ReviewSubmitSerializer,
+        responses={201: ReviewSerializer},
+    )
     def post(self, request, assignment_id):
         assignment = get_object_or_404(
             ReviewerAssignment.objects.select_related('version__submission__section', 'reviewer'),
@@ -227,17 +494,31 @@ class SubmitReviewView(APIView):
 # ------------------------------------------------------------------ #
 
 class ReviewerRecommendationsView(APIView):
-    from django.core.exceptions import PermissionDenied
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        parameters=[
+            OpenApiParameter(
+                name="limit",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Maximum number of recommendations. The server "
+                    "caps this at REVIEWER_RECOMMENDATION_COUNT."
+                ),
+            )
+        ],
+        responses={
+            200: ReviewerRecommendationsResponseSerializer,
+        },
+    )
     def get(self, request, submission_id):
 
-        if not request.user.has_role(Role.RoleName.SECTION_EDITOR):
-            raise PermissionDenied("Only section editors can view recommendations.")
-
-        submission = get_object_or_404(
-            Submission.objects.select_related("author"),
-            pk=submission_id,
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
         )
 
         # Limit capped at REVIEWER_RECOMMENDATION_COUNT — prevents abuse
@@ -246,7 +527,10 @@ class ReviewerRecommendationsView(APIView):
         except (ValueError, TypeError):
             requested_limit = REVIEWER_RECOMMENDATION_COUNT
 
-        limit = min(requested_limit, REVIEWER_RECOMMENDATION_COUNT)
+        limit = max(
+            1,
+            min(requested_limit, REVIEWER_RECOMMENDATION_COUNT),
+        )
 
         recommendations = RecommendationService.get_recommendations(
             submission=submission,
@@ -264,11 +548,15 @@ class ReviewerRecommendationsView(APIView):
     
 class MakeEditorDecisionView(APIView):
     permission_classes = [IsAuthenticated]
-
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=EditorDecisionSerializer,
+        responses={200: SubmissionVersionDecisionSerializer},
+    )
     def post(self, request, submission_id):
-        submission = get_object_or_404(
-            Submission.objects.select_related("assigned_editor"),
-            pk=submission_id,
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
         )
 
         serializer = EditorDecisionSerializer(data=request.data)
@@ -291,9 +579,58 @@ class MakeEditorDecisionView(APIView):
             status=status.HTTP_200_OK,
         )
     
+class ReviewerCandidateSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        parameters=[ReviewerCandidateSearchQuerySerializer],
+        responses={
+            200: ReviewerCandidateSearchResponseSerializer,
+        },
+    )
+    def get(self, request, submission_id):
+        submission = assigned_editor_submission_or_404(
+            editor=request.user,
+            submission_id=submission_id,
+        )
+
+        query_serializer = (
+            ReviewerCandidateSearchQuerySerializer(
+                data=request.query_params
+            )
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        search = query_serializer.validated_data["search"]
+        limit = query_serializer.validated_data["limit"]
+
+        candidates = list(
+            reviewer_candidates_for(
+                submission=submission,
+                search=search,
+            )[:limit]
+        )
+
+        return Response(
+            {
+                "submission_id": str(submission.id),
+                "count": len(candidates),
+                "candidates": ReviewerCandidateSerializer(
+                    candidates,
+                    many=True,
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 class ReviewerManuscriptDownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Reviewer"],
+        responses={200: ReviewerManuscriptDownloadSerializer},
+    )
     def get(self, request, assignment_id):
         assignment = get_object_or_404(
             ReviewerAssignment.objects.select_related(
@@ -313,11 +650,11 @@ class ReviewerManuscriptDownloadView(APIView):
                 "You can access the manuscript only after accepting the review invitation."
             )
 
-        object_name = assignment.version.file
+        object_name = assignment.version.blinded_file
 
         if not object_name:
             raise ValidationError(
-                "No manuscript file is attached to this submission version."
+                "No blinded manuscript file is attached to this submission version."
             )
 
         storage = StorageService()
@@ -338,4 +675,107 @@ class ReviewerManuscriptDownloadView(APIView):
                 "manuscript_url": manuscript_url,
             },
             status=status.HTTP_200_OK,
+        )
+
+class CancelReviewerAssignmentView(APIView):
+    permission_classes = [IsAuthenticated]
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentCancelSerializer,
+        responses={200: ReviewerAssignmentSerializer},
+    )
+    def post(self, request, assignment_id):
+        assignment = (
+            assigned_editor_reviewer_assignment_or_404(
+                editor=request.user,
+                assignment_id=assignment_id,
+            )
+        )
+
+        serializer = ReviewerAssignmentCancelSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        assignment = ReviewService.cancel_assignment(
+            editor=request.user,
+            assignment=assignment,
+            reason=serializer.validated_data["reason"],
+        )
+
+        return Response(
+            ReviewerAssignmentSerializer(
+                assignment,
+                context={
+                    "is_editor": True,
+                    "request": request,
+                },
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ReplaceReviewerAssignmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Editorial Reviews"],
+        request=ReviewerAssignmentReplaceSerializer,
+        responses={201: ReviewerAssignmentSerializer},
+    )
+    def post(self, request, assignment_id):
+        assignment = (
+            assigned_editor_reviewer_assignment_or_404(
+                editor=request.user,
+                assignment_id=assignment_id,
+            )
+        )
+
+        serializer = ReviewerAssignmentReplaceSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        replacement_reviewer = get_object_or_404(
+            User,
+            pk=serializer.validated_data["reviewer_id"],
+        )
+
+        cancelled, replacement = (
+            ReviewService.replace_assignment(
+                editor=request.user,
+                assignment=assignment,
+                replacement_reviewer=replacement_reviewer,
+                response_deadline=serializer.validated_data[
+                    "response_deadline"
+                ],
+                review_deadline=serializer.validated_data[
+                    "review_deadline"
+                ],
+                reason=serializer.validated_data["reason"],
+            )
+        )
+
+        return Response(
+            {
+                "cancelled_assignment": (
+                    ReviewerAssignmentSerializer(
+                        cancelled,
+                        context={
+                            "is_editor": True,
+                            "request": request,
+                        },
+                    ).data
+                ),
+                "replacement_assignment": (
+                    ReviewerAssignmentSerializer(
+                        replacement,
+                        context={
+                            "is_editor": True,
+                            "request": request,
+                        },
+                    ).data
+                ),
+            },
+            status=status.HTTP_201_CREATED,
         )

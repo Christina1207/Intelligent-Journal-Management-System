@@ -5,21 +5,22 @@ import { ArticleMetadataCard } from "../components/article-metadata-card";
 import { ArticleRelatedSection } from "../components/article-related-section";
 import { PublicFooter } from "../components/public-footer";
 import { PublicHeader } from "../components/public-header";
-import { journalInfo } from "../data/public-home.mock";
-import type { PublicArticle } from "../types";
+import type { JournalInfo, PublicArticle } from "../types";
 
 type PublicArticleDetailsPageProps = {
+  journal: JournalInfo;
   article: PublicArticle;
   relatedArticles: PublicArticle[];
 };
 
 export function PublicArticleDetailsPage({
+  journal,
   article,
   relatedArticles,
 }: PublicArticleDetailsPageProps) {
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <ArticleDetailHeader article={article} />
@@ -63,7 +64,7 @@ export function PublicArticleDetailsPage({
         </div>
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }

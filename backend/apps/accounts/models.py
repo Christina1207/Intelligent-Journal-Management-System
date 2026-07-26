@@ -39,14 +39,17 @@ class User(AbstractUser):
     orcid = models.CharField(max_length=19, blank=True, default="") # format: 0000-0000-0000-0000
     affiliation = models.CharField(max_length=255, blank=True, default="")
     country = models.CharField(max_length=100, blank=True, default="")
-    status = models.CharField(
-        max_length=10,
-        choices=Status.choices,
-        default=Status.ACTIVE,
-    )
     roles = models.ManyToManyField(Role, blank=True, related_name="users")
-    # TODO: REQUIRED_FIELDS should be reviewed — 'username' may need to be included
-    # or authentication should be switched to email-only. Defer to Phase 7 hardening.
+
+    @property
+    def status(self) -> str:
+        """
+        Backward-compatible API representation of Django's authoritative
+        account activation field.
+        """
+        if self.is_active:
+            return self.Status.ACTIVE
+        return self.Status.INACTIVE
     REQUIRED_FIELDS = ["email", "first_name", "last_name"]
 
     def __str__(self):
@@ -79,6 +82,15 @@ class ReviewerProfile(models.Model):
         User,
         on_delete=models.PROTECT,
         related_name="reviewer_profile",
+    )
+    sections = models.ManyToManyField(
+        "journals.Section",
+        related_name="reviewer_profiles",
+        blank=True,
+        help_text=(
+            "Journal sections in which this reviewer is approved "
+            "to review manuscripts."
+        ),
     )
     keywords = ArrayField(
         base_field=models.CharField(max_length=100),

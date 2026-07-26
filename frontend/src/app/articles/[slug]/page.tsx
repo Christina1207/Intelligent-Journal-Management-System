@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { PublicArticleDetailsPage } from "@/features/public/pages/public-article-details-page";
 import {
-  findPublicArticleBySlug,
-  getRelatedArticles,
-} from "@/features/public/utils/article-details";
-import { allPublicArticles } from "@/features/public/data/public-home.mock";
+  getPublicArticle,
+  getPublicArticles,
+  getPublicJournal,
+} from "@/features/public/api/public-api";
 
 type ArticleDetailsRouteParams = {
   slug: string;
@@ -14,15 +14,9 @@ type ArticleDetailsPageProps = {
   params: Promise<ArticleDetailsRouteParams>;
 };
 
-export function generateStaticParams() {
-  return allPublicArticles.map((article) => ({
-    slug: article.slug,
-  }));
-}
-
 export async function generateMetadata({ params }: ArticleDetailsPageProps) {
   const resolvedParams = await params;
-  const article = findPublicArticleBySlug(resolvedParams.slug);
+  const article = await getPublicArticle(resolvedParams.slug);
 
   if (!article) {
     return {
@@ -40,16 +34,28 @@ export default async function ArticleDetailsPage({
   params,
 }: ArticleDetailsPageProps) {
   const resolvedParams = await params;
-  const article = findPublicArticleBySlug(resolvedParams.slug);
+
+  const [journal, article] = await Promise.all([
+    getPublicJournal(),
+    getPublicArticle(resolvedParams.slug),
+  ]);
 
   if (!article) {
     notFound();
   }
 
-  const relatedArticles = getRelatedArticles(article);
+  const relatedResponse = await getPublicArticles({
+    section: article.sectionSlug,
+    ordering: "-published_at",
+  });
+
+  const relatedArticles = relatedResponse.results
+    .filter((candidate) => candidate.slug !== article.slug)
+    .slice(0, 3);
 
   return (
     <PublicArticleDetailsPage
+      journal={journal}
       article={article}
       relatedArticles={relatedArticles}
     />

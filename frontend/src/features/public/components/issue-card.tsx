@@ -1,15 +1,12 @@
 import Link from "next/link";
 import type { PublicIssue } from "../types";
 import { formatArticleDate } from "../utils/article-details";
-import { getIssueArticleCount } from "../utils/public-issues";
 
 type IssueCardProps = {
   issue: PublicIssue;
 };
 
 export function IssueCard({ issue }: IssueCardProps) {
-  const articleCount = getIssueArticleCount(issue);
-
   return (
     <article className="rounded-2xl border bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex flex-wrap items-center gap-2">
@@ -41,12 +38,15 @@ export function IssueCard({ issue }: IssueCardProps) {
         {issue.description}
       </p>
 
-      <div className="mt-5 border-t pt-5">
-        <p className="text-sm text-slate-600">
-          <span className="font-semibold text-slate-950">{articleCount}</span>{" "}
-          published article{articleCount === 1 ? "" : "s"}
-        </p>
-      </div>
+      {issue.volume || issue.issue ? (
+        <div className="mt-5 border-t pt-5">
+          <p className="text-sm text-slate-600">
+            {issue.volume ? `Volume ${issue.volume}` : null}
+            {issue.volume && issue.issue ? " · " : null}
+            {issue.issue ? `Issue ${issue.issue}` : null}
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-6">
         <Link

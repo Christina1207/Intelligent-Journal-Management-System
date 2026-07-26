@@ -247,6 +247,93 @@ class OAIProviderEndpointTests(TestCase):
         self.assertEqual(self._identifiers(root), [self._identifier(article)])
         self.assertIsNotNone(root.find(f".//{{{OAI_DC_NAMESPACE}}}dc"))
 
+    def test_get_record_preserves_safe_academic_metadata(self):
+        article = self._create_article(
+            slug="academic-metadata-record",
+            title="Responsible AI for Scientific Publishing",
+            abstract=(
+                "An evaluation of responsible machine-assisted "
+                "editorial workflows."
+            ),
+            language="en",
+        )
+
+        primary_author = article.authors.get(order=1)
+        primary_author.full_name = "Ada Lovelace"
+        primary_author.orcid = "0000-0000-0000-0001"
+        primary_author.affiliation = "Analytical Engine Institute"
+        primary_author.save(
+            update_fields=[
+                "full_name",
+                "orcid",
+                "affiliation",
+            ]
+        )
+
+        PublishedArticleAuthor.objects.create(
+            article=article,
+            full_name="Alan Turing",
+            email="alan.private@example.org",
+            orcid="0000-0002-1825-0097",
+            affiliation="Computing Laboratory",
+            country="United Kingdom",
+            order=2,
+            is_corresponding=False,
+        )
+
+        response, root = self._get_oai(
+            "/oai?verb=GetRecord"
+            f"&identifier={self._identifier(article)}"
+            "&metadataPrefix=oai_dc"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        creators = [
+            element.text
+            for element in root.findall(
+                f".//{{{DC_NAMESPACE}}}creator"
+            )
+        ]
+        subjects = [
+            element.text
+            for element in root.findall(
+                f".//{{{DC_NAMESPACE}}}subject"
+            )
+        ]
+        identifiers = [
+            element.text
+            for element in root.findall(
+                f".//{{{DC_NAMESPACE}}}identifier"
+            )
+        ]
+        language = root.find(
+            f".//{{{DC_NAMESPACE}}}language"
+        )
+
+        self.assertEqual(
+            creators,
+            ["Ada Lovelace", "Alan Turing"],
+        )
+        self.assertEqual(subjects, ["oai", "metadata"])
+        self.assertIsNotNone(language)
+        self.assertEqual(language.text, "en")
+
+        self.assertIn(
+            "https://doi.org/10.5555/academic-metadata-record",
+            identifiers,
+        )
+        self.assertIn(
+            "https://journal.example.org/api/v1/public/articles/"
+            "academic-metadata-record/",
+            identifiers,
+        )
+
+        # Email addresses are not part of the public oai_dc record.
+        xml = response.content.decode("utf-8")
+        self.assertNotIn("snapshot@example.org", xml)
+        self.assertNotIn("alan.private@example.org", xml)
+
     def test_get_record_unknown_identifier_returns_id_does_not_exist(self):
         response, root = self._get_oai(
             "/oai?verb=GetRecord"

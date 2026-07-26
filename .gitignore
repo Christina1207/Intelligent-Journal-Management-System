@@ -49,3 +49,7 @@ desktop.ini
 *.pkl
 *.safetensors
 models/
+
+mediafiles/
+
+!frontend/src/features/public/data/

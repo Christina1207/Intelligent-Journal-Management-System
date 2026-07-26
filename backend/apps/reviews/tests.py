@@ -1,0 +1,2005 @@
+from datetime import timedelta
+from unittest.mock import patch
+
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+from django.core.exceptions import ValidationError
+from django.db import close_old_connections
+from django.test import (
+    TestCase,
+    TransactionTestCase,
+    skipUnlessDBFeature,
+)
+
+from apps.reviews.services import ReviewService
+
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.accounts.models import Role,ReviewerProfile
+from apps.journals.models import Section
+from apps.reviews.models import Review
+from apps.submissions.models import Submission, SubmissionVersion,SubmissionCoAuthor
+from apps.workflow.models import ReviewerAssignment
+
+from config.constants import (
+    MAX_ACTIVE_REVIEWER_ASSIGNMENTS,
+    REQUIRED_REVIEWS_COUNT,
+)
+
+class ReviewerAssignmentExpirationTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+
+        self.author = user_model.objects.create_user(
+            username="expiration-author",
+            email="expiration-author@example.com",
+            password="testpass123",
+        )
+        self.editor = user_model.objects.create_user(
+            username="expiration-editor",
+            email="expiration-editor@example.com",
+            password="testpass123",
+        )
+        self.reviewer = user_model.objects.create_user(
+            username="expiration-reviewer",
+            email="expiration-reviewer@example.com",
+            password="testpass123",
+        )
+
+        self.section = Section.objects.create(
+            name="Invitation Expiration Tests",
+        )
+        self.submission = Submission.objects.create(
+            title="Invitation expiration manuscript",
+            abstract="Testing periodic invitation expiration.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/expiration/full.pdf",
+            blinded_file="submissions/expiration/blinded.pdf",
+        )
+
+    def create_assignment(
+        self,
+        *,
+        status_value,
+        response_deadline,
+        reviewer=None,
+    ):
+        return ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=reviewer or self.reviewer,
+            assigned_by=self.editor,
+            status=status_value,
+            response_deadline=response_deadline,
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+
+    def test_service_expires_only_overdue_pending_assignments(self):
+        now = timezone.now()
+
+        overdue = self.create_assignment(
+            status_value=ReviewerAssignment.Status.PENDING,
+            response_deadline=now - timedelta(minutes=1),
+        )
+
+        exact_deadline_reviewer = get_user_model().objects.create_user(
+            username="exact-deadline-reviewer",
+            email="exact-deadline-reviewer@example.com",
+            password="testpass123",
+        )
+        exact_deadline = self.create_assignment(
+            reviewer=exact_deadline_reviewer,
+            status_value=ReviewerAssignment.Status.PENDING,
+            response_deadline=now,
+        )
+
+        future_reviewer = get_user_model().objects.create_user(
+            username="future-deadline-reviewer",
+            email="future-deadline-reviewer@example.com",
+            password="testpass123",
+        )
+        future = self.create_assignment(
+            reviewer=future_reviewer,
+            status_value=ReviewerAssignment.Status.PENDING,
+            response_deadline=now + timedelta(minutes=1),
+        )
+
+        accepted_reviewer = get_user_model().objects.create_user(
+            username="accepted-expiration-reviewer",
+            email="accepted-expiration-reviewer@example.com",
+            password="testpass123",
+        )
+        accepted = self.create_assignment(
+            reviewer=accepted_reviewer,
+            status_value=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=now - timedelta(minutes=1),
+        )
+
+        expired_count = (
+            ReviewService.expire_overdue_pending_assignments(
+                as_of=now,
+            )
+        )
+
+        self.assertEqual(expired_count, 2)
+
+        overdue.refresh_from_db()
+        exact_deadline.refresh_from_db()
+        future.refresh_from_db()
+        accepted.refresh_from_db()
+
+        self.assertEqual(
+            overdue.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+        self.assertEqual(
+            exact_deadline.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+        self.assertEqual(
+            future.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertEqual(
+            accepted.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+
+    @patch(
+        "apps.reviews.tasks."
+        "ReviewService.expire_overdue_pending_assignments",
+        return_value=4,
+    )
+    def test_celery_task_delegates_to_review_service(
+        self,
+        expiration_service,
+    ):
+        from apps.reviews.tasks import (
+            expire_pending_reviewer_assignments,
+        )
+
+        result = expire_pending_reviewer_assignments.run()
+
+        self.assertEqual(result, 4)
+        expiration_service.assert_called_once_with()
+
+class ReviewerManuscriptDownloadApiTests(APITestCase):
+    def setUp(self):
+        self.reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR
+        )
+        self.editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR
+        )
+
+        user_model = get_user_model()
+        self.author = self.create_user(user_model, "download-author", self.author_role)
+        self.editor = self.create_user(user_model, "download-editor", self.editor_role)
+        self.reviewer = self.create_user(
+            user_model,
+            "accepted-download-reviewer",
+            self.reviewer_role,
+        )
+        self.other_reviewer = self.create_user(
+            user_model,
+            "other-download-reviewer",
+            self.reviewer_role,
+        )
+
+        self.section = Section.objects.create(name="Reviewer Downloads")
+        self.submission = Submission.objects.create(
+            title="Blinded reviewer manuscript",
+            abstract="Reviewer download test abstract.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/download/v1/full/manuscript.pdf",
+            blinded_file="submissions/download/v1/blinded/manuscript.pdf",
+        )
+
+    def create_user(self, user_model, username, role):
+        user = user_model.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        user.roles.add(role)
+        return user
+
+    def create_assignment(self, *, reviewer=None, status_value):
+        return ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=reviewer or self.reviewer,
+            assigned_by=self.editor,
+            status=status_value,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+
+    def download_url(self, assignment):
+        return reverse(
+            "reviewer:reviewer-manuscript-download",
+            args=[assignment.id],
+        )
+
+    @patch("apps.reviews.views.StorageService")
+    def test_accepted_reviewer_receives_url_signed_from_blinded_file(
+        self,
+        storage_service_class,
+    ):
+        assignment = self.create_assignment(
+            status_value=ReviewerAssignment.Status.ACCEPTED,
+        )
+        storage_service = storage_service_class.return_value
+        storage_service.get_public_url.return_value = (
+            "http://localhost:9000/manuscripts/blinded-signed-url"
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(self.download_url(assignment))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["assignment_id"], str(assignment.id))
+        self.assertEqual(response.data["version_id"], str(self.version.id))
+        self.assertEqual(response.data["version_number"], 1)
+        self.assertEqual(response.data["expires_in_seconds"], 600)
+        self.assertEqual(
+            response.data["manuscript_url"],
+            "http://localhost:9000/manuscripts/blinded-signed-url",
+        )
+        self.assertNotIn("file", response.data)
+        self.assertNotIn("blinded_file", response.data)
+        storage_service.get_public_url.assert_called_once_with(
+            object_name=self.version.blinded_file,
+            expires_in_seconds=600,
+        )
+
+    @patch("apps.reviews.views.StorageService")
+    def test_non_accepted_and_unrelated_reviewers_are_denied(
+        self,
+        storage_service_class,
+    ):
+        cases = [
+            ("pending", ReviewerAssignment.Status.PENDING, self.reviewer),
+            ("declined", ReviewerAssignment.Status.DECLINED, self.reviewer),
+            ("cancelled", ReviewerAssignment.Status.CANCELLED, self.reviewer),
+            (
+                "unrelated",
+                ReviewerAssignment.Status.ACCEPTED,
+                self.other_reviewer,
+            ),
+        ]
+
+        for label, assignment_status, authenticated_user in cases:
+            with self.subTest(label=label):
+                assignment = self.create_assignment(
+                    reviewer=self.reviewer,
+                    status_value=assignment_status,
+                )
+                self.client.force_authenticate(authenticated_user)
+
+                response = self.client.get(self.download_url(assignment))
+
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+                assignment.delete()
+
+        storage_service_class.assert_not_called()
+
+    @patch("apps.reviews.views.StorageService")
+    def test_missing_blinded_file_returns_400_and_never_signs_full_file(
+        self,
+        storage_service_class,
+    ):
+        self.version.blinded_file = ""
+        self.version.save(update_fields=["blinded_file"])
+        assignment = self.create_assignment(
+            status_value=ReviewerAssignment.Status.ACCEPTED,
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(self.download_url(assignment))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("No blinded manuscript file", str(response.data))
+        storage_service_class.assert_not_called()
+
+
+class AssignedEditorAuthorizationTests(APITestCase):
+    def setUp(self):
+        self.editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR
+        )
+        self.reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER
+        )
+
+        user_model = get_user_model()
+
+        self.editor = self.create_user(
+            user_model,
+            "assigned-editor",
+            self.editor_role,
+        )
+        self.other_editor = self.create_user(
+            user_model,
+            "unrelated-editor",
+            self.editor_role,
+        )
+        self.author = self.create_user(
+            user_model,
+            "review-author",
+            self.author_role,
+        )
+        self.reviewer = self.create_user(
+            user_model,
+            "candidate-reviewer",
+            self.reviewer_role,
+        )
+        self.replacement_reviewer = self.create_user(
+            user_model,
+            "replacement-reviewer",
+            self.reviewer_role,
+        )
+
+        self.section = Section.objects.create(
+            name="Review Authorization Tests"
+        )
+        reviewer_profile = ReviewerProfile.objects.create(
+            user=self.reviewer,
+        )
+        reviewer_profile.sections.add(self.section)
+
+        replacement_profile = ReviewerProfile.objects.create(
+            user=self.replacement_reviewer,
+        )
+        replacement_profile.sections.add(self.section)
+
+        self.submission = Submission.objects.create(
+            title="Protected Review Submission",
+            abstract="Authorization test abstract.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.ASSIGNED,
+        )
+
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/review-auth/v1/manuscript.pdf",
+        )
+
+    def create_user(self, user_model, username, role):
+        user = user_model.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        user.roles.add(role)
+        return user
+
+    def create_assignment(self, *, reviewer=None, status_value=None):
+        return ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=reviewer or self.reviewer,
+            assigned_by=self.editor,
+            status=status_value or ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+
+    def test_review_string_identifies_reviewer_and_submission(self):
+        assignment = self.create_assignment()
+
+        review = Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="The manuscript is ready for publication.",
+            comments_for_editor="No confidential concerns.",
+        )
+
+        self.assertEqual(
+            str(review),
+            (
+                f"Review({self.reviewer.id} → "
+                f"{self.submission.id} "
+                f"[{Review.Recommendation.ACCEPT}])"
+            ),
+        )
+
+    def replacement_payload(self, *, reviewer=None):
+        return {
+            "reviewer_id": str(
+                (reviewer or self.replacement_reviewer).id
+            ),
+            "response_deadline": (
+                timezone.now() + timedelta(days=3)
+            ).isoformat(),
+            "review_deadline": (
+                timezone.now() + timedelta(days=14)
+            ).isoformat(),
+            "reason": (
+                "The original reviewer became unavailable."
+            ),
+        }
+
+    def test_non_editor_cannot_view_recommendations(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-recommendations",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_unassigned_editor_cannot_view_recommendations(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-recommendations",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_assigned_editor_can_view_recommendations(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-recommendations",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data["submission_id"],
+            str(self.submission.id),
+        )
+
+    def test_unassigned_editor_cannot_invite_reviewer(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+                reviewer=self.reviewer,
+            ).exists()
+        )
+
+    def test_accepted_assignment_can_be_replaced(self):
+        assignment = self.create_assignment()
+        before_request = timezone.now()
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            self.replacement_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.CANCELLED,
+        )
+        self.assertEqual(assignment.cancelled_by, self.editor)
+        self.assertGreaterEqual(
+            assignment.cancelled_at,
+            before_request,
+        )
+        self.assertEqual(
+            assignment.cancellation_reason,
+            "The original reviewer became unavailable.",
+        )
+
+        replacement = ReviewerAssignment.objects.get(
+            reviewer=self.replacement_reviewer,
+            version=self.version,
+        )
+        self.assertEqual(
+            replacement.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertEqual(replacement.replaces, assignment)
+
+        self.assertEqual(
+            response.data["cancelled_assignment"]["status"],
+            ReviewerAssignment.Status.CANCELLED,
+        )
+        self.assertEqual(
+            response.data["replacement_assignment"]["status"],
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertEqual(
+            response.data["replacement_assignment"]["replaces"],
+            str(assignment.id),
+        )
+
+    def test_submitted_review_assignment_cannot_be_cancelled_or_replaced(self):
+        assignment = self.create_assignment()
+        Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="This manuscript is ready.",
+            comments_for_editor="No confidential concerns.",
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        cancel_response = self.client.post(
+            reverse(
+                "editor-reviews:cancel-assignment",
+                args=[assignment.id],
+            ),
+            {
+                "reason": (
+                    "The original reviewer became unavailable."
+                ),
+            },
+            format="json",
+        )
+        replace_response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            self.replacement_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            cancel_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            replace_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertIsNone(assignment.cancelled_at)
+        self.assertIsNone(assignment.cancelled_by)
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                reviewer=self.replacement_reviewer,
+                version=self.version,
+            ).exists()
+        )
+
+    def test_unrelated_editor_cannot_replace_assignment(self):
+        assignment = self.create_assignment()
+
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            self.replacement_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertIsNone(assignment.cancelled_at)
+        self.assertIsNone(assignment.cancelled_by)
+
+    def test_invalid_replacement_reviewer_rolls_back_cancellation(self):
+        assignment = self.create_assignment()
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:replace-assignment",
+                args=[assignment.id],
+            ),
+            {
+                "reviewer_id": str(self.author.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+                "reason": (
+                    "The original reviewer became unavailable."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertIsNone(assignment.cancelled_at)
+        self.assertIsNone(assignment.cancelled_by)
+    
+    def test_reviewer_invitation_rejects_past_response_deadline(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() - timedelta(days=1)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=10)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("response_deadline", response.data)
+
+
+    def test_reviewer_invitation_rejects_past_review_deadline(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=2)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() - timedelta(days=1)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("review_deadline", response.data)
+
+
+    def test_review_deadline_must_follow_response_deadline(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(self.reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=10)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=5)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("review_deadline", response.data)
+
+    def test_assigned_editor_can_search_reviewer_candidates(self):
+        self.reviewer.first_name = "Grace"
+        self.reviewer.last_name = "Hopper"
+        self.reviewer.affiliation = "Computing Research Lab"
+        self.reviewer.save(
+            update_fields=[
+                "first_name",
+                "last_name",
+                "affiliation",
+            ]
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            ),
+            {"search": "Hopper"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["candidates"][0]["id"],
+            str(self.reviewer.id),
+        )
+
+
+    def test_unassigned_editor_cannot_search_candidates(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+
+    def test_candidate_search_excludes_already_invited_reviewer(self):
+        ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline=(
+                timezone.now() + timedelta(days=3)
+            ),
+            review_deadline=(
+                timezone.now() + timedelta(days=14)
+            ),
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        returned_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(
+            str(self.reviewer.id),
+            returned_ids,
+        )
+
+
+    def test_candidate_search_excludes_inactive_reviewer(self):
+        self.reviewer.is_active = False
+        self.reviewer.save(update_fields=["is_active"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        returned_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(
+            str(self.reviewer.id),
+            returned_ids,
+        )
+
+    def test_candidate_search_only_returns_reviewers_for_submission_section(
+        self,
+    ):
+        user_model = get_user_model()
+
+        other_section = Section.objects.create(
+            name="Unrelated Medical Section",
+        )
+
+        unrelated_reviewer = self.create_user(
+            user_model,
+            "unrelated-section-reviewer",
+            self.reviewer_role,
+        )
+
+        unrelated_profile = ReviewerProfile.objects.create(
+            user=unrelated_reviewer,
+        )
+        unrelated_profile.sections.add(other_section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertIn(str(self.reviewer.id), returned_ids)
+        self.assertNotIn(
+            str(unrelated_reviewer.id),
+            returned_ids,
+        )
+
+
+    def test_editor_cannot_invite_reviewer_from_another_section(
+        self,
+    ):
+        user_model = get_user_model()
+
+        other_section = Section.objects.create(
+            name="Other Reviewer Section",
+        )
+
+        unrelated_reviewer = self.create_user(
+            user_model,
+            "wrong-section-reviewer",
+            self.reviewer_role,
+        )
+
+        unrelated_profile = ReviewerProfile.objects.create(
+            user=unrelated_reviewer,
+        )
+        unrelated_profile.sections.add(other_section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewer",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_id": str(unrelated_reviewer.id),
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("reviewer_id", response.data)
+
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+                reviewer=unrelated_reviewer,
+            ).exists()
+        )
+    
+    def test_assigned_editor_can_invite_multiple_reviewers(self):
+        user_model = get_user_model()
+
+        second_reviewer = self.create_user(
+            user_model,
+            "second-batch-reviewer",
+            self.reviewer_role,
+        )
+
+        second_profile = ReviewerProfile.objects.create(
+            user=second_reviewer,
+        )
+        second_profile.sections.add(self.section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [
+                    str(self.reviewer.id),
+                    str(second_reviewer.id),
+                ],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["assignments"]), 2)
+
+        assignments = ReviewerAssignment.objects.filter(
+            version=self.version,
+        )
+
+        self.assertEqual(assignments.count(), 2)
+        self.assertSetEqual(
+            set(assignments.values_list("reviewer_id", flat=True)),
+            {
+                self.reviewer.id,
+                second_reviewer.id,
+            },
+        )
+
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.UNDER_REVIEW,
+        )
+
+    def test_batch_invitation_rejects_duplicate_reviewers(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [
+                    str(self.reviewer.id),
+                    str(self.reviewer.id),
+                ],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("reviewer_ids", response.data)
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+            ).exists()
+        )    
+    
+    def test_batch_invitation_rolls_back_when_one_reviewer_is_invalid(
+        self,
+    ):
+        user_model = get_user_model()
+
+        other_section = Section.objects.create(
+            name="Batch Rollback Other Section",
+        )
+
+        wrong_section_reviewer = self.create_user(
+            user_model,
+            "wrong-section-batch-reviewer",
+            self.reviewer_role,
+        )
+
+        wrong_section_profile = ReviewerProfile.objects.create(
+            user=wrong_section_reviewer,
+        )
+        wrong_section_profile.sections.add(other_section)
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [
+                    str(self.reviewer.id),
+                    str(wrong_section_reviewer.id),
+                ],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+            ).exists()
+        )
+
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.ASSIGNED,
+        )
+
+    def test_unassigned_editor_cannot_send_batch_invitation(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:assign-reviewers",
+                args=[self.submission.id],
+            ),
+            {
+                "reviewer_ids": [str(self.reviewer.id)],
+                "response_deadline": (
+                    timezone.now() + timedelta(days=3)
+                ).isoformat(),
+                "review_deadline": (
+                    timezone.now() + timedelta(days=14)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertFalse(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+            ).exists()
+        )
+
+    def test_candidate_search_excludes_reviewer_at_workload_capacity(self):
+        for index in range(MAX_ACTIVE_REVIEWER_ASSIGNMENTS):
+            other_submission = Submission.objects.create(
+                title=f"Reviewer workload {index}",
+                abstract="Another manuscript requiring peer review.",
+                language="en",
+                author=self.author,
+                section=self.section,
+                assigned_editor=self.editor,
+                status=Submission.Status.UNDER_REVIEW,
+            )
+            other_version = SubmissionVersion.objects.create(
+                submission=other_submission,
+                version_number=1,
+                file=f"submissions/workload/{index}/manuscript.pdf",
+            )
+            ReviewerAssignment.objects.create(
+                version=other_version,
+                reviewer=self.reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=timezone.now() + timedelta(days=3),
+                review_deadline=timezone.now() + timedelta(days=14),
+            )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        candidate_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(str(self.reviewer.id), candidate_ids)
+
+
+    def test_candidate_search_excludes_registered_coauthor(self):
+        SubmissionCoAuthor.objects.create(
+            submission=self.submission,
+            full_name="Candidate Reviewer",
+            email=self.reviewer.email,
+            order=2,
+        )
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                "editor-reviews:reviewer-candidates",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        candidate_ids = {
+            candidate["id"]
+            for candidate in response.data["candidates"]
+        }
+
+        self.assertNotIn(str(self.reviewer.id), candidate_ids)
+class ReviewerInvitationResponseApiTests(APITestCase):
+    def setUp(self):
+        reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+        editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR,
+        )
+
+        user_model = get_user_model()
+
+        self.author = user_model.objects.create_user(
+            username="response-author",
+            email="response-author@example.com",
+            password="testpass123",
+        )
+        self.author.roles.add(author_role)
+
+        self.editor = user_model.objects.create_user(
+            username="response-editor",
+            email="response-editor@example.com",
+            password="testpass123",
+        )
+        self.editor.roles.add(editor_role)
+
+        self.reviewer = user_model.objects.create_user(
+            username="invited-response-reviewer",
+            email="invited-response-reviewer@example.com",
+            password="testpass123",
+        )
+        self.reviewer.roles.add(reviewer_role)
+
+        self.other_reviewer = user_model.objects.create_user(
+            username="other-response-reviewer",
+            email="other-response-reviewer@example.com",
+            password="testpass123",
+        )
+        self.other_reviewer.roles.add(reviewer_role)
+
+        self.section = Section.objects.create(
+            name="Reviewer Response Tests",
+        )
+        self.submission = Submission.objects.create(
+            title="Invitation response manuscript",
+            abstract="Reviewer invitation response test.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/response/v1/full/manuscript.pdf",
+            blinded_file="submissions/response/v1/blinded/manuscript.pdf",
+        )
+        self.assignment = ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline=timezone.now() + timedelta(days=3),
+            review_deadline=timezone.now() + timedelta(days=14),
+        )
+        self.url = reverse(
+            "reviewer:respond-assignment",
+            args=[self.assignment.id],
+        )
+
+    def test_invited_reviewer_can_accept(self):
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["status"],
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+
+    def test_invited_reviewer_can_decline(self):
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["status"],
+            ReviewerAssignment.Status.DECLINED,
+        )
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.DECLINED,
+        )
+
+    def test_late_invitation_is_expired_and_cannot_be_accepted(self):
+        self.assignment.response_deadline = (
+            timezone.now() - timedelta(minutes=1)
+        )
+        self.assignment.save(
+            update_fields=["response_deadline"]
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "response deadline has passed",
+            str(response.data),
+        )
+
+        self.assignment.refresh_from_db()
+
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+
+    def test_late_pending_invitation_is_not_respondable(self):
+        self.assignment.response_deadline = (
+            timezone.now() - timedelta(minutes=1)
+        )
+        self.assignment.save(
+            update_fields=["response_deadline"]
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.get(
+            reverse("reviewer:my-assignments")
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        returned_assignment = next(
+            item
+            for item in response.data
+            if str(item["id"]) == str(self.assignment.id)
+        )
+
+        self.assertEqual(
+            returned_assignment["status"],
+            ReviewerAssignment.Status.PENDING,
+        )
+        self.assertFalse(
+            returned_assignment["can_respond"]
+        )
+
+    @patch(
+        "apps.reviews.services.REQUIRED_REVIEWS_COUNT",
+        2,
+    )
+    def test_reaching_required_count_expires_pending_invitations(
+        self,
+    ):
+        self.other_assignment = ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=self.other_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.ACCEPTED,
+            response_deadline=(
+                timezone.now() + timedelta(days=3)
+            ),
+            review_deadline=(
+                timezone.now() + timedelta(days=14)
+            ),
+        )
+
+        spare_reviewer = get_user_model().objects.create_user(
+            username="spare-response-reviewer",
+            email="spare-response-reviewer@example.com",
+            password="testpass123",
+        )
+        spare_reviewer.roles.add(
+            Role.objects.get(name=Role.RoleName.REVIEWER)
+        )
+
+        spare_assignment = ReviewerAssignment.objects.create(
+            version=self.version,
+            reviewer=spare_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignment.Status.PENDING,
+            response_deadline=(
+                timezone.now() + timedelta(days=3)
+            ),
+            review_deadline=(
+                timezone.now() + timedelta(days=14)
+            ),
+        )
+
+        self.client.force_authenticate(self.reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assignment.refresh_from_db()
+        spare_assignment.refresh_from_db()
+
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.ACCEPTED,
+        )
+        self.assertEqual(
+            spare_assignment.status,
+            ReviewerAssignment.Status.EXPIRED,
+        )
+        self.assertEqual(
+            ReviewerAssignment.objects.filter(
+                version=self.version,
+                status=ReviewerAssignment.Status.ACCEPTED,
+            ).count(),
+            2,
+        )
+
+    def test_another_reviewer_cannot_respond(self):
+        self.client.force_authenticate(self.other_reviewer)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+
+    def test_user_without_reviewer_role_cannot_respond(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.post(
+            self.url,
+            {"accept": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.assignment.refresh_from_db()
+        self.assertEqual(
+            self.assignment.status,
+            ReviewerAssignment.Status.PENDING,
+        )
+
+@skipUnlessDBFeature("has_select_for_update")
+class ReviewerAcceptanceConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+        editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR,
+        )
+
+        user_model = get_user_model()
+
+        self.author = user_model.objects.create_user(
+            username="concurrency-author",
+            email="concurrency-author@example.com",
+            password="testpass123",
+        )
+        self.author.roles.add(author_role)
+
+        self.editor = user_model.objects.create_user(
+            username="concurrency-editor",
+            email="concurrency-editor@example.com",
+            password="testpass123",
+        )
+        self.editor.roles.add(editor_role)
+
+        self.section = Section.objects.create(
+            name="Concurrent Reviewer Responses",
+        )
+        self.submission = Submission.objects.create(
+            title="Concurrent response manuscript",
+            abstract="Concurrent reviewer acceptance test.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/concurrency/full.pdf",
+            blinded_file="submissions/concurrency/blinded.pdf",
+        )
+
+        self.assignments = []
+
+        for index in range(2):
+            reviewer = user_model.objects.create_user(
+                username=f"concurrency-reviewer-{index}",
+                email=f"concurrency-reviewer-{index}@example.com",
+                password="testpass123",
+            )
+            reviewer.roles.add(reviewer_role)
+
+            assignment = ReviewerAssignment.objects.create(
+                version=self.version,
+                reviewer=reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.PENDING,
+                response_deadline=(
+                    timezone.now() + timedelta(days=3)
+                ),
+                review_deadline=(
+                    timezone.now() + timedelta(days=14)
+                ),
+            )
+            self.assignments.append(assignment)
+
+    def respond(self, assignment_id, reviewer_id, barrier):
+        close_old_connections()
+
+        try:
+            assignment = ReviewerAssignment.objects.get(
+                pk=assignment_id
+            )
+            reviewer = get_user_model().objects.get(
+                pk=reviewer_id
+            )
+
+            barrier.wait(timeout=10)
+
+            ReviewService.respond_to_assignment(
+                reviewer=reviewer,
+                assignment=assignment,
+                accept=True,
+            )
+            return "accepted"
+
+        except ValidationError:
+            return "rejected"
+
+        finally:
+            close_old_connections()
+
+    @patch(
+        "apps.reviews.services.REQUIRED_REVIEWS_COUNT",
+        1,
+    )
+    def test_concurrent_acceptances_do_not_exceed_capacity(self):
+        barrier = Barrier(2)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(
+                    self.respond,
+                    assignment.id,
+                    assignment.reviewer_id,
+                    barrier,
+                )
+                for assignment in self.assignments
+            ]
+
+            results = [
+                future.result(timeout=15)
+                for future in futures
+            ]
+
+        statuses = list(
+            ReviewerAssignment.objects.filter(
+                version=self.version
+            ).values_list("status", flat=True)
+        )
+
+        self.assertCountEqual(
+            results,
+            ["accepted", "rejected"],
+        )
+        self.assertEqual(
+            statuses.count(
+                ReviewerAssignment.Status.ACCEPTED
+            ),
+            1,
+        )
+        self.assertEqual(
+            statuses.count(
+                ReviewerAssignment.Status.EXPIRED
+            ),
+            1,
+        )
+
+class ReviewWorkspaceContractTests(APITestCase):
+    def setUp(self):
+        self.reviewer_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.REVIEWER,
+        )
+        self.author_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.AUTHOR,
+        )
+        self.editor_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_EDITOR,
+        )
+
+        user_model = get_user_model()
+
+        self.author = self.create_user(
+            user_model,
+            "workspace-author",
+            self.author_role,
+        )
+        self.editor = self.create_user(
+            user_model,
+            "workspace-editor",
+            self.editor_role,
+        )
+        self.other_editor = self.create_user(
+            user_model,
+            "workspace-other-editor",
+            self.editor_role,
+        )
+
+        self.section = Section.objects.create(
+            name="Review Workspace Tests",
+        )
+        self.submission = Submission.objects.create(
+            title="Review workspace manuscript",
+            abstract="Review workspace contract test.",
+            language="en",
+            author=self.author,
+            section=self.section,
+            assigned_editor=self.editor,
+            status=Submission.Status.UNDER_REVIEW,
+        )
+        self.version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=1,
+            file="submissions/workspace/v1/full/manuscript.pdf",
+            blinded_file=(
+                "submissions/workspace/v1/blinded/manuscript.pdf"
+            ),
+        )
+
+        self.reviewers = []
+        self.assignments = []
+
+        for index in range(REQUIRED_REVIEWS_COUNT):
+            reviewer = self.create_user(
+                user_model,
+                f"workspace-reviewer-{index}",
+                self.reviewer_role,
+            )
+            assignment = ReviewerAssignment.objects.create(
+                version=self.version,
+                reviewer=reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=timezone.now() + timedelta(days=3),
+                review_deadline=timezone.now() + timedelta(days=14),
+            )
+            self.reviewers.append(reviewer)
+            self.assignments.append(assignment)
+
+        self.workspace_url = reverse(
+            "editor-reviews:submission-reviews",
+            args=[self.submission.id],
+        )
+
+    def create_user(self, user_model, username, role):
+        user = user_model.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        user.roles.add(role)
+        return user
+
+    def test_workspace_reports_current_round_progress(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(self.workspace_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["submission_id"],
+            str(self.submission.id),
+        )
+        self.assertEqual(
+            response.data["current_version"]["version_number"],
+            1,
+        )
+        self.assertEqual(
+            response.data["progress"]["accepted"],
+            REQUIRED_REVIEWS_COUNT,
+        )
+        self.assertEqual(response.data["progress"]["submitted"], 0)
+        self.assertFalse(response.data["reviews_available"])
+        self.assertFalse(response.data["can_make_decision"])
+        self.assertEqual(
+            len(response.data["assignments"]),
+            REQUIRED_REVIEWS_COUNT,
+        )
+
+    def test_completed_round_exposes_reviews_and_allows_decision(self):
+        for assignment in self.assignments:
+            Review.objects.create(
+                assignment=assignment,
+                recommendation=Review.Recommendation.MINOR_REVISION,
+                comments_for_author="Please clarify the methodology.",
+                comments_for_editor="The manuscript is revisable.",
+            )
+
+        self.submission.status = Submission.Status.REVIEWED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(self.workspace_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["reviews_available"])
+        self.assertTrue(response.data["can_make_decision"])
+        self.assertEqual(
+            response.data["progress"]["submitted"],
+            REQUIRED_REVIEWS_COUNT,
+        )
+        self.assertEqual(
+            len(response.data["reviews"]),
+            REQUIRED_REVIEWS_COUNT,
+        )
+        self.assertIn(
+            "comments_for_editor",
+            response.data["reviews"][0],
+        )
+
+    def test_assignment_response_exposes_reviewer_action_state(self):
+        assignment = self.assignments[0]
+        reviewer = self.reviewers[0]
+
+        assignment.status = ReviewerAssignment.Status.PENDING
+        assignment.save(update_fields=["status"])
+
+        self.client.force_authenticate(reviewer)
+
+        response = self.client.get(
+            reverse("reviewer:my-assignments"),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        returned_assignment = response.data[0]
+
+        self.assertFalse(returned_assignment["review_submitted"])
+        self.assertTrue(returned_assignment["can_respond"])
+        self.assertFalse(
+            returned_assignment["can_download_manuscript"]
+        )
+        self.assertFalse(returned_assignment["can_submit_review"])
+
+    def test_submitted_review_disables_duplicate_submission(self):
+        assignment = self.assignments[0]
+        reviewer = self.reviewers[0]
+
+        Review.objects.create(
+            assignment=assignment,
+            recommendation=Review.Recommendation.ACCEPT,
+            comments_for_author="The manuscript is suitable.",
+            comments_for_editor="No confidential concerns.",
+        )
+
+        self.client.force_authenticate(reviewer)
+
+        response = self.client.get(
+            reverse("reviewer:my-assignments"),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        returned_assignment = response.data[0]
+
+        self.assertTrue(returned_assignment["review_submitted"])
+        self.assertFalse(returned_assignment["can_respond"])
+        self.assertTrue(
+            returned_assignment["can_download_manuscript"]
+        )
+        self.assertFalse(returned_assignment["can_submit_review"])
+
+    def test_unrelated_editor_cannot_open_workspace(self):
+        self.client.force_authenticate(self.other_editor)
+
+        response = self.client.get(self.workspace_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    @patch(
+        "apps.submissions.policies.MAX_REVISION_ROUNDS",
+        1,
+    )
+    def test_first_revision_request_is_allowed(self):
+        for assignment in self.assignments:
+            Review.objects.create(
+                assignment=assignment,
+                recommendation=Review.Recommendation.MINOR_REVISION,
+                comments_for_author="Please revise the methodology.",
+                comments_for_editor="A further round is appropriate.",
+            )
+
+        self.submission.status = Submission.Status.REVIEWED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:submission-make-editor-decision",
+                args=[self.submission.id],
+            ),
+            {
+                "decision": SubmissionVersion.Decision.MINOR_REVISION,
+                "decision_letter": (
+                    "Please revise the manuscript using the reviewer feedback."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.submission.refresh_from_db()
+        self.version.refresh_from_db()
+
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.UNDER_REVISION,
+        )
+        self.assertEqual(
+            self.version.decision,
+            SubmissionVersion.Decision.MINOR_REVISION,
+        )
+    @patch(
+        "apps.submissions.policies.MAX_REVISION_ROUNDS",
+        1,
+    )
+    def test_revision_decision_is_rejected_after_limit(self):
+        self.version.decision = SubmissionVersion.Decision.MINOR_REVISION
+        self.version.decided_by = self.editor
+        self.version.decided_at = timezone.now()
+        self.version.save(
+            update_fields=[
+                "decision",
+                "decided_by",
+                "decided_at",
+            ]
+        )
+
+        second_version = SubmissionVersion.objects.create(
+            submission=self.submission,
+            version_number=2,
+            file="submissions/workspace/v2/full/manuscript.pdf",
+            blinded_file=(
+                "submissions/workspace/v2/blinded/manuscript.pdf"
+            ),
+            response_to_reviewers=(
+                "We addressed every point raised in the first round."
+            ),
+        )
+
+        for reviewer in self.reviewers:
+            second_assignment = ReviewerAssignment.objects.create(
+                version=second_version,
+                reviewer=reviewer,
+                assigned_by=self.editor,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                response_deadline=timezone.now() - timedelta(days=7),
+                review_deadline=timezone.now() + timedelta(days=7),
+            )
+            Review.objects.create(
+                assignment=second_assignment,
+                recommendation=Review.Recommendation.MINOR_REVISION,
+                comments_for_author="A further change would be helpful.",
+                comments_for_editor="This is the second-round report.",
+            )
+
+        self.submission.status = Submission.Status.REVIEWED
+        self.submission.save(update_fields=["status"])
+
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                "editor-reviews:submission-make-editor-decision",
+                args=[self.submission.id],
+            ),
+            {
+                "decision": SubmissionVersion.Decision.MINOR_REVISION,
+                "decision_letter": "Please revise the manuscript again.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "Maximum revision rounds (1) reached",
+            str(response.data),
+        )
+
+        self.submission.refresh_from_db()
+        second_version.refresh_from_db()
+
+        self.assertEqual(
+            self.submission.status,
+            Submission.Status.REVIEWED,
+        )
+        self.assertEqual(
+            second_version.decision,
+            SubmissionVersion.Decision.PENDING,
+        )

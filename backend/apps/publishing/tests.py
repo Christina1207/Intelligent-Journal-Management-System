@@ -8,12 +8,19 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role
-from apps.journals.models import JournalMetadataSettings, Section
-from apps.submissions.models import Submission, SubmissionTopic, SubmissionVersion
+from apps.journals.models import Issue, JournalMetadataSettings, Section
+from apps.submissions.models import (
+    Submission,
+    SubmissionCoAuthor,
+    SubmissionTopic,
+    SubmissionVersion,
+)
 
 from .models import PublishedArticle, PublishedArticleAuthor
 from .exporters import (
@@ -29,6 +36,23 @@ from .metadata import (
     ArticleMetadataBuilder,
 )
 from .services import PublishingService
+
+
+def create_current_published_issue(
+    *,
+    title="Current Issue",
+    volume="1",
+    number="1",
+):
+    return Issue.objects.create(
+        title=title,
+        volume=volume,
+        number=number,
+        year=timezone.now().year,
+        status=Issue.Status.PUBLISHED,
+        published_at=timezone.now(),
+        is_current=True,
+    )
 
 
 class PublishingServiceTests(TestCase):
@@ -108,7 +132,7 @@ class PublishingServiceTests(TestCase):
                     "Only accepted submissions can be moved to publishing",
                 ):
                     PublishingService.create_draft_from_submission(
-                        editor=self.editor,
+                        actor=self.editor,
                         submission=submission,
                     )
 
@@ -122,7 +146,7 @@ class PublishingServiceTests(TestCase):
         )
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -139,14 +163,18 @@ class PublishingServiceTests(TestCase):
             article.license_url,
             "https://creativecommons.org/licenses/by/4.0/",
         )
-        self.assertEqual(article.pdf_file.name, "submissions/example/v1/manuscript.pdf")
+        self.assertIsInstance(article.pdf_file, str)
+        self.assertEqual(
+            article.pdf_file,
+            "submissions/example/v1/manuscript.pdf",
+        )
         self.assertTrue(article.slug.startswith("semantic-matching-in-editorial-workflows"))
 
     def test_create_draft_snapshots_primary_author_metadata(self):
         submission = self._create_submission()
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -159,11 +187,138 @@ class PublishingServiceTests(TestCase):
         self.assertEqual(author_snapshot.country, "United Kingdom")
         self.assertTrue(author_snapshot.is_corresponding)
 
+    def test_create_draft_snapshots_author_keywords_and_ordered_coauthors(
+        self,
+    ):
+        submission = self._create_submission()
+        submission.keywords = [
+            "peer review",
+            "editorial workflow",
+            "machine learning",
+        ]
+        submission.save(update_fields=["keywords"])
+
+        SubmissionTopic.objects.create(
+            submission=submission,
+            label="Generated editorial topic",
+            keywords=["generated keyword"],
+        )
+
+        second_author = SubmissionCoAuthor.objects.create(
+            submission=submission,
+            full_name="Alan Turing",
+            email="alan@example.org",
+            orcid="0000-0002-1825-0097",
+            affiliation="Computing Laboratory",
+            country="United Kingdom",
+            order=2,
+        )
+        SubmissionCoAuthor.objects.create(
+            submission=submission,
+            full_name="Grace Hopper",
+            email="grace@example.org",
+            orcid="0000-0002-1694-233X",
+            affiliation="Naval Computing Research",
+            country="United States",
+            order=3,
+        )
+
+        article = PublishingService.create_draft_from_submission(
+            actor=self.editor,
+            submission=submission,
+        )
+
+        # Author-supplied keywords take precedence over generated keywords.
+        self.assertEqual(
+            article.keywords,
+            [
+                "peer review",
+                "editorial workflow",
+                "machine learning",
+            ],
+        )
+
+        author_snapshots = list(
+            article.authors.order_by("order").values(
+                "full_name",
+                "email",
+                "orcid",
+                "affiliation",
+                "country",
+                "order",
+                "is_corresponding",
+            )
+        )
+
+        self.assertEqual(
+            author_snapshots,
+            [
+                {
+                    "full_name": "Ada Lovelace",
+                    "email": "author@example.com",
+                    "orcid": "0000-0000-0000-0001",
+                    "affiliation": "Analytical Engine Institute",
+                    "country": "United Kingdom",
+                    "order": 1,
+                    "is_corresponding": True,
+                },
+                {
+                    "full_name": "Alan Turing",
+                    "email": "alan@example.org",
+                    "orcid": "0000-0002-1825-0097",
+                    "affiliation": "Computing Laboratory",
+                    "country": "United Kingdom",
+                    "order": 2,
+                    "is_corresponding": False,
+                },
+                {
+                    "full_name": "Grace Hopper",
+                    "email": "grace@example.org",
+                    "orcid": "0000-0002-1694-233X",
+                    "affiliation": "Naval Computing Research",
+                    "country": "United States",
+                    "order": 3,
+                    "is_corresponding": False,
+                },
+            ],
+        )
+
+        # Publication metadata must remain stable if the submission changes later.
+        submission.keywords = ["changed after publication"]
+        submission.save(update_fields=["keywords"])
+
+        second_author.full_name = "Changed Source Name"
+        second_author.save(update_fields=["full_name"])
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.keywords,
+            [
+                "peer review",
+                "editorial workflow",
+                "machine learning",
+            ],
+        )
+        self.assertEqual(
+            list(
+                article.authors.order_by("order").values_list(
+                    "full_name",
+                    flat=True,
+                )
+            ),
+            [
+                "Ada Lovelace",
+                "Alan Turing",
+                "Grace Hopper",
+            ],
+        )
+
     def test_source_changes_after_draft_creation_do_not_change_snapshot(self):
         submission = self._create_submission()
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
         author_snapshot = article.authors.get()
@@ -207,7 +362,7 @@ class PublishingServiceTests(TestCase):
     def test_duplicate_published_author_order_is_rejected_for_same_article(self):
         submission = self._create_submission()
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
@@ -229,10 +384,10 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(
             PermissionDenied,
-            "Only section editors can create publishing drafts.",
+            "You cannot create a publishing draft for this submission.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=non_editor,
+                actor=non_editor,
                 submission=submission,
             )
 
@@ -247,10 +402,10 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(
             PermissionDenied,
-            "Only the assigned section editor can create a publishing draft",
+            "You cannot create a publishing draft for this submission.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=other_editor,
+                actor=other_editor,
                 submission=submission,
             )
 
@@ -269,10 +424,10 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(
             PermissionDenied,
-            "Only the assigned section editor can create a publishing draft",
+            "You cannot create a publishing draft for this submission.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=other_editor,
+                actor=other_editor,
                 submission=submission,
             )
 
@@ -290,7 +445,7 @@ class PublishingServiceTests(TestCase):
             "Only the latest accepted version can be moved to publishing.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -310,7 +465,7 @@ class PublishingServiceTests(TestCase):
             "Only the latest accepted version can be moved to publishing.",
         ):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -319,13 +474,13 @@ class PublishingServiceTests(TestCase):
     def test_cannot_create_duplicate_draft_for_submission(self):
         submission = self._create_submission()
         PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
         with self.assertRaises(ValidationError):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -334,7 +489,7 @@ class PublishingServiceTests(TestCase):
 
         with self.assertRaisesMessage(ValidationError, "manuscript file"):
             PublishingService.create_draft_from_submission(
-                editor=self.editor,
+                actor=self.editor,
                 submission=submission,
             )
 
@@ -347,23 +502,152 @@ class PublishingServiceTests(TestCase):
         submission = self._create_submission(version_file=long_object_path)
 
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
         )
 
-        self.assertEqual(article.pdf_file.name, long_object_path)
+        self.assertEqual(article.pdf_file, long_object_path)
 
     def test_publish_article_sets_published_status_and_timestamp(self):
         submission = self._create_submission()
         article = PublishingService.create_draft_from_submission(
-            editor=self.editor,
+            actor=self.editor,
             submission=submission,
+        )
+        issue = create_current_published_issue()
+
+        article = PublishingService.publish_article(article)
+
+        article.refresh_from_db()
+        self.assertEqual(article.status, PublishedArticle.Status.PUBLISHED)
+        self.assertIsNotNone(article.published_at)
+        self.assertEqual(article.publication_issue, issue)
+        self.assertEqual(article.volume, issue.volume)
+        self.assertEqual(article.issue, issue.number)
+
+    def test_publish_article_requires_a_published_issue(self):
+        submission = self._create_submission()
+        article = PublishingService.create_draft_from_submission(
+            actor=self.editor,
+            submission=submission,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "published issue",
+        ):
+            PublishingService.publish_article(article)
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.status,
+            PublishedArticle.Status.DRAFT,
+        )
+        self.assertIsNone(article.published_at)
+        self.assertIsNone(article.publication_issue_id)
+
+    def test_publish_article_honors_explicit_published_issue(self):
+        submission = self._create_submission()
+        article = PublishingService.create_draft_from_submission(
+            actor=self.editor,
+            submission=submission,
+        )
+        issue = Issue.objects.create(
+            title="Explicit Publication Issue",
+            volume="7",
+            number="3",
+            year=timezone.now().year,
+            status=Issue.Status.PUBLISHED,
+            published_at=timezone.now(),
+            is_current=False,
+        )
+
+        article.publication_issue = issue
+        article.volume = "stale-volume"
+        article.issue = "stale-issue"
+        article.save(
+            update_fields=[
+                "publication_issue",
+                "volume",
+                "issue",
+            ]
         )
 
         article = PublishingService.publish_article(article)
 
-        self.assertEqual(article.status, PublishedArticle.Status.PUBLISHED)
+        self.assertEqual(
+            article.status,
+            PublishedArticle.Status.PUBLISHED,
+        )
+        self.assertEqual(article.publication_issue, issue)
+        self.assertEqual(article.volume, issue.volume)
+        self.assertEqual(article.issue, issue.number)
         self.assertIsNotNone(article.published_at)
+
+    def test_explicit_invalid_issue_is_not_silently_replaced(self):
+        current_issue = create_current_published_issue(
+            title="Valid Current Issue",
+            volume="10",
+            number="1",
+        )
+
+        for index, issue_status in enumerate(
+            [
+                Issue.Status.DRAFT,
+                Issue.Status.ARCHIVED,
+            ],
+            start=1,
+        ):
+            with self.subTest(issue_status=issue_status):
+                submission = self._create_submission(
+                    title=(
+                        "Invalid issue publication "
+                        f"{issue_status}"
+                    )
+                )
+                article = (
+                    PublishingService
+                    .create_draft_from_submission(
+                        actor=self.editor,
+                        submission=submission,
+                    )
+                )
+                invalid_issue = Issue.objects.create(
+                    title=f"Invalid {issue_status} Issue",
+                    volume=str(20 + index),
+                    number="1",
+                    year=timezone.now().year,
+                    status=issue_status,
+                    is_current=False,
+                )
+
+                article.publication_issue = invalid_issue
+                article.save(
+                    update_fields=["publication_issue"]
+                )
+
+                with self.assertRaisesMessage(
+                    ValidationError,
+                    "status 'published'",
+                ):
+                    PublishingService.publish_article(article)
+
+                article.refresh_from_db()
+
+                self.assertEqual(
+                    article.status,
+                    PublishedArticle.Status.DRAFT,
+                )
+                self.assertEqual(
+                    article.publication_issue,
+                    invalid_issue,
+                )
+                self.assertNotEqual(
+                    article.publication_issue,
+                    current_issue,
+                )
+                self.assertIsNone(article.published_at)
 
 
 class ArticleMetadataBuilderTests(TestCase):
@@ -688,7 +972,26 @@ class PublishingApiTests(TestCase):
             email="api-author@example.com",
             password="testpass123",
         )
-        self.section = Section.objects.create(name="Artificial Intelligence")
+        self.section_manager_role, _ = Role.objects.get_or_create(
+            name=Role.RoleName.SECTION_MANAGER
+        )
+        self.manager = get_user_model().objects.create_user(
+            username="manager",
+            email="manager@example.com",
+            password="testpass123",
+        )
+        self.manager.roles.add(self.section_manager_role)
+
+        self.other_manager = get_user_model().objects.create_user(
+            username="other-manager",
+            email="other-manager@example.com",
+            password="testpass123",
+        )
+        self.other_manager.roles.add(self.section_manager_role)
+        self.section = Section.objects.create(
+            name="Artificial Intelligence",
+            manager=self.manager,
+        )
         self.submission = Submission.objects.create(
             title="Reviewer Recommendation for Journals",
             abstract="An accepted manuscript about reviewer recommendation.",
@@ -868,7 +1171,7 @@ class PublishingApiTests(TestCase):
             str(self.submission_version.id),
         )
 
-    def test_unassigned_user_create_draft_endpoint_returns_403(self):
+    def test_unassigned_user_create_draft_endpoint_returns_404(self):
         unassigned_editor = get_user_model().objects.create_user(
             username="unassigned-editor",
             email="unassigned-editor@example.com",
@@ -881,8 +1184,7 @@ class PublishingApiTests(TestCase):
             f"/api/v1/publishing/submissions/{self.submission.id}/create-draft/",
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertIn("Only the assigned section editor", str(response.data))
+        self.assertEqual(response.status_code, 404)
 
     def test_non_section_editor_create_draft_endpoint_returns_403(self):
         non_editor = get_user_model().objects.create_user(
@@ -898,7 +1200,10 @@ class PublishingApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("Only section editors", str(response.data))
+        self.assertIn(
+            "Only authorized editorial users can create publication drafts.",
+            str(response.data),
+        )
 
     def test_duplicate_create_draft_endpoint_returns_clean_400(self):
         self.client.force_authenticate(self.user)
@@ -1117,17 +1422,25 @@ class PublishingApiTests(TestCase):
             [high.slug, middle.slug, low.slug],
         )
 
-    def test_public_list_invalid_ordering_returns_clean_400(self):
-        response = self.client.get("/api/v1/public/articles/?ordering=status")
+    def test_public_list_accepts_section_slug_filter(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.PUBLISHED,
+            slug="slug-filtered-article",
+            section=self.section,
+        )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Unsupported ordering", str(response.data))
+        response = self.client.get(
+            f"/api/v1/public/articles/?section={self.section.slug}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._response_slugs(response), [article.slug])
 
     def test_public_list_invalid_section_filter_returns_clean_400(self):
-        response = self.client.get("/api/v1/public/articles/?section=not-a-uuid")
+        response = self.client.get("/api/v1/public/articles/?section=bad@slug")
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Invalid section id", str(response.data))
+        self.assertIn("Invalid section filter", str(response.data))
 
     def test_public_detail_uses_slug_and_increments_view_count(self):
         article = self._create_article(
@@ -1142,6 +1455,52 @@ class PublishingApiTests(TestCase):
         self.assertEqual(response.data["slug"], article.slug)
         article.refresh_from_db()
         self.assertEqual(article.view_count, 1)
+
+    def test_public_detail_exposes_safe_ordered_academic_metadata(self):
+        article = self._create_export_article()
+
+        response = self.client.get(
+            f"/api/v1/public/articles/{article.slug}/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["authors"],
+            ["Ada Lovelace", "Alan Turing"],
+        )
+        self.assertEqual(
+            response.data["keywords"],
+            ["citation export", "metadata"],
+        )
+        self.assertEqual(
+            response.data["doi"],
+            "10.5555/exportable",
+        )
+        self.assertEqual(response.data["language"], "en")
+
+        author_details = response.data["author_details"]
+
+        self.assertEqual(
+            [author["full_name"] for author in author_details],
+            ["Ada Lovelace", "Alan Turing"],
+        )
+        self.assertEqual(
+            [author["order"] for author in author_details],
+            [1, 2],
+        )
+        self.assertTrue(author_details[0]["is_corresponding"])
+        self.assertFalse(author_details[1]["is_corresponding"])
+
+        # Public metadata must not expose private contact details.
+        for author in author_details:
+            self.assertNotIn("email", author)
+
+        # Readers receive controlled endpoints, never storage object keys.
+        self.assertNotIn("pdf_file", response.data)
+        self.assertIn(
+            f"/public/articles/{article.slug}/download/",
+            response.data["download_url"],
+        )
 
     def test_public_detail_does_not_expose_draft_or_retracted_articles(self):
         draft = self._create_article(
@@ -1434,38 +1793,114 @@ class PublishingApiTests(TestCase):
         self.assertEqual(article.download_count, 0)
 
     def test_publish_endpoint_publishes_draft_article(self):
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.manager)
         article = PublishingService.create_draft_from_submission(
-            editor=self.user,
+            actor=self.manager,
             submission=self.submission,
         )
+        issue = create_current_published_issue()
 
         response = self.client.post(f"/api/v1/publishing/articles/{article.id}/publish/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], PublishedArticle.Status.PUBLISHED)
         self.assertIsNotNone(response.data["published_at"])
+        article.refresh_from_db()
+        self.assertEqual(article.publication_issue, issue)
+        self.assertEqual(article.volume, issue.volume)
+        self.assertEqual(article.issue, issue.number)
 
     def test_patch_cannot_change_article_status_directly(self):
-        self.client.force_authenticate(self.user)
         article = PublishingService.create_draft_from_submission(
-            editor=self.user,
+            actor=self.manager,
             submission=self.submission,
         )
+        self.client.force_authenticate(self.manager)
 
         response = self.client.patch(
-            f"/api/v1/publishing/articles/{article.id}/",
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
             {"status": PublishedArticle.Status.PUBLISHED},
             format="json",
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
         article.refresh_from_db()
         self.assertEqual(article.status, PublishedArticle.Status.DRAFT)
-        self.assertEqual(response.data["status"], PublishedArticle.Status.DRAFT)
+        self.assertEqual(
+            response.data["status"],
+            PublishedArticle.Status.DRAFT,
+        )
+
+    def test_section_editor_cannot_list_publication_records(self):
+        PublishingService.create_draft_from_submission(
+            actor=self.user,
+            submission=self.submission,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            reverse("publishing-article-list")
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+    def test_section_editor_cannot_retrieve_publication_record(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.user,
+            submission=self.submission,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+    def test_section_editor_cannot_update_publication_record(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.user,
+            submission=self.submission,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
+            {"title": "Unauthorized metadata change"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        article.refresh_from_db()
+        self.assertNotEqual(
+            article.title,
+            "Unauthorized metadata change",
+        )
 
     def test_publish_endpoint_rejects_already_published_article(self):
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.manager)
         article = self._create_article(
             status=PublishedArticle.Status.PUBLISHED,
             slug="already-published",
@@ -1477,7 +1912,7 @@ class PublishingApiTests(TestCase):
         self.assertIn("already published", str(response.data))
 
     def test_publish_endpoint_rejects_retracted_article(self):
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.manager)
         article = self._create_article(
             status=PublishedArticle.Status.RETRACTED,
             slug="retracted-management",
@@ -1487,3 +1922,267 @@ class PublishingApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Retracted articles cannot be published", str(response.data))
+
+    def test_manager_can_create_draft_for_managed_section(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-create-draft",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_unrelated_manager_cannot_create_draft(self):
+        self.client.force_authenticate(self.other_manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-create-draft",
+                args=[self.submission.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_manager_can_publish_article_from_managed_section(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="managed-draft",
+        )
+        create_current_published_issue()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-article-publish",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        article.refresh_from_db()
+        self.assertEqual(
+            article.status,
+            PublishedArticle.Status.PUBLISHED,
+        )
+
+    def test_unrelated_manager_cannot_publish_article(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="unrelated-manager-draft",
+        )
+        create_current_published_issue()
+        self.client.force_authenticate(self.other_manager)
+
+        response = self.client.post(
+            reverse(
+                "publishing-article-publish",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_section_editor_cannot_publish_article(self):
+        article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="section-editor-draft",
+        )
+        create_current_published_issue()
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            reverse(
+                "publishing-article-publish",
+                args=[article.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_list_is_limited_to_managed_sections(self):
+        managed_article = self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="managed-list-draft",
+        )
+        other_section = Section.objects.create(
+            name="Other Managed Section",
+            manager=self.other_manager,
+        )
+        self._create_article(
+            status=PublishedArticle.Status.DRAFT,
+            slug="other-managed-list-draft",
+            section=other_section,
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(
+            reverse("publishing-article-list")
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        returned_ids = {
+            item["id"]
+            for item in response.data["results"]
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {str(managed_article.id)},
+        )
+    def test_patch_cannot_replace_pdf_object_key(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.manager,
+            submission=self.submission,
+        )
+        original_object_key = article.pdf_file
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.patch(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
+            {
+                "pdf_file": (
+                    "submissions/unrelated/v1/full/replacement.pdf"
+                )
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "accepted submission version",
+            str(response.data),
+        )
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.pdf_file,
+            original_object_key,
+        )
+
+    def test_published_article_cannot_be_detached_or_moved_to_draft_issue(
+        self,
+    ):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.manager,
+            submission=self.submission,
+        )
+        published_issue = create_current_published_issue()
+        article = PublishingService.publish_article(article)
+
+        draft_issue = Issue.objects.create(
+            title="Future Draft Issue",
+            volume="2",
+            number="1",
+            year=timezone.now().year,
+            status=Issue.Status.DRAFT,
+        )
+
+        self.client.force_authenticate(self.manager)
+        url = reverse(
+            "publishing-article-detail",
+            args=[article.id],
+        )
+
+        detach_response = self.client.patch(
+            url,
+            {"publication_issue": None},
+            format="json",
+        )
+        move_response = self.client.patch(
+            url,
+            {
+                "publication_issue": str(draft_issue.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            detach_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "must remain assigned",
+            str(detach_response.data),
+        )
+
+        self.assertEqual(
+            move_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn(
+            "status 'published'",
+            str(move_response.data),
+        )
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.publication_issue,
+            published_issue,
+        )
+
+    def test_linked_issue_controls_volume_and_issue_metadata(self):
+        article = PublishingService.create_draft_from_submission(
+            actor=self.manager,
+            submission=self.submission,
+        )
+        publication_issue = Issue.objects.create(
+            title="Metadata Synchronization Issue",
+            volume="8",
+            number="4",
+            year=timezone.now().year,
+            status=Issue.Status.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.patch(
+            reverse(
+                "publishing-article-detail",
+                args=[article.id],
+            ),
+            {
+                "publication_issue": str(
+                    publication_issue.id
+                ),
+                "volume": "incorrect-volume",
+                "issue": "incorrect-number",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        article.refresh_from_db()
+
+        self.assertEqual(
+            article.publication_issue,
+            publication_issue,
+        )
+        self.assertEqual(
+            article.volume,
+            publication_issue.volume,
+        )
+        self.assertEqual(
+            article.issue,
+            publication_issue.number,
+        )

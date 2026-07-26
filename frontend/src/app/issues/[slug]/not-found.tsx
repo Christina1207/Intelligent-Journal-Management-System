@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { PublicFooter } from "@/features/public/components/public-footer";
 import { PublicHeader } from "@/features/public/components/public-header";
-import { journalInfo } from "@/features/public/data/public-home.mock";
+import { getPublicJournalSafe } from "@/features/public/api/public-api";
 
-export default function IssueNotFoundPage() {
+export default async function IssueNotFoundPage() {
+  const journal = await getPublicJournalSafe();
   return (
     <>
-      <PublicHeader />
+      <PublicHeader journal={journal} />
 
       <main id="main-content" className="bg-slate-50">
         <div className="mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center px-4 py-20 text-center sm:px-6 lg:px-8">
@@ -32,7 +33,7 @@ export default function IssueNotFoundPage() {
         </div>
       </main>
 
-      <PublicFooter journal={journalInfo} />
+      <PublicFooter journal={journal} />
     </>
   );
 }
