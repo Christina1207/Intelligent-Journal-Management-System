@@ -34,10 +34,8 @@ const statusOptions: Array<{
   { value: "ALL", label: "All active statuses" },
   { value: "ASSIGNED", label: "Assigned to editor" },
   { value: "UNDER_REVIEW", label: "Under review" },
-  { value: "SUSPENDED", label: "Suspended" },
   { value: "REVIEWED", label: "Reviews completed" },
   { value: "UNDER_REVISION", label: "Revision requested" },
-  { value: "REVISED", label: "Revision submitted" },
 ];
 
 function formatDate(value: string) {

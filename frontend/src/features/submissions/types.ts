@@ -4,10 +4,8 @@ export type SubmissionStatus =
   | "SUBMITTED"
   | "ASSIGNED"
   | "UNDER_REVIEW"
-  | "SUSPENDED"
   | "REVIEWED"
   | "UNDER_REVISION"
-  | "REVISED"
   | "ACCEPTED"
   | "REJECTED";
 

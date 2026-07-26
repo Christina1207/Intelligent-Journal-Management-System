@@ -39,18 +39,6 @@ const attentionFlagContent: Record<
     description: "The author has been asked to submit a revised manuscript.",
     severity: "warning",
   },
-  REVISION_REVIEW_PENDING: {
-    label: "Revision review pending",
-    description:
-      "A revised manuscript has been submitted and requires editorial handling.",
-    severity: "warning",
-  },
-  CASE_SUSPENDED: {
-    label: "Case suspended",
-    description:
-      "Editorial handling for this manuscript is currently suspended.",
-    severity: "warning",
-  },
 };
 
 export function AttentionFlagBadge({

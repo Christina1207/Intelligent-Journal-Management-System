@@ -21,10 +21,8 @@ const statusFilterOptions: Array<{
   { label: "Under review", value: "UNDER_REVIEW" },
   { label: "Reviews completed", value: "REVIEWED" },
   { label: "Revision requested", value: "UNDER_REVISION" },
-  { label: "Revision submitted", value: "REVISED" },
   { label: "Accepted", value: "ACCEPTED" },
   { label: "Rejected", value: "REJECTED" },
-  { label: "Suspended", value: "SUSPENDED" },
 ];
 const EMPTY_SUBMISSIONS: AuthorSubmissionListItem[] = [];
 

@@ -36,10 +36,8 @@ export type ManagerQueueResponse = PaginatedApiResponse<ManagerQueueSubmission>;
 export type ManagerMonitoringStatus =
   | "ASSIGNED"
   | "UNDER_REVIEW"
-  | "SUSPENDED"
   | "REVIEWED"
-  | "UNDER_REVISION"
-  | "REVISED";
+  | "UNDER_REVISION";
 
 export type ManagerAssignedEditor = {
   id: string;
@@ -65,9 +63,7 @@ export type ManagerAttentionFlag =
   | "OVERDUE_REVIEWER_INVITATIONS"
   | "OVERDUE_REVIEWS"
   | "EDITOR_DECISION_PENDING"
-  | "AUTHOR_REVISION_PENDING"
-  | "REVISION_REVIEW_PENDING"
-  | "CASE_SUSPENDED";
+  | "AUTHOR_REVISION_PENDING";
 
 export type ManagerMonitoringSubmission = {
   id: string;
