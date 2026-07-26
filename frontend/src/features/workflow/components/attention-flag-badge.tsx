@@ -1,5 +1,6 @@
 import { ClockAlert, TriangleAlert } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import type { ManagerAttentionFlag } from "@/features/workflow/types";
 import { cn } from "@/lib/utils";
 
@@ -52,18 +53,16 @@ export function AttentionFlagBadge({
   const Icon = content.severity === "overdue" ? ClockAlert : TriangleAlert;
 
   return (
-    <span
+    <Badge
+      variant={content.severity === "overdue" ? "danger" : "warning"}
       title={content.description}
       className={cn(
-        "inline-flex min-h-6 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
-        content.severity === "overdue"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-amber-200 bg-amber-50 text-amber-700",
+        "h-auto min-h-6 whitespace-normal px-2.5 py-1 text-left",
         className,
       )}
     >
       <Icon aria-hidden="true" className="size-3.5 shrink-0" />
       {content.label}
-    </span>
+    </Badge>
   );
 }

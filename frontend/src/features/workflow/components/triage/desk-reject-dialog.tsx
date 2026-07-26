@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import { Notice } from "@/components/common/notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,26 +46,27 @@ export function DeskRejectDialog({
 }) {
   const [reason, setReason] = React.useState<TriageRejectionReason | "">("");
   const [authorMessage, setAuthorMessage] = React.useState("");
-  const [validationError, setValidationError] = React.useState<string | null>(
-    null,
-  );
+  const [validationErrors, setValidationErrors] = React.useState<{
+    reason?: string;
+    authorMessage?: string;
+  }>({});
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!reason) {
-      setValidationError("Select a desk-rejection reason.");
+    const nextErrors = {
+      reason: !reason ? "Select a desk-rejection reason." : undefined,
+      authorMessage:
+        authorMessage.trim().length < 20
+          ? "The author-facing message must contain at least 20 characters."
+          : undefined,
+    };
+
+    setValidationErrors(nextErrors);
+
+    if (nextErrors.reason || nextErrors.authorMessage || !reason) {
       return;
     }
-
-    if (authorMessage.trim().length < 20) {
-      setValidationError(
-        "The author-facing message must contain at least 20 characters.",
-      );
-      return;
-    }
-
-    setValidationError(null);
 
     onConfirm({
       reason_code: reason,
@@ -72,44 +75,67 @@ export function DeskRejectDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isPending) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Desk reject manuscript</DialogTitle>
+          <DialogTitle>Desk reject this manuscript?</DialogTitle>
           <DialogDescription>
-            This records a final rejection decision for the current manuscript
-            version. The author-facing message will be included in the decision
-            record.
+            This records a final negative editorial decision for the current
+            manuscript version.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {validationError || apiError ? (
-            <div
-              role="alert"
-              className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-            >
-              {validationError ?? apiError}
-            </div>
+          <Notice
+            tone="destructive"
+            title="The submission will leave the active workflow"
+            description="The selected reason and message become part of the decision record. Only the author-facing message is shared with the author."
+          />
+
+          {validationErrors.reason ||
+          validationErrors.authorMessage ||
+          apiError ? (
+            <Notice
+              tone="destructive"
+              title="Desk rejection could not be submitted"
+              description={
+                validationErrors.reason ??
+                validationErrors.authorMessage ??
+                apiError
+              }
+            />
           ) : null}
 
-          <div>
-            <label
-              htmlFor="desk-rejection-reason"
-              className="text-sm font-medium text-slate-700"
-            >
-              Rejection reason
-            </label>
-
+          <FormField
+            htmlFor="desk-rejection-reason"
+            label="Rejection reason"
+            required
+            error={validationErrors.reason}
+          >
             <select
               id="desk-rejection-reason"
               value={reason}
               disabled={isPending}
+              aria-invalid={Boolean(validationErrors.reason)}
+              aria-describedby={getFormFieldDescription({
+                id: "desk-rejection-reason",
+                hasError: Boolean(validationErrors.reason),
+              })}
               onChange={(event) => {
                 setReason(event.target.value as TriageRejectionReason | "");
-                setValidationError(null);
+                setValidationErrors((current) => ({
+                  ...current,
+                  reason: undefined,
+                }));
               }}
-              className="mt-2 block h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
+              className="block min-h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35"
             >
               <option value="">Select a reason</option>
 
@@ -119,18 +145,17 @@ export function DeskRejectDialog({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          <div>
+          <FormField
+            htmlFor="desk-rejection-message"
+            label="Message to the author"
+            required
+            description="Visible to the author. Do not include internal notes or confidential reviewer information."
+            error={validationErrors.authorMessage}
+          >
             <div className="flex items-center justify-between gap-3">
-              <label
-                htmlFor="desk-rejection-message"
-                className="text-sm font-medium text-slate-700"
-              >
-                Message to the author
-              </label>
-
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-muted-foreground">
                 {authorMessage.length}/5000
               </span>
             </div>
@@ -140,24 +165,30 @@ export function DeskRejectDialog({
               value={authorMessage}
               maxLength={5000}
               disabled={isPending}
+              aria-invalid={Boolean(validationErrors.authorMessage)}
+              aria-describedby={getFormFieldDescription({
+                id: "desk-rejection-message",
+                hasDescription: true,
+                hasError: Boolean(validationErrors.authorMessage),
+              })}
               onChange={(event) => {
                 setAuthorMessage(event.target.value);
-                setValidationError(null);
+                setValidationErrors((current) => ({
+                  ...current,
+                  authorMessage: undefined,
+                }));
               }}
               placeholder="Explain the decision clearly and constructively."
-              className="mt-2 min-h-36"
+              className="min-h-36"
+              dir="auto"
             />
-
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              This message is visible to the author. Do not include internal
-              notes or confidential reviewer information.
-            </p>
-          </div>
+          </FormField>
 
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
+              size="touch"
               disabled={isPending}
               onClick={() => onOpenChange(false)}
             >
@@ -166,10 +197,11 @@ export function DeskRejectDialog({
 
             <Button
               type="submit"
+              variant="destructive"
+              size="touch"
               disabled={isPending}
-              className="bg-red-600 text-white hover:bg-red-700"
             >
-              {isPending ? "Rejecting manuscript..." : "Confirm desk rejection"}
+              {isPending ? "Recording decision…" : "Confirm desk rejection"}
             </Button>
           </DialogFooter>
         </form>
