@@ -12,6 +12,10 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
+import {
+  ManuscriptSummary,
+  ResponsiveQueue,
+} from "@/features/editorial/components";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
 import { EditorReassignmentDialog } from "@/features/workflow/components/assignment/editor-reassignment-dialog";
 import { AttentionFlagBadge } from "@/features/workflow/components/attention-flag-badge";
@@ -165,24 +169,22 @@ export function ManagerMonitoringPage() {
         ) : submissions.length === 0 ? (
           <EmptyMonitoringState filtered={statusFilter !== "ALL"} />
         ) : (
-          <>
-            <div className="hidden overflow-x-auto xl:block">
+          <ResponsiveQueue
+            table={
               <MonitoringTable
                 submissions={submissions}
                 onReassign={setReassignmentTarget}
               />
-            </div>
-
-            <div className="divide-y divide-slate-200 xl:hidden">
-              {submissions.map((submission) => (
+            }
+            cards={submissions.map((submission) => (
                 <MonitoringMobileCard
                   key={submission.id}
                   submission={submission}
                   onReassign={setReassignmentTarget}
                 />
-              ))}
-            </div>
-          </>
+            ))}
+            tableFrom="xl"
+          />
         )}
 
         {monitoringQuery.data && submissions.length > 0 ? (
@@ -300,17 +302,17 @@ function MonitoringTable({
         {submissions.map((submission) => (
           <tr key={submission.id} className="hover:bg-slate-50">
             <td className="max-w-sm px-5 py-4 align-top">
-              <h3 className="line-clamp-2 font-medium text-slate-950">
-                {submission.title}
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {submission.section.name}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                Submitted {formatDate(submission.submitted_at)}
-              </p>
+              <ManuscriptSummary
+                title={submission.title}
+                metadata={
+                  <>
+                    <span>{submission.section.name}</span>
+                    <span className="mt-1 block text-xs">
+                      Submitted {formatDate(submission.submitted_at)}
+                    </span>
+                  </>
+                }
+              />
             </td>
 
             <td className="px-5 py-4 align-top">
@@ -391,12 +393,11 @@ function MonitoringMobileCard({
     <article className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-medium leading-6 text-slate-950">
-            {submission.title}
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {submission.section.name}
-          </p>
+          <ManuscriptSummary
+            title={submission.title}
+            headingLevel={2}
+            metadata={submission.section.name}
+          />
         </div>
 
         <SubmissionStatusBadge status={submission.status} />

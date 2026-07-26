@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
+
 import { PublicationDraftCreationPage } from "@/features/publishing/components";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Create Publication Draft",
 };
 

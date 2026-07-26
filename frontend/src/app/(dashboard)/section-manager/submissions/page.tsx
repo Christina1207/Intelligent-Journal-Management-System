@@ -1,5 +1,5 @@
-import { SectionManagerSubmissionsPage } from "@/features/submissions/pages/section-manager-submissions-page"
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <SectionManagerSubmissionsPage />
+  redirect("/manager/submissions");
 }

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Download, FileCheck2, ShieldCheck } from "lucide-react";
+import { Download, FileCheck2, ShieldCheck } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,27 +14,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DeadlineIndicator,
+  InvitationStatusBadge,
+  isDeadlinePast,
+  ReviewRoundLabel,
+} from "@/features/editorial/components";
 import { ReviewReportForm } from "@/features/reviews/components/review-report-form";
 import {
   useRespondToReviewInvitation,
   useReviewerManuscriptDownload,
 } from "@/features/reviews/hooks";
-import type {
-  ReviewerAssignment,
-  ReviewerAssignmentStatus,
-} from "@/features/reviews/types";
+import type { ReviewerAssignment } from "@/features/reviews/types";
 
 interface ReviewerAssignmentCardProps {
   assignment: ReviewerAssignment;
 }
-
-const STATUS_LABELS: Record<ReviewerAssignmentStatus, string> = {
-  PENDING: "Invitation pending",
-  ACCEPTED: "Accepted",
-  DECLINED: "Declined",
-  EXPIRED: "Expired",
-  CANCELLED: "Cancelled",
-};
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -54,25 +48,6 @@ function getErrorMessage(error: unknown) {
   }
 
   return "The requested action could not be completed.";
-}
-
-function StatusBadge({ assignment }: { assignment: ReviewerAssignment }) {
-  if (assignment.review_submitted) {
-    return <Badge variant="secondary">Review submitted</Badge>;
-  }
-
-  if (assignment.is_overdue) {
-    return <Badge variant="destructive">Overdue</Badge>;
-  }
-
-  const variant =
-    assignment.status === "DECLINED"
-      ? "destructive"
-      : assignment.status === "ACCEPTED"
-        ? "default"
-        : "outline";
-
-  return <Badge variant={variant}>{STATUS_LABELS[assignment.status]}</Badge>;
 }
 
 export function ReviewerAssignmentCard({
@@ -132,12 +107,9 @@ export function ReviewerAssignmentCard({
       ? assignment.response_deadline
       : assignment.review_deadline;
 
-  const deadlineLabel =
-    assignment.status === "PENDING"
-      ? "Invitation response deadline"
-      : "Review deadline";
-
   const isInvitationBusy = respondToInvitation.isPending;
+  const deadlinePassed =
+    assignment.is_overdue || isDeadlinePast(deadline);
   const hasRevisionResponse =
     Boolean(assignment.version.response_to_reviewers?.trim()) &&
     assignment.version.version_number > 1;
@@ -145,34 +117,28 @@ export function ReviewerAssignmentCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{assignment.submission.title}</CardTitle>
-        <CardDescription>
-          {assignment.submission.section} · Round{" "}
-          {assignment.version.version_number} ·{" "}
-          {assignment.submission.language.toUpperCase()}
+        <CardTitle dir="auto">{assignment.submission.title}</CardTitle>
+        <CardDescription className="flex flex-wrap items-center gap-2">
+          <span>{assignment.submission.section}</span>
+          <ReviewRoundLabel versionNumber={assignment.version.version_number} />
+          <span>{assignment.submission.language.toUpperCase()}</span>
         </CardDescription>
         <CardAction>
-          <StatusBadge assignment={assignment} />
+          <InvitationStatusBadge
+            status={assignment.status}
+            reviewSubmitted={assignment.review_submitted}
+            isOverdue={deadlinePassed}
+          />
         </CardAction>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="flex items-center gap-1.5 text-muted-foreground">
-              <CalendarDays className="size-4" aria-hidden="true" />
-              {deadlineLabel}
-            </dt>
-            <dd
-              className={
-                assignment.is_overdue ? "mt-1 text-destructive" : "mt-1"
-              }
-            >
-              <time dateTime={deadline ?? undefined}>
-                {formatDateTime(deadline)}
-              </time>
-            </dd>
-          </div>
+          <DeadlineIndicator
+            deadline={deadline}
+            isOverdue={assignment.is_overdue}
+            kind={assignment.status === "PENDING" ? "response" : "review"}
+          />
 
           <div>
             <dt className="text-muted-foreground">Version submitted</dt>
@@ -186,7 +152,10 @@ export function ReviewerAssignmentCard({
           <summary className="cursor-pointer font-medium">
             Manuscript abstract
           </summary>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+          <p
+            className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground"
+            dir="auto"
+          >
             {assignment.submission.abstract}
           </p>
         </details>
@@ -196,7 +165,10 @@ export function ReviewerAssignmentCard({
             <summary className="cursor-pointer font-medium">
               Author response to previous reviews
             </summary>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
+            <p
+              className="mt-3 whitespace-pre-wrap text-sm leading-6"
+              dir="auto"
+            >
               {assignment.version.response_to_reviewers}
             </p>
           </details>

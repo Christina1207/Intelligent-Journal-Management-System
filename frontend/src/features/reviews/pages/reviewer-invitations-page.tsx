@@ -4,7 +4,9 @@ import { useMemo } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { EmptyState } from "@/components/common/empty-state";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorState } from "@/components/common/error-state";
+import { LoadingState } from "@/components/common/loading-state";
+import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReviewerAssignmentCard } from "@/features/reviews/components";
@@ -102,31 +104,23 @@ export function ReviewerInvitationsPage() {
 
   if (assignmentsQuery.isPending) {
     return (
-      <section className="space-y-4" aria-busy="true">
-        <div className="h-8 w-64 animate-pulse rounded bg-muted" />
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[0, 1, 2].map((item) => (
-            <div
-              key={item}
-              className="h-24 animate-pulse rounded-xl bg-muted"
-            />
-          ))}
-        </div>
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
-      </section>
+      <LoadingState
+        label="Loading reviewer assignments"
+        className="min-h-[50vh]"
+      />
     );
   }
 
   if (assignmentsQuery.isError) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Reviewer workspace unavailable</AlertTitle>
-        <AlertDescription className="space-y-3">
-          <p>
-            {assignmentsQuery.error instanceof Error
-              ? assignmentsQuery.error.message
-              : "Assignments could not be loaded."}
-          </p>
+      <ErrorState
+        title="Reviewer workspace unavailable"
+        description={
+          assignmentsQuery.error instanceof Error
+            ? assignmentsQuery.error.message
+            : "Assignments could not be loaded."
+        }
+        action={
           <Button
             type="button"
             variant="outline"
@@ -136,22 +130,18 @@ export function ReviewerInvitationsPage() {
             <RefreshCw aria-hidden="true" />
             Try again
           </Button>
-        </AlertDescription>
-      </Alert>
+        }
+      />
     );
   }
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Reviewer workspace
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage invitations, access blinded manuscripts, and submit
-          confidential peer-review reports.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Peer review"
+        title="Reviewer workspace"
+        description="Manage invitations, access blinded manuscripts, and submit confidential peer-review reports."
+      />
 
       <section
         aria-label="Reviewer assignment summary"

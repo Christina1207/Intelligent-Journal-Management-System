@@ -14,6 +14,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  ManuscriptSummary,
+  ResponsiveQueue,
+} from "@/features/editorial/components";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
 import { getManagerQueue } from "@/features/workflow/api/manager-api";
 import { managerQueryKeys } from "@/features/workflow/api/manager-query-keys";
@@ -176,20 +180,15 @@ export function ManagerSubmissionsPage() {
         ) : filteredSubmissions.length === 0 ? (
           <NoMatchingSubmissions onClearSearch={() => setSearchTerm("")} />
         ) : (
-          <>
-            <div className="hidden overflow-x-auto lg:block">
-              <ScreeningQueueTable submissions={filteredSubmissions} />
-            </div>
-
-            <div className="divide-y divide-slate-200 lg:hidden">
-              {filteredSubmissions.map((submission) => (
+          <ResponsiveQueue
+            table={<ScreeningQueueTable submissions={filteredSubmissions} />}
+            cards={filteredSubmissions.map((submission) => (
                 <ScreeningQueueMobileCard
                   key={submission.id}
                   submission={submission}
                 />
-              ))}
-            </div>
-          </>
+            ))}
+          />
         )}
 
         {queueQuery.data && submissions.length > 0 ? (
@@ -283,13 +282,10 @@ function ScreeningQueueTable({
         {submissions.map((submission) => (
           <tr key={submission.id} className="hover:bg-slate-50">
             <td className="max-w-md px-5 py-4 align-top">
-              <h3 className="line-clamp-2 font-medium text-slate-950">
-                {submission.title}
-              </h3>
-
-              <p className="mt-1 line-clamp-2 text-sm leading-5 text-slate-500">
-                {submission.abstract}
-              </p>
+              <ManuscriptSummary
+                title={submission.title}
+                abstract={submission.abstract}
+              />
             </td>
 
             <td className="px-5 py-4 align-top text-sm text-slate-600">
@@ -332,21 +328,16 @@ function ScreeningQueueMobileCard({
     <article className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-medium leading-6 text-slate-950">
-            {submission.title}
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {submission.section.name}
-          </p>
+          <ManuscriptSummary
+            title={submission.title}
+            abstract={submission.abstract}
+            headingLevel={2}
+            metadata={submission.section.name}
+          />
         </div>
 
         <SubmissionStatusBadge status={submission.status} />
       </div>
-
-      <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
-        {submission.abstract}
-      </p>
 
       <dl className="mt-4 grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-3">
         <div>

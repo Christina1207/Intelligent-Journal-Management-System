@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Inbox, RefreshCw } from "lucide-react";
 
 import { EmptyState } from "@/components/common/empty-state";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorState } from "@/components/common/error-state";
+import { LoadingState } from "@/components/common/loading-state";
+import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ManuscriptSummary } from "@/features/editorial/components";
 import {
   EditorReviewProgressPanel,
   ReviewerDiscoveryPanel,
@@ -50,27 +53,23 @@ export function SectionEditorAssignmentsPage() {
 
   if (queueQuery.isPending) {
     return (
-      <div className="space-y-4" aria-busy="true">
-        <div className="h-28 animate-pulse rounded-xl bg-muted" />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="h-96 animate-pulse rounded-xl bg-muted" />
-          <div className="h-96 animate-pulse rounded-xl bg-muted" />
-        </div>
-      </div>
+      <LoadingState
+        label="Loading editorial assignments"
+        className="min-h-[50vh]"
+      />
     );
   }
 
   if (queueQuery.isError) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Editorial assignments unavailable</AlertTitle>
-        <AlertDescription className="space-y-3">
-          <p>
-            {queueQuery.error instanceof Error
-              ? queueQuery.error.message
-              : "The assignment queue could not be loaded."}
-          </p>
-
+      <ErrorState
+        title="Editorial assignments unavailable"
+        description={
+          queueQuery.error instanceof Error
+            ? queueQuery.error.message
+            : "The assignment queue could not be loaded."
+        }
+        action={
           <Button
             type="button"
             variant="outline"
@@ -80,25 +79,18 @@ export function SectionEditorAssignmentsPage() {
             <RefreshCw aria-hidden="true" />
             Try again
           </Button>
-        </AlertDescription>
-      </Alert>
+        }
+      />
     );
   }
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border bg-card p-6">
-        <p className="text-sm font-medium text-muted-foreground">
-          Section editorial workflow
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Editorial assignments
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-          Select an assigned manuscript, identify qualified reviewers, and
-          manage the start of peer review.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Section editorial workflow"
+        title="Editorial assignments"
+        description="Select an assigned manuscript, identify qualified reviewers, and manage the start of peer review."
+      />
 
       {submissions.length === 0 ? (
         <EmptyState
@@ -135,9 +127,16 @@ export function SectionEditorAssignmentsPage() {
                     onClick={() => setSelectedSubmissionId(submission.id)}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="font-medium leading-5">
-                        {submission.title}
-                      </p>
+                      <ManuscriptSummary
+                        title={submission.title}
+                        metadata={
+                          <>
+                            {submission.section.name}
+                            <span aria-hidden="true"> · </span>
+                            Submitted {formatDate(submission.submitted_at)}
+                          </>
+                        }
+                      />
                       <ChevronRight
                         className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                         aria-hidden="true"
@@ -148,10 +147,6 @@ export function SectionEditorAssignmentsPage() {
                       <SubmissionStatusBadge status={submission.status} />
                     </div>
 
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      {submission.section.name} · Submitted{" "}
-                      {formatDate(submission.submitted_at)}
-                    </p>
                   </button>
                 );
               })}
@@ -197,7 +192,7 @@ export function SectionEditorAssignmentsPage() {
             {selectedSubmission ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>{selectedSubmission.title}</CardTitle>
+                  <CardTitle dir="auto">{selectedSubmission.title}</CardTitle>
                   <CardDescription>
                     {selectedSubmission.section.name} ·{" "}
                     {selectedSubmission.language.toUpperCase()}
@@ -210,7 +205,10 @@ export function SectionEditorAssignmentsPage() {
                 <CardContent className="space-y-6">
                   <div>
                     <h2 className="font-medium">Manuscript abstract</h2>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                    <p
+                      className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground"
+                      dir="auto"
+                    >
                       {selectedSubmission.abstract}
                     </p>
                   </div>
