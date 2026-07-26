@@ -253,6 +253,7 @@ export function NewSubmissionForm() {
 
       <form
         onSubmit={form.handleSubmit(handleValidSubmit, handleInvalid)}
+        aria-busy={isSubmitting}
         noValidate
       >
         <Card>

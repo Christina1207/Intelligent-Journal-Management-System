@@ -1,5 +1,5 @@
 import { PublicAuthorGuidelinesPage } from "@/features/public/pages/public-author-guidelines-page";
-import { getPublicPageSafe } from "@/features/public/api/public-api";
+import { getPublicPage } from "@/features/public/api/public-api";
 
 export const metadata = {
   title: "Author Guidelines",
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function AuthorGuidelinesPage() {
-  const page = await getPublicPageSafe("author-guidelines");
+  const page = await getPublicPage("author-guidelines");
 
   return <PublicAuthorGuidelinesPage page={page} />;
 }

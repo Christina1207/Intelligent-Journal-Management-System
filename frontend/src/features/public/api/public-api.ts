@@ -363,15 +363,6 @@ export async function getPublicPage(slug: string) {
   }
 }
 
-export async function getPublicPageSafe(slug: string) {
-  try {
-    return await getPublicPage(slug);
-  } catch (error) {
-    reportPublicFallback(`public page "${slug}"`, error);
-    return null;
-  }
-}
-
 export async function getEditorialBoard() {
   try {
     const response = await publicFetch<
@@ -392,28 +383,19 @@ export async function getEditorialBoard() {
 }
 
 export async function getContactMethods() {
-  const response = await publicFetch<
-    ContactMethodApiDto[] | PaginatedApiResponse<ContactMethodApiDto>
-  >("/public/contact/", {}, { revalidate: 300 });
-
-  const contacts = Array.isArray(response) ? response : response.results;
-
-  return contacts.map(mapContactMethod);
-}
-export async function getEditorialBoardSafe() {
   try {
-    return await getEditorialBoard();
-  } catch (error) {
-    reportPublicFallback("editorial board", error);
-    return [];
-  }
-}
+    const response = await publicFetch<
+      ContactMethodApiDto[] | PaginatedApiResponse<ContactMethodApiDto>
+    >("/public/contact/", {}, { revalidate: 300 });
 
-export async function getContactMethodsSafe() {
-  try {
-    return await getContactMethods();
+    const contacts = Array.isArray(response) ? response : response.results;
+
+    return contacts.map(mapContactMethod);
   } catch (error) {
-    reportPublicFallback("contact methods", error);
-    return [];
+    if (isNotFoundError(error)) {
+      return [];
+    }
+
+    throw error;
   }
 }

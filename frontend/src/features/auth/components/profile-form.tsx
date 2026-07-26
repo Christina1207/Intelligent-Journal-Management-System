@@ -274,6 +274,7 @@ export function ProfileForm() {
             <form
               onSubmit={form.handleSubmit(handleSubmit)}
               className="grid gap-6"
+              aria-busy={isSubmitting}
               noValidate
             >
               {formError ? (

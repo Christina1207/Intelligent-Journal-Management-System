@@ -141,7 +141,10 @@ export function AuthorShell({
             href="/author"
             className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/35"
           >
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary font-sans text-[0.65rem] font-bold tracking-[0.12em] text-sidebar-primary-foreground">
+            <span
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary font-sans text-[0.65rem] font-bold tracking-[0.12em] text-sidebar-primary-foreground"
+              aria-hidden="true"
+            >
               {journalShortName
                 .split(/\s+/)
                 .map((part) => part[0])
@@ -320,6 +323,7 @@ export function AuthorShell({
 
         <main
           id="main-content"
+          tabIndex={-1}
           className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10"
         >
           {children}

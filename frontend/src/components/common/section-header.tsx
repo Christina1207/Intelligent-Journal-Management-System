@@ -27,7 +27,7 @@ export function SectionHeader({
       <div className="min-w-0">
         <h2
           id={titleId}
-          className="text-2xl leading-tight font-semibold tracking-tight text-foreground"
+          className="break-words text-2xl leading-tight font-semibold tracking-tight text-foreground"
           dir="auto"
         >
           {title}

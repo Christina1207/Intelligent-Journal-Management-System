@@ -17,7 +17,7 @@ function ContentBody({ body }: { body: string }) {
     .filter(Boolean)
 
   return (
-    <div className="mt-4 space-y-4 text-base leading-8 text-text-secondary">
+    <div className="mt-4 space-y-4 break-words text-base leading-8 text-text-secondary">
       {paragraphs.map((paragraph, index) => (
         <p key={`${paragraph.slice(0, 30)}-${index}`} dir="auto">
           {paragraph}
@@ -87,6 +87,7 @@ export function InfoContentSection({
             <article
               key={section.id}
               id={section.id}
+              tabIndex={-1}
               className="scroll-mt-24 py-7 first:pt-8 last:pb-8"
             >
               <h2

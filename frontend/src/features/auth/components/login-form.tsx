@@ -85,6 +85,7 @@ export function LoginForm({ nextPath }: { nextPath: string | null }) {
       <form
         onSubmit={form.handleSubmit(handleSubmit)}
         className="mt-8 grid gap-5"
+        aria-busy={form.formState.isSubmitting}
         noValidate
       >
         {formError ? (

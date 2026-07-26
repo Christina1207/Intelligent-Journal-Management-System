@@ -1,5 +1,5 @@
 import { PublicPublicationEthicsPage } from "@/features/public/pages/public-publication-ethics-page";
-import { getPublicPageSafe } from "@/features/public/api/public-api";
+import { getPublicPage } from "@/features/public/api/public-api";
 
 export const metadata = {
   title: "Publication Ethics",
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function PublicationEthicsPage() {
-  const page = await getPublicPageSafe("publication-ethics");
+  const page = await getPublicPage("publication-ethics");
 
   return <PublicPublicationEthicsPage page={page} />;
 }

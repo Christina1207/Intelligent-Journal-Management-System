@@ -530,7 +530,7 @@ function ReviewItem({
     <div>
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd
-        className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground"
+        className="mt-1 break-words whitespace-pre-wrap text-sm leading-6 text-foreground"
         dir={autoDirection ? "auto" : undefined}
       >
         {value}

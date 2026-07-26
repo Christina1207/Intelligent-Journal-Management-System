@@ -1,5 +1,5 @@
 import { PublicEditorialBoardPage } from "@/features/public/pages/public-editorial-board-page";
-import { getEditorialBoardSafe } from "@/features/public/api/public-api";
+import { getEditorialBoard } from "@/features/public/api/public-api";
 
 export const metadata = {
   title: "Editorial Board",
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function EditorialBoardPage() {
-  const members = await getEditorialBoardSafe();
+  const members = await getEditorialBoard();
 
   return <PublicEditorialBoardPage members={members} />;
 }

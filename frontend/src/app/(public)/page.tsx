@@ -12,7 +12,7 @@ export default async function HomePage() {
     getPublicJournal(),
     getLatestPublicArticles(3),
     getPublicSections(),
-    getCurrentPublicIssue().catch(() => null),
+    getCurrentPublicIssue(),
   ]);
 
   const currentIssueArticles = currentIssue

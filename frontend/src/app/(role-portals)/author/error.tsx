@@ -1,26 +1,45 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
+import { useEffect } from "react";
+import { RefreshCw } from "lucide-react";
 
 import { ErrorState } from "@/components/common/error-state";
+import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 
-export default function AuthorAreaError({
-  reset,
+export default function AuthorRouteError({
+  error,
+  unstable_retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  unstable_retry: () => void;
 }) {
+  useEffect(() => {
+    console.error("[author-route]", error);
+  }, [error]);
+
   return (
-    <ErrorState
-      title="This author page could not be loaded"
-      description="The problem may be temporary. Your submission data has not been changed."
-      action={
-        <Button type="button" variant="outline" size="touch" onClick={reset}>
-          <RotateCcw data-icon="inline-start" aria-hidden="true" />
-          Try again
-        </Button>
-      }
-    />
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Author workspace"
+        title="This page could not be loaded"
+        description="Your account session remains active. Retry the page when the journal service is available."
+      />
+      <ErrorState
+        title="Author workspace unavailable"
+        description="A temporary problem prevented this page from rendering."
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            size="touch"
+            onClick={unstable_retry}
+          >
+            <RefreshCw aria-hidden="true" />
+            Try again
+          </Button>
+        }
+      />
+    </div>
   );
 }

@@ -149,6 +149,7 @@ export function RegisterForm({ nextPath }: { nextPath: string }) {
       <form
         onSubmit={form.handleSubmit(handleSubmit)}
         className="mt-8 grid gap-7"
+        aria-busy={form.formState.isSubmitting}
         noValidate
       >
         {formError ? (

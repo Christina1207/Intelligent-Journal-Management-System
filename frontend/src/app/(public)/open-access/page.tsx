@@ -1,5 +1,5 @@
 import { PublicOpenAccessPage } from "@/features/public/pages/public-open-access-page";
-import { getPublicPageSafe } from "@/features/public/api/public-api";
+import { getPublicPage } from "@/features/public/api/public-api";
 
 export const metadata = {
   title: "Open Access",
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function OpenAccessPage() {
-  const page = await getPublicPageSafe("open-access");
+  const page = await getPublicPage("open-access");
 
   return <PublicOpenAccessPage page={page} />;
 }

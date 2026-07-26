@@ -1,5 +1,5 @@
 import { PublicAboutPage } from "@/features/public/pages/public-about-page";
-import { getPublicPageSafe } from "@/features/public/api/public-api";
+import { getPublicPage } from "@/features/public/api/public-api";
 
 export const metadata = {
   title: "About the Journal",
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function AboutPage() {
-  const page = await getPublicPageSafe("about");
+  const page = await getPublicPage("about");
 
   return <PublicAboutPage page={page} />;
 }

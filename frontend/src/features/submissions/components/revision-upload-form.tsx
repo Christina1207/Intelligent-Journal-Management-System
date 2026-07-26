@@ -135,6 +135,7 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
             uploadMutation.mutate(values),
           )}
           className="grid gap-6"
+          aria-busy={isSubmitting}
           noValidate
         >
           <Controller

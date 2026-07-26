@@ -30,7 +30,10 @@ export function IssueCard({ issue }: IssueCardProps) {
           ) : null}
         </div>
 
-        <h3 className="mt-3 text-xl leading-snug font-semibold text-foreground">
+        <h3
+          className="mt-3 break-words text-xl leading-snug font-semibold text-foreground"
+          dir="auto"
+        >
           <Link
             href={`/issues/${issue.slug}`}
             className="underline-offset-4 hover:text-accent hover:underline"
