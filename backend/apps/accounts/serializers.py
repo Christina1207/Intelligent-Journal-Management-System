@@ -3,7 +3,14 @@ import re
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import ReviewerProfile, User, Role
+from apps.journals.models import Section
+
+from .models import (
+    ReviewerApplication,
+    ReviewerProfile,
+    Role,
+    User,
+)
 
 CURRENT_USER_PROFILE_UPDATE_FIELDS = (
     "first_name",
@@ -13,6 +20,56 @@ CURRENT_USER_PROFILE_UPDATE_FIELDS = (
     "country",
 )
 
+def normalize_expertise_keywords(value):
+    """
+    Normalize expertise keywords while preserving their display casing.
+
+    Whitespace-only values are removed and duplicates are compared
+    case-insensitively.
+    """
+    normalized = []
+    seen = set()
+
+    for raw_keyword in value:
+        keyword = " ".join(str(raw_keyword).split())
+
+        if not keyword:
+            continue
+
+        normalized_key = keyword.casefold()
+
+        if normalized_key in seen:
+            continue
+
+        seen.add(normalized_key)
+        normalized.append(keyword)
+
+    if not 3 <= len(normalized) <= 20:
+        raise serializers.ValidationError(
+            "Provide between 3 and 20 distinct expertise keywords."
+        )
+
+    return normalized
+
+
+def normalize_reviewer_biography(
+    value,
+    *,
+    minimum_length=0,
+):
+    biography = value.strip()
+
+    if len(biography) < minimum_length:
+        raise serializers.ValidationError(
+            f"Biography must contain at least {minimum_length} characters."
+        )
+
+    if len(biography) > 5000:
+        raise serializers.ValidationError(
+            "Biography must contain at most 5000 characters."
+        )
+
+    return biography
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -100,38 +157,170 @@ class ReviewerProfileSerializer(serializers.ModelSerializer):
             "sync_status",
         ]
     def validate_keywords(self, value):
-        normalized = []
-        seen = set()
-
-        for raw_keyword in value:
-            keyword = " ".join(raw_keyword.split())
-
-            if not keyword:
-                continue
-
-            normalized_key = keyword.casefold()
-
-            if normalized_key not in seen:
-                seen.add(normalized_key)
-                normalized.append(keyword)
-
-        if not 3 <= len(normalized) <= 20:
-            raise serializers.ValidationError(
-                "Provide between 3 and 20 distinct expertise keywords."
-            )
-
-        return normalized
+        return normalize_expertise_keywords(value)
 
     def validate_biography(self, value):
-        biography = value.strip()
+        return normalize_reviewer_biography(value)
 
-        if len(biography) > 5000:
+class ReviewerApplicationSectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Section
+        fields = [
+            "id",
+            "name",
+            "slug",
+        ]
+        read_only_fields = fields
+
+
+class ReviewerApplicationApplicantSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(
+        source="get_full_name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "full_name",
+            "orcid",
+            "affiliation",
+            "country",
+        ]
+        read_only_fields = fields
+
+
+class ReviewerApplicationDecisionUserSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(
+        source="get_full_name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "full_name",
+            "email",
+        ]
+        read_only_fields = fields
+
+
+class ReviewerApplicationSubmitSerializer(serializers.Serializer):
+    """
+    Validates reviewer-application submission and update data.
+
+    The service layer remains responsible for eligibility checks,
+    persistence, and application state transitions.
+    """
+
+    section_id = serializers.PrimaryKeyRelatedField(
+        queryset=Section.objects.all(),
+        source="section",
+        write_only=True,
+        error_messages={
+            "required": "section_id is required.",
+            "does_not_exist": "No section exists with this id.",
+            "incorrect_type": "section_id must be a valid UUID.",
+        },
+    )
+
+    keywords = serializers.ListField(
+        child=serializers.CharField(
+            max_length=100,
+            allow_blank=False,
+        ),
+        allow_empty=False,
+    )
+
+    biography = serializers.CharField(
+        max_length=5000,
+        allow_blank=False,
+        trim_whitespace=False,
+    )
+
+    def validate_section_id(self, section):
+        if not section.is_active:
             raise serializers.ValidationError(
-                "Biography must contain at most 5000 characters."
+                "Reviewer applications can only target active sections."
             )
 
-        return biography
+        return section
 
+    def validate_keywords(self, value):
+        return normalize_expertise_keywords(value)
+
+    def validate_biography(self, value):
+        return normalize_reviewer_biography(
+            value,
+            minimum_length=50,
+        )
+
+
+class ReviewerApplicationSerializer(serializers.ModelSerializer):
+    applicant = ReviewerApplicationApplicantSerializer(
+        source="user",
+        read_only=True,
+    )
+
+    section = ReviewerApplicationSectionSerializer(
+        read_only=True,
+    )
+
+    reviewed_by = ReviewerApplicationDecisionUserSerializer(
+        read_only=True,
+    )
+
+    class Meta:
+        model = ReviewerApplication
+        fields = [
+            "id",
+            "applicant",
+            "section",
+            "keywords",
+            "biography",
+            "status",
+            "decision_note",
+            "reviewed_by",
+            "submitted_at",
+            "updated_at",
+            "reviewed_at",
+        ]
+        read_only_fields = fields
+
+
+class ReviewerApplicationApprovalSerializer(serializers.Serializer):
+    decision_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=2000,
+        trim_whitespace=True,
+    )
+
+
+class ReviewerApplicationRejectionSerializer(serializers.Serializer):
+    decision_note = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=2000,
+        trim_whitespace=True,
+    )
+
+    def validate_decision_note(self, value):
+        decision_note = value.strip()
+
+        if not decision_note:
+            raise serializers.ValidationError(
+                "A rejection reason is required."
+            )
+
+        return decision_note
 
 class UserProfileSerializer(serializers.ModelSerializer):
     roles = RoleSerializer(many=True, read_only=True)
