@@ -5,13 +5,16 @@ from .models import Role
 
 class CanManageReviewerApplications(BasePermission):
     """
-    Allows journal-wide reviewer application management to the
-    Editor-in-Chief, system administrators, and Django superusers.
+    Grants reviewer-application management capability.
+
+    Section-level authorization is enforced separately by the queryset
+    and service layer. Editors-in-Chief, administrators, and superusers
+    have journal-wide access.
     """
 
     message = (
-        "Only the Editor-in-Chief or a system administrator "
-        "can manage reviewer applications."
+        "Only the responsible Section Manager, Editor-in-Chief, "
+        "or a system administrator can manage reviewer applications."
     )
 
     def has_permission(self, request, view):
@@ -25,6 +28,7 @@ class CanManageReviewerApplications(BasePermission):
 
         return user.roles.filter(
             name__in=[
+                Role.RoleName.SECTION_MANAGER,
                 Role.RoleName.EDITOR_IN_CHIEF,
                 Role.RoleName.ADMIN,
             ]

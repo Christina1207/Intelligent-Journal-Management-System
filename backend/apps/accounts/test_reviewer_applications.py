@@ -63,8 +63,26 @@ class ReviewerApplicationApiTests(APITestCase):
             username="section-manager",
             email="manager@example.com",
         )
+        self.section.manager = self.section_manager
+        self.section.save(
+            update_fields=["manager"],
+        )
         self.section_manager.roles.add(
             self.section_manager_role
+        )
+        self.other_section_manager = self._create_user(
+            username="other-section-manager",
+            email="other-manager@example.com",
+        )
+        self.other_section_manager.roles.add(
+            self.section_manager_role
+        )
+
+        self.other_section.manager = (
+            self.other_section_manager
+        )
+        self.other_section.save(
+            update_fields=["manager"],
         )
 
         self.regular_author = self._create_user(
@@ -110,11 +128,12 @@ class ReviewerApplicationApiTests(APITestCase):
         self,
         *,
         user=None,
+        section=None,
         status_value=ReviewerApplication.Status.PENDING,
     ):
         return ReviewerApplication.objects.create(
             user=user or self.applicant,
-            section=self.section,
+            section=section or self.section,
             keywords=[
                 "Machine Learning",
                 "Natural Language Processing",
@@ -423,27 +442,72 @@ class ReviewerApplicationApiTests(APITestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
-    def test_section_manager_cannot_approve_application(self):
+    @patch(
+        "apps.accounts.tasks."
+        "generate_reviewer_expertise_embedding.delay"
+    )
+    def test_section_manager_can_approve_application_for_own_section(
+        self,
+        embedding_task,
+    ):
         application = self._create_application()
 
         self.client.force_authenticate(
             self.section_manager
         )
 
-        response = self.client.post(
-            reverse(
-                "reviewer-application-approve",
-                kwargs={
-                    "application_id": application.id,
+        with self.captureOnCommitCallbacks(
+            execute=True
+        ):
+            response = self.client.post(
+                reverse(
+                    "reviewer-application-approve",
+                    kwargs={
+                        "application_id": application.id,
+                    },
+                ),
+                {
+                    "decision_note": (
+                        "Approved by the responsible "
+                        "Section Manager."
+                    )
                 },
-            ),
-            {},
-            format="json",
-        )
+                format="json",
+            )
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_200_OK,
+        )
+
+        application.refresh_from_db()
+        self.applicant.refresh_from_db()
+
+        self.assertEqual(
+            application.status,
+            ReviewerApplication.Status.APPROVED,
+        )
+        self.assertEqual(
+            application.reviewed_by,
+            self.section_manager,
+        )
+        self.assertTrue(
+            self.applicant.has_role(
+                Role.RoleName.REVIEWER
+            )
+        )
+
+        profile = ReviewerProfile.objects.get(
+            user=self.applicant,
+        )
+
+        self.assertEqual(
+            list(profile.sections.all()),
+            [self.section],
+        )
+
+        embedding_task.assert_called_once_with(
+            str(self.applicant.id)
         )
 
     @patch(
@@ -624,6 +688,50 @@ class ReviewerApplicationApiTests(APITestCase):
             ).exists()
         )
 
+    def test_section_manager_cannot_approve_another_sections_application(
+        self,
+    ):
+        application = self._create_application(
+            section=self.other_section,
+        )
+
+        self.client.force_authenticate(
+            self.section_manager
+        )
+
+        response = self.client.post(
+            reverse(
+                "reviewer-application-approve",
+                kwargs={
+                    "application_id": application.id,
+                },
+            ),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        application.refresh_from_db()
+        self.applicant.refresh_from_db()
+
+        self.assertEqual(
+            application.status,
+            ReviewerApplication.Status.PENDING,
+        )
+        self.assertFalse(
+            self.applicant.has_role(
+                Role.RoleName.REVIEWER
+            )
+        )
+        self.assertFalse(
+            ReviewerProfile.objects.filter(
+                user=self.applicant,
+            ).exists()
+        )
 
 class ReviewerApplicationRecommendationTests(
     APITestCase

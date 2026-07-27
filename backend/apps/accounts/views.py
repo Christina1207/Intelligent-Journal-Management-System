@@ -219,8 +219,9 @@ class ReviewerApplicationView(generics.GenericAPIView):
         200: ReviewerApplicationSerializer(many=True),
         403: OpenApiResponse(
             description=(
-                "Only journal-wide editorial administrators "
-                "can list applications."
+                 "Only the responsible Section Manager, "
+                 "Editor-in-Chief, or an administrator "
+                 "can list reviewer applications."
             )
         ),
     },
@@ -241,15 +242,36 @@ class ReviewerApplicationListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        user = self.request.user
 
-        raw_status = self.request.query_params.get("status")
+        has_global_access = (
+            user.is_superuser
+            or user.roles.filter(
+                name__in=[
+                    Role.RoleName.EDITOR_IN_CHIEF,
+                    Role.RoleName.ADMIN,
+                ]
+            ).exists()
+        )
+
+        if not has_global_access:
+            queryset = queryset.filter(
+                section__manager=user,
+            )
+
+        raw_status = self.request.query_params.get(
+            "status"
+        )
 
         if not raw_status:
             return queryset
 
         normalized_status = raw_status.strip().upper()
 
-        if normalized_status not in ReviewerApplication.Status.values:
+        if (
+            normalized_status
+            not in ReviewerApplication.Status.values
+        ):
             allowed_statuses = ", ".join(
                 ReviewerApplication.Status.values
             )
@@ -257,7 +279,7 @@ class ReviewerApplicationListView(generics.ListAPIView):
             raise ValidationError(
                 {
                     "status": (
-                        f"Invalid status. Use one of: "
+                        "Invalid status. Use one of: "
                         f"{allowed_statuses}."
                     )
                 }
@@ -277,8 +299,8 @@ class ReviewerApplicationListView(generics.ListAPIView):
         ),
         403: OpenApiResponse(
             description=(
-                "The authenticated user cannot manage "
-                "reviewer applications."
+                "The user is not authorized to manage "
+                "applications for this section."
             )
         ),
         404: OpenApiResponse(
@@ -324,8 +346,8 @@ class ReviewerApplicationApproveView(
         ),
         403: OpenApiResponse(
             description=(
-                "The authenticated user cannot manage "
-                "reviewer applications."
+                "The user is not authorized to manage "
+                "applications for this section."
             )
         ),
         404: OpenApiResponse(

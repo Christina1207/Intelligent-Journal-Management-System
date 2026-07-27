@@ -117,7 +117,13 @@ class ReviewerApplicationService:
     reviewer role assignment, profile creation, and embedding dispatch.
     """
 
-    MANAGER_ROLE_NAMES = (
+    GLOBAL_MANAGER_ROLE_NAMES = (
+        Role.RoleName.EDITOR_IN_CHIEF,
+        Role.RoleName.ADMIN,
+    )
+
+    APPLICATION_MANAGER_ROLE_NAMES = (
+        Role.RoleName.SECTION_MANAGER,
         Role.RoleName.EDITOR_IN_CHIEF,
         Role.RoleName.ADMIN,
     )
@@ -176,7 +182,19 @@ class ReviewerApplicationService:
             )
 
     @classmethod
-    def _ensure_manager_can_decide(cls, user):
+    def _ensure_user_can_manage_application(
+        cls,
+        *,
+        user,
+        application,
+    ):
+        """
+        Enforce section-scoped reviewer-application authority.
+
+        Editors-in-Chief, administrators, and superusers have global
+        authority. A Section Manager may act only on applications targeting
+        a section currently assigned to that manager.
+        """
         if not user or not user.is_authenticated:
             raise PermissionDenied(
                 "Authentication is required."
@@ -185,13 +203,32 @@ class ReviewerApplicationService:
         if user.is_superuser:
             return
 
-        if not user.roles.filter(
-            name__in=cls.MANAGER_ROLE_NAMES
-        ).exists():
-            raise PermissionDenied(
-                "Only the Editor-in-Chief or a system administrator "
-                "can manage reviewer applications."
+        role_names = set(
+            user.roles.filter(
+                name__in=cls.APPLICATION_MANAGER_ROLE_NAMES
+            ).values_list(
+                "name",
+                flat=True,
             )
+        )
+
+        if role_names.intersection(
+            cls.GLOBAL_MANAGER_ROLE_NAMES
+        ):
+            return
+
+        is_responsible_section_manager = (
+            Role.RoleName.SECTION_MANAGER in role_names
+            and application.section.manager_id == user.id
+        )
+
+        if is_responsible_section_manager:
+            return
+
+        raise PermissionDenied(
+            "You can manage reviewer applications only for "
+            "sections assigned to you."
+        )
 
     @staticmethod
     def _ensure_section_is_active(section):
@@ -393,10 +430,13 @@ class ReviewerApplicationService:
         reviewer profile, assigns exactly one section, and dispatches
         embedding generation only after the transaction commits.
         """
-        cls._ensure_manager_can_decide(reviewed_by)
-
         application = cls._get_application_for_update(
             application_id=application_id,
+        )
+
+        cls._ensure_user_can_manage_application(
+            user=reviewed_by,
+            application=application,
         )
 
         if (
@@ -493,7 +533,14 @@ class ReviewerApplicationService:
         """
         Reject a pending application without granting reviewer access.
         """
-        cls._ensure_manager_can_decide(reviewed_by)
+        application = cls._get_application_for_update(
+            application_id=application_id,
+        )
+
+        cls._ensure_user_can_manage_application(
+            user=reviewed_by,
+            application=application,
+        )
 
         normalized_note = (decision_note or "").strip()
 
