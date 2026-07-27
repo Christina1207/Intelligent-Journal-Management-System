@@ -1,5 +1,15 @@
 export type ReviewerApplicationStatus = "PENDING" | "APPROVED" | "REJECTED";
 
+export type ReviewerApplicationListStatus = "ALL" | ReviewerApplicationStatus;
+
+export type ReviewerApplicationApprovalPayload = {
+  decision_note?: string;
+};
+
+export type ReviewerApplicationRejectionPayload = {
+  decision_note: string;
+};
+
 export type ReviewerApplicationSection = {
   id: string;
   name: string;

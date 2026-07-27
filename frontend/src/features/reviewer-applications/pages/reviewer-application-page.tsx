@@ -317,7 +317,7 @@ export function ReviewerApplicationPage() {
             tone="info"
             icon={Clock3}
             title="Application pending"
-            description="Your application is awaiting review by the Editor-in-Chief. You may update it while it remains pending."
+            description={`Your application is awaiting review by the Section Manager responsible for the ${application.section.name} section. You may update it while it remains pending.`}
           />
 
           <ReviewerStatusSummary application={application} />

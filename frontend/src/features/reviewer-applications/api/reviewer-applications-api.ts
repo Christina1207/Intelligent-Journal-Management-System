@@ -4,7 +4,10 @@ import { ApiError } from "@/lib/api/errors";
 import type {
   PaginatedResponse,
   ReviewerApplication,
+  ReviewerApplicationApprovalPayload,
+  ReviewerApplicationListStatus,
   ReviewerApplicationPayload,
+  ReviewerApplicationRejectionPayload,
   ReviewerApplicationSection,
 } from "@/features/reviewer-applications/types";
 
@@ -44,6 +47,46 @@ export function updateReviewerApplication(
 ) {
   return apiClient.patch<ReviewerApplication>(
     "/auth/reviewer-application/",
+    payload,
+  );
+}
+
+export async function getReviewerApplications({
+  page,
+  status,
+}: {
+  page: number;
+  status: ReviewerApplicationListStatus;
+}) {
+  const query = new URLSearchParams({
+    page: String(page),
+  });
+
+  if (status !== "ALL") {
+    query.set("status", status);
+  }
+
+  return apiClient.get<PaginatedResponse<ReviewerApplication>>(
+    `/auth/reviewer-applications/?${query.toString()}`,
+  );
+}
+
+export function approveReviewerApplication(
+  applicationId: string,
+  payload: ReviewerApplicationApprovalPayload,
+) {
+  return apiClient.post<ReviewerApplication>(
+    `/auth/reviewer-applications/${applicationId}/approve/`,
+    payload,
+  );
+}
+
+export function rejectReviewerApplication(
+  applicationId: string,
+  payload: ReviewerApplicationRejectionPayload,
+) {
+  return apiClient.post<ReviewerApplication>(
+    `/auth/reviewer-applications/${applicationId}/reject/`,
     payload,
   );
 }
