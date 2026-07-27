@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import ReviewerProfile, User, Role
+from .models import ReviewerApplication, ReviewerProfile, Role, User
 
 
 @admin.register(Role)
@@ -8,6 +8,46 @@ class RoleAdmin(admin.ModelAdmin):
     list_display = ["name"]
     ordering = ["name"]
 
+
+@admin.register(ReviewerApplication)
+class ReviewerApplicationAdmin(admin.ModelAdmin):
+    list_display = [
+        "user",
+        "section",
+        "status",
+        "submitted_at",
+        "reviewed_at",
+        "reviewed_by",
+    ]
+
+    list_filter = [
+        "status",
+        "section",
+    ]
+
+    search_fields = [
+        "user__username",
+        "user__email",
+        "user__first_name",
+        "user__last_name",
+        "section__name",
+    ]
+
+    readonly_fields = [
+        "submitted_at",
+        "updated_at",
+        "reviewed_at",
+    ]
+
+    list_select_related = [
+        "user",
+        "section",
+        "reviewed_by",
+    ]
+
+    ordering = [
+        "-submitted_at",
+    ]
 
 @admin.register(ReviewerProfile)
 class ReviewerProfileAdmin(admin.ModelAdmin):
