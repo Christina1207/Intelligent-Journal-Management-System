@@ -1,31 +1,39 @@
 "use client";
 
 import * as React from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
+import { Check, CircleUserRound, IdCard, Save, Undo2 } from "lucide-react";
+import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
 
+import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import { Notice } from "@/components/common/notice";
+import { PageHeader } from "@/components/common/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { updateCurrentUserProfile } from "@/features/auth/api/auth-api";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import {
+  profileSchema,
+  type ProfileFormValues,
+} from "@/features/auth/schemas";
 import { ApiError } from "@/lib/api/errors";
 import type { UpdateCurrentUserProfilePayload } from "@/types/auth";
+import { ROLE_LABELS } from "@/types/roles";
 
-const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
+type EditableProfileField = keyof ProfileFormValues;
 
-type EditableProfileField =
-  | "first_name"
-  | "last_name"
-  | "orcid"
-  | "affiliation"
-  | "country";
-
-type FormValues = Record<EditableProfileField, string>;
-type FormErrors = Partial<Record<EditableProfileField | "form", string>>;
-
-function getApiFieldErrors(error: unknown): FormErrors {
-  if (!(error instanceof ApiError)) {
-    return {};
-  }
-
+function getApiFieldErrors(error: unknown) {
   if (
+    !(error instanceof ApiError) ||
     typeof error.details !== "object" ||
     error.details === null ||
     Array.isArray(error.details)
@@ -33,13 +41,23 @@ function getApiFieldErrors(error: unknown): FormErrors {
     return {};
   }
 
-  const errors: FormErrors = {};
+  const errors: Partial<Record<EditableProfileField, string>> = {};
 
   for (const [field, value] of Object.entries(error.details)) {
+    if (
+      field !== "first_name" &&
+      field !== "last_name" &&
+      field !== "orcid" &&
+      field !== "affiliation" &&
+      field !== "country"
+    ) {
+      continue;
+    }
+
     if (Array.isArray(value)) {
-      errors[field as keyof FormErrors] = value.map(String).join(" ");
+      errors[field] = value.map(String).join(" ");
     } else if (typeof value === "string") {
-      errors[field as keyof FormErrors] = value;
+      errors[field] = value;
     }
   }
 
@@ -47,11 +65,7 @@ function getApiFieldErrors(error: unknown): FormErrors {
 }
 
 function getGeneralErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-
-  if (error instanceof Error) {
+  if (error instanceof ApiError || error instanceof Error) {
     return error.message;
   }
 
@@ -64,7 +78,7 @@ function getInitialValues(user: {
   orcid?: string;
   affiliation?: string;
   country?: string;
-}): FormValues {
+}): ProfileFormValues {
   return {
     first_name: user.first_name ?? "",
     last_name: user.last_name ?? "",
@@ -75,8 +89,8 @@ function getInitialValues(user: {
 }
 
 function buildChangedPayload(
-  initialValues: FormValues,
-  currentValues: FormValues,
+  initialValues: ProfileFormValues,
+  currentValues: ProfileFormValues,
 ): UpdateCurrentUserProfilePayload {
   const payload: UpdateCurrentUserProfilePayload = {};
 
@@ -85,7 +99,7 @@ function buildChangedPayload(
     const initialValue = initialValues[key].trim();
 
     if (currentValue !== initialValue) {
-      payload[key] = currentValue;
+      payload[key] = key === "orcid" ? currentValue.toUpperCase() : currentValue;
     }
   }
 
@@ -101,16 +115,67 @@ function getDisplayName(user: {
   return fullName || user.username;
 }
 
+type ProfileTextFieldProps = {
+  form: UseFormReturn<ProfileFormValues>;
+  name: EditableProfileField;
+  label: string;
+  description?: string;
+  placeholder?: string;
+  autoComplete?: string;
+  required?: boolean;
+  onEdit: () => void;
+};
+
+function ProfileTextField({
+  form,
+  name,
+  label,
+  description,
+  placeholder,
+  autoComplete,
+  required,
+  onEdit,
+}: ProfileTextFieldProps) {
+  const error = form.formState.errors[name]?.message;
+  const registration = form.register(name);
+
+  return (
+    <FormField
+      htmlFor={name}
+      label={label}
+      description={description}
+      error={error}
+      required={required}
+    >
+      <Input
+        id={name}
+        type="text"
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        aria-invalid={Boolean(error)}
+        aria-describedby={getFormFieldDescription({
+          id: name,
+          hasDescription: Boolean(description),
+          hasError: Boolean(error),
+        })}
+        {...registration}
+        onChange={(event) => {
+          registration.onChange(event);
+          onEdit();
+        }}
+      />
+    </FormField>
+  );
+}
+
 export function ProfileForm() {
   const { user, refreshCurrentUser } = useAuth();
-
-  const initialValues = React.useMemo(
-    () => (user ? getInitialValues(user) : null),
-    [user],
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(
+    null,
   );
-
-  const [values, setValues] = React.useState<FormValues>(() =>
-    user
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: user
       ? getInitialValues(user)
       : {
           first_name: "",
@@ -119,331 +184,276 @@ export function ProfileForm() {
           affiliation: "",
           country: "",
         },
-  );
-  const [errors, setErrors] = React.useState<FormErrors>({});
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(
-    null,
-  );
-
-  React.useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setValues(getInitialValues(user));
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [user]);
+  });
 
   const updateProfileMutation = useMutation({
     mutationFn: updateCurrentUserProfile,
-    onSuccess: async () => {
-      await refreshCurrentUser();
-      setSuccessMessage("Profile updated successfully.");
-      setErrors({});
+    onSuccess: async (updatedUser) => {
+      const currentUser = await refreshCurrentUser();
+      form.reset(getInitialValues(currentUser ?? updatedUser));
+      form.clearErrors();
+      setSuccessMessage("Your profile has been updated.");
     },
     onError: (error) => {
       setSuccessMessage(null);
-      setErrors({
-        ...getApiFieldErrors(error),
-        form: getGeneralErrorMessage(error),
+
+      for (const [field, message] of Object.entries(getApiFieldErrors(error))) {
+        form.setError(field as EditableProfileField, {
+          type: "server",
+          message,
+        });
+      }
+
+      form.setError("root", {
+        type: "server",
+        message: getGeneralErrorMessage(error),
       });
     },
   });
+  const watchedValues = useWatch({ control: form.control });
 
-  if (!user || !initialValues) {
-    return (
-      <div className="rounded-xl border bg-white p-6 text-sm text-slate-500 shadow-sm">
-        Loading profile...
-      </div>
-    );
+  if (!user) {
+    return null;
   }
-  const currentInitialValues = initialValues;
 
-  const changedPayload = buildChangedPayload(currentInitialValues, values);
+  const initialValues = getInitialValues(user);
+  const currentValues: ProfileFormValues = {
+    first_name: watchedValues.first_name ?? "",
+    last_name: watchedValues.last_name ?? "",
+    orcid: watchedValues.orcid ?? "",
+    affiliation: watchedValues.affiliation ?? "",
+    country: watchedValues.country ?? "",
+  };
+  const changedPayload = buildChangedPayload(initialValues, currentValues);
   const hasChanges = Object.keys(changedPayload).length > 0;
   const isSubmitting = updateProfileMutation.isPending;
+  const displayName = getDisplayName(user);
+  const formError = form.formState.errors.root?.message;
 
-  function updateField(field: EditableProfileField, value: string) {
-    setValues((currentValues) => ({
-      ...currentValues,
-      [field]: value,
-    }));
-
+  function handleEdit() {
     setSuccessMessage(null);
-
-    setErrors((currentErrors) => {
-      const nextErrors = { ...currentErrors };
-      delete nextErrors[field];
-      delete nextErrors.form;
-      return nextErrors;
-    });
+    form.clearErrors("root");
   }
 
-  function validate() {
-    const nextErrors: FormErrors = {};
-
-    if (!values.first_name.trim()) {
-      nextErrors.first_name = "First name is required.";
-    }
-
-    if (!values.last_name.trim()) {
-      nextErrors.last_name = "Last name is required.";
-    }
-
-    if (values.orcid.trim() && !orcidPattern.test(values.orcid.trim())) {
-      nextErrors.orcid =
-        "ORCID must use the format 0000-0000-0000-0000. The final character may be X.";
-    }
-
-    return nextErrors;
-  }
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const validationErrors = validate();
-
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setSuccessMessage(null);
-      return;
-    }
-
-    const payload = buildChangedPayload(currentInitialValues, values);
+  function handleSubmit(values: ProfileFormValues) {
+    const payload = buildChangedPayload(initialValues, values);
 
     if (Object.keys(payload).length === 0) {
-      setSuccessMessage("No profile changes to save.");
-      setErrors({});
+      setSuccessMessage("Your profile is already up to date.");
       return;
     }
 
+    setSuccessMessage(null);
     updateProfileMutation.mutate(payload);
   }
 
   function handleReset() {
-    setValues(currentInitialValues);
-    setErrors({});
+    form.reset(initialValues);
+    form.clearErrors();
     setSuccessMessage(null);
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium text-slate-500">Author account</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-          Profile
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Manage the author information associated with your manuscript
-          submissions. Username and email are read-only for account integrity.
-        </p>
-      </section>
+    <div className="space-y-7">
+      <PageHeader
+        eyebrow="Author account"
+        title="Profile"
+        description="Maintain the researcher information associated with your submissions and published article metadata."
+      />
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-xl border bg-white p-6 shadow-sm"
-        >
-          <h2 className="text-lg font-semibold text-slate-950">
-            Editable profile information
-          </h2>
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-xl">Researcher information</CardTitle>
+            <CardDescription>
+              Update only the fields supported by your journal account.
+              Username, email, account status, and roles are read-only.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="grid gap-6"
+              aria-busy={isSubmitting}
+              noValidate
+            >
+              {formError ? (
+                <Notice
+                  tone="destructive"
+                  title="Profile update failed"
+                  description={formError}
+                />
+              ) : null}
 
-          {errors.form ? (
-            <div className="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {errors.form}
-            </div>
-          ) : null}
+              {successMessage ? (
+                <Notice
+                  tone="success"
+                  icon={Check}
+                  title={successMessage}
+                />
+              ) : null}
 
-          {successMessage ? (
-            <div className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {successMessage}
-            </div>
-          ) : null}
+              <div className="grid gap-5 sm:grid-cols-2">
+                <ProfileTextField
+                  form={form}
+                  name="first_name"
+                  label="First name"
+                  autoComplete="given-name"
+                  required
+                  onEdit={handleEdit}
+                />
+                <ProfileTextField
+                  form={form}
+                  name="last_name"
+                  label="Last name"
+                  autoComplete="family-name"
+                  required
+                  onEdit={handleEdit}
+                />
+              </div>
 
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <TextField
-              id="first_name"
-              label="First name"
-              value={values.first_name}
-              error={errors.first_name}
-              onChange={(value) => updateField("first_name", value)}
-              autoComplete="given-name"
-              required
+              <ProfileTextField
+                form={form}
+                name="orcid"
+                label="ORCID"
+                placeholder="0000-0000-0000-0000"
+                description="Optional researcher identifier. The final character may be X."
+                onEdit={handleEdit}
+              />
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <ProfileTextField
+                  form={form}
+                  name="affiliation"
+                  label="Affiliation"
+                  autoComplete="organization"
+                  placeholder="University or research institution"
+                  onEdit={handleEdit}
+                />
+                <ProfileTextField
+                  form={form}
+                  name="country"
+                  label="Country"
+                  autoComplete="country-name"
+                  onEdit={handleEdit}
+                />
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-border pt-6 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="touch"
+                  onClick={handleReset}
+                  disabled={isSubmitting || !hasChanges}
+                >
+                  <Undo2 data-icon="inline-start" aria-hidden="true" />
+                  Reset
+                </Button>
+                <Button
+                  type="submit"
+                  variant="accent"
+                  size="touch"
+                  disabled={isSubmitting || !hasChanges}
+                >
+                  <Save data-icon="inline-start" aria-hidden="true" />
+                  {isSubmitting ? "Saving..." : "Save changes"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <aside className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Account summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3 border-b border-border pb-5">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary font-semibold text-secondary-foreground">
+                  {displayName
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground" dir="auto">
+                    {displayName}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+
+              <dl className="mt-5 grid gap-4 text-sm">
+                <ReadOnlyItem label="Username" value={user.username} />
+                <ReadOnlyItem label="Email" value={user.email} />
+                <ReadOnlyItem
+                  label="Account status"
+                  value={user.status.replaceAll("_", " ").toLowerCase()}
+                  capitalize
+                />
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">
+                    Roles
+                  </dt>
+                  <dd className="mt-2 flex flex-wrap gap-2">
+                    {user.roles.map((role) => (
+                      <Badge key={role} variant="secondary">
+                        {ROLE_LABELS[role]}
+                      </Badge>
+                    ))}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Notice
+            tone="info"
+            icon={IdCard}
+            title="Metadata quality"
+            description="Affiliation, country, and ORCID help the editorial office maintain accurate author and publication records."
+          />
+
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-surface-muted p-4 text-sm text-text-secondary">
+            <CircleUserRound
+              className="mt-0.5 size-5 shrink-0 text-accent"
+              aria-hidden="true"
             />
-
-            <TextField
-              id="last_name"
-              label="Last name"
-              value={values.last_name}
-              error={errors.last_name}
-              onChange={(value) => updateField("last_name", value)}
-              autoComplete="family-name"
-              required
-            />
-          </div>
-
-          <div className="mt-5">
-            <TextField
-              id="orcid"
-              label="ORCID"
-              value={values.orcid}
-              error={errors.orcid}
-              onChange={(value) => updateField("orcid", value)}
-              placeholder="0000-0000-0000-0000"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Optional researcher identifier. Example: 0000-0002-1825-0097.
+            <p className="leading-6">
+              Changes apply to your account. Metadata already captured in a
+              submitted manuscript may remain part of that submission record.
             </p>
           </div>
-
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <TextField
-              id="affiliation"
-              label="Affiliation"
-              value={values.affiliation}
-              error={errors.affiliation}
-              onChange={(value) => updateField("affiliation", value)}
-              placeholder="University or research institution"
-            />
-
-            <TextField
-              id="country"
-              label="Country"
-              value={values.country}
-              error={errors.country}
-              onChange={(value) => updateField("country", value)}
-              autoComplete="country-name"
-            />
-          </div>
-
-          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={isSubmitting || !hasChanges}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Reset
-            </button>
-
-            <button
-              type="submit"
-              disabled={isSubmitting || !hasChanges}
-              className="rounded-md bg-slate-950 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? "Saving..." : "Save changes"}
-            </button>
-          </div>
-        </form>
-
-        <aside className="space-y-6">
-          <section className="rounded-xl border bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">
-              Account summary
-            </h2>
-
-            <div className="mt-5 flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
-                {getDisplayName(user)
-                  .split(" ")
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
-
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-950">
-                  {getDisplayName(user)}
-                </p>
-                <p className="truncate text-sm text-slate-500">{user.email}</p>
-              </div>
-            </div>
-
-            <dl className="mt-6 space-y-4 text-sm">
-              <ReadOnlyItem label="Username" value={user.username} />
-              <ReadOnlyItem label="Email" value={user.email} />
-              <ReadOnlyItem label="Status" value={user.status} />
-              <div>
-                <dt className="text-slate-500">Roles</dt>
-                <dd className="mt-2 flex flex-wrap gap-2">
-                  {user.roles.map((role) => (
-                    <span
-                      key={role}
-                      className="rounded-full border bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
-                    >
-                      {role.replaceAll("_", " ")}
-                    </span>
-                  ))}
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="rounded-xl border bg-slate-950 p-6 text-white shadow-sm">
-            <h2 className="text-lg font-semibold">Profile quality</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Complete affiliation, country, and ORCID information help the
-              editorial office identify authors and maintain cleaner publication
-              records.
-            </p>
-          </section>
         </aside>
-      </section>
+      </div>
     </div>
   );
 }
 
-type TextFieldProps = {
-  id: EditableProfileField;
-  label: string;
-  value: string;
-  error?: string;
-  placeholder?: string;
-  autoComplete?: string;
-  required?: boolean;
-  onChange: (value: string) => void;
-};
-
-function TextField({
-  id,
+function ReadOnlyItem({
   label,
   value,
-  error,
-  placeholder,
-  autoComplete,
-  required,
-  onChange,
-}: TextFieldProps) {
+  capitalize,
+}: {
+  label: string;
+  value: string;
+  capitalize?: boolean;
+}) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={id}
-        type="text"
-        value={value}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        required={required}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-      />
-      {error ? <p className="mt-1 text-sm text-red-600">{error}</p> : null}
-    </div>
-  );
-}
-
-function ReadOnlyItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="mt-1 font-medium text-slate-950">{value || "Not set"}</dd>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd
+        className={capitalize ? "mt-1 font-medium capitalize" : "mt-1 font-medium"}
+        dir="auto"
+      >
+        {value}
+      </dd>
     </div>
   );
 }

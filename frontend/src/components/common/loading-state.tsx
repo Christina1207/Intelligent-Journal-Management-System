@@ -1,13 +1,29 @@
 import { LoaderCircle } from "lucide-react"
 
+import { cn } from "@/lib/utils"
+
 interface LoadingStateProps {
   label?: string
+  className?: string
 }
 
-export function LoadingState({ label = "Loading" }: LoadingStateProps) {
+export function LoadingState({
+  label = "Loading",
+  className,
+}: LoadingStateProps) {
   return (
-    <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
-      <LoaderCircle className="size-4 animate-spin" />
+    <div
+      className={cn(
+        "flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground",
+        className
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      <LoaderCircle
+        className="size-4 animate-spin motion-reduce:animate-none"
+        aria-hidden="true"
+      />
       <span>{label}</span>
     </div>
   )

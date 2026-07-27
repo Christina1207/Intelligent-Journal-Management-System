@@ -1,24 +1,15 @@
-import * as React from "react";
+import type { ReactNode } from "react";
 
-import { ManagerShell } from "@/components/layout/manager-shell";
-import { AuthGuard } from "@/features/auth/components/auth-guard";
+import { EditorialPortalLayout } from "@/components/layout/editorial-portal-layout";
 
 export default function ManagerLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <React.Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-          Loading Section Manager area...
-        </div>
-      }
-    >
-      <AuthGuard requiredRole="SECTION_MANAGER">
-        <ManagerShell>{children}</ManagerShell>
-      </AuthGuard>
-    </React.Suspense>
+    <EditorialPortalLayout role="SECTION_MANAGER">
+      {children}
+    </EditorialPortalLayout>
   );
 }

@@ -1,37 +1,31 @@
-import type { PublicArticle } from "../types";
-import { ArticleCard } from "./article-card";
+import { SectionHeader } from "@/components/common/section-header"
+
+import type { PublicArticle } from "../types"
+import { ArticleCard } from "./article-card"
 
 type ArticleRelatedSectionProps = {
-  articles: PublicArticle[];
-};
+  articles: PublicArticle[]
+}
 
 export function ArticleRelatedSection({
   articles,
 }: ArticleRelatedSectionProps) {
   if (articles.length === 0) {
-    return null;
+    return null
   }
 
   return (
-    <section className="mt-10" aria-labelledby="related-articles-title">
-      <div className="mb-6">
-        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Continue Reading
-        </p>
-
-        <h2
-          id="related-articles-title"
-          className="mt-2 text-2xl font-bold text-slate-950"
-        >
-          Related Articles
-        </h2>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
+    <section aria-labelledby="related-articles-title">
+      <SectionHeader
+        titleId="related-articles-title"
+        title="Related articles"
+        description="More published research from the same journal section."
+      />
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
         {articles.map((article) => (
-          <ArticleCard key={article.id} article={article} />
+          <ArticleCard key={article.id} article={article} compact />
         ))}
       </div>
     </section>
-  );
+  )
 }

@@ -1,21 +1,22 @@
-import { ArchiveOverviewHeader } from "../components/archive-overview-header";
-import { IssueCard } from "../components/issue-card";
-import { PublicFooter } from "../components/public-footer";
-import { PublicHeader } from "../components/public-header";
-import type { JournalInfo, PublicIssue } from "../types";
+import { Archive } from "lucide-react"
+
+import { EmptyState } from "@/components/common/empty-state"
+
+import { ArchiveOverviewHeader } from "../components/archive-overview-header"
+import { IssueCard } from "../components/issue-card"
+import type { PublicIssue } from "../types"
 
 type PublicArchivesPageProps = {
-  journal: JournalInfo;
-  issues: PublicIssue[];
-  articleCount: number;
-};
+  issues: PublicIssue[]
+}
 
 function groupIssuesByYear(issues: PublicIssue[]) {
-  const grouped = new Map<string, PublicIssue[]>();
+  const grouped = new Map<string, PublicIssue[]>()
 
   issues.forEach((issue) => {
-    grouped.set(issue.year, [...(grouped.get(issue.year) ?? []), issue]);
-  });
+    const year = issue.year || "Other"
+    grouped.set(year, [...(grouped.get(year) ?? []), issue])
+  })
 
   return Array.from(grouped.entries())
     .sort(([firstYear], [secondYear]) => Number(secondYear) - Number(firstYear))
@@ -24,53 +25,45 @@ function groupIssuesByYear(issues: PublicIssue[]) {
       issues: yearIssues.sort(
         (first, second) =>
           new Date(second.publishedAt).getTime() -
-          new Date(first.publishedAt).getTime(),
+          new Date(first.publishedAt).getTime()
       ),
-    }));
+    }))
 }
 
-export function PublicArchivesPage({
-  journal,
-  issues,
-  articleCount,
-}: PublicArchivesPageProps) {
-  const groupedIssues = groupIssuesByYear(issues);
+export function PublicArchivesPage({ issues }: PublicArchivesPageProps) {
+  const groupedIssues = groupIssuesByYear(issues)
 
   return (
     <>
-      <PublicHeader journal={journal} />
+      <ArchiveOverviewHeader
+        issueCount={issues.length}
+        yearCount={groupedIssues.length}
+      />
 
-      <main id="main-content" className="bg-slate-50">
-        <ArchiveOverviewHeader
-          issueCount={issues.length}
-          articleCount={articleCount}
-          yearCount={groupedIssues.length}
-        />
+      <section className="py-10 sm:py-12" aria-labelledby="archives-title">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <h2 id="archives-title" className="sr-only">
+            Archived journal issues
+          </h2>
 
-        <section className="py-12 sm:py-16" aria-labelledby="archives-title">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <h2 id="archives-title" className="sr-only">
-              Archived journal issues
-            </h2>
-
-            <div className="space-y-12">
+          {groupedIssues.length > 0 ? (
+            <div className="space-y-10">
               {groupedIssues.map((group) => (
-                <section
-                  key={group.year}
-                  aria-labelledby={`year-${group.year}`}
-                >
-                  <div className="mb-6 flex items-center gap-4">
-                    <h3
+                <section key={group.year} aria-labelledby={`year-${group.year}`}>
+                  <div className="mb-4 flex items-center gap-4">
+                    <h2
                       id={`year-${group.year}`}
-                      className="text-2xl font-bold text-slate-950"
+                      className="text-2xl font-semibold text-foreground"
                     >
                       {group.year}
-                    </h3>
-
-                    <div className="h-px flex-1 bg-slate-200" />
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      {group.issues.length} issue
+                      {group.issues.length === 1 ? "" : "s"}
+                    </span>
+                    <div className="h-px flex-1 bg-border" aria-hidden="true" />
                   </div>
-
-                  <div className="grid gap-6 lg:grid-cols-3">
+                  <div className="grid gap-3">
                     {group.issues.map((issue) => (
                       <IssueCard key={issue.id} issue={issue} />
                     ))}
@@ -78,11 +71,15 @@ export function PublicArchivesPage({
                 </section>
               ))}
             </div>
-          </div>
-        </section>
-      </main>
-
-      <PublicFooter journal={journal} />
+          ) : (
+            <EmptyState
+              icon={<Archive aria-hidden="true" />}
+              title="No published issues"
+              description="Journal issues will appear here when they are published."
+            />
+          )}
+        </div>
+      </section>
     </>
-  );
+  )
 }

@@ -1,74 +1,118 @@
-import Link from "next/link";
-import type { PublicArticle } from "../types";
-import { ArticleCardDownloadButton } from "./article-card-download-button";
+import { ArrowUpRight, FileText } from "lucide-react"
+import Link from "next/link"
+
+import { Badge } from "@/components/ui/badge"
+import { buttonVariants } from "@/components/ui/button"
+
+import type { PublicArticle } from "../types"
+import { formatArticleDate, getDoiHref } from "../utils/article-details"
+import { ArticleCardDownloadButton } from "./article-card-download-button"
 
 type ArticleCardProps = {
-  article: PublicArticle;
-};
+  article: PublicArticle
+  compact?: boolean
+}
 
-const dateFormatter = new Intl.DateTimeFormat("en", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
-
-export function ArticleCard({ article }: ArticleCardProps) {
-  const publishedDate = dateFormatter.format(new Date(article.publishedAt));
+export function ArticleCard({
+  article,
+  compact = false,
+}: ArticleCardProps) {
+  const publishedDate = formatArticleDate(article.publishedAt)
 
   return (
-    <article className="rounded-2xl border bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-        <span>{article.section}</span>
-        <span aria-hidden="true">·</span>
-        <time dateTime={article.publishedAt}>{publishedDate}</time>
-        <span aria-hidden="true">·</span>
-        <span>{article.language}</span>
+    <article className="group rounded-xl border border-border/85 bg-card p-5 shadow-xs sm:p-6">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
+        {article.sectionSlug ? (
+          <Link
+            href={`/sections/${article.sectionSlug}`}
+            className="rounded-sm text-accent underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {article.section}
+          </Link>
+        ) : (
+          <span>{article.section}</span>
+        )}
+        {publishedDate ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <time dateTime={article.publishedAt}>{publishedDate}</time>
+          </>
+        ) : null}
+        {article.language ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{article.language}</span>
+          </>
+        ) : null}
       </div>
 
-      <h3 className="mt-3 text-xl font-semibold leading-7 text-slate-950">
+      <h3
+        className="mt-3 text-xl leading-snug font-semibold tracking-tight text-foreground"
+        dir="auto"
+      >
         <Link
           href={`/articles/${article.slug}`}
-          className="transition hover:text-slate-700"
+          className="rounded-sm decoration-accent underline-offset-4 group-hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {article.title}
         </Link>
       </h3>
 
-      <p className="mt-2 text-sm text-slate-600">
-        {article.authors.join(", ")}
-      </p>
+      {article.authors.length > 0 ? (
+        <p className="mt-2 text-sm leading-6 text-text-secondary" dir="auto">
+          {article.authors.join(", ")}
+        </p>
+      ) : null}
 
-      <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-600">
-        {article.abstract}
-      </p>
+      {article.abstract ? (
+        <p
+          className={
+            compact
+              ? "mt-3 line-clamp-2 text-sm leading-6 text-text-secondary"
+              : "mt-4 line-clamp-3 text-sm leading-6 text-text-secondary"
+          }
+          dir="auto"
+        >
+          {article.abstract}
+        </p>
+      ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {article.keywords.slice(0, 4).map((keyword) => (
-          <span
-            key={keyword}
-            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
-          >
-            {keyword}
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-5 flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-xs text-slate-500">
-          {article.doi ? <span>DOI: {article.doi}</span> : <span>No DOI</span>}
+      {article.keywords.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Keywords">
+          {article.keywords.slice(0, compact ? 3 : 5).map((keyword) => (
+            <Badge key={keyword} variant="secondary" dir="auto">
+              {keyword}
+            </Badge>
+          ))}
         </div>
+      ) : null}
 
-        <div className="flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-col gap-4 border-t border-border/75 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        {article.doi ? (
+          <a
+            href={getDoiHref(article.doi)}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 truncate text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            DOI: {article.doi}
+          </a>
+        ) : (
+          <span />
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href={`/articles/${article.slug}`}
-            className="rounded-md border px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className={buttonVariants({ variant: "outline", size: "touch" })}
           >
-            View Article
+            <FileText data-icon="inline-start" aria-hidden="true" />
+            View
+            <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
           </Link>
-
           <ArticleCardDownloadButton slug={article.slug} />
         </div>
       </div>
     </article>
-  );
+  )
 }

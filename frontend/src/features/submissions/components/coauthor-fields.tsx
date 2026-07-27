@@ -1,14 +1,24 @@
 "use client";
 
+import { Plus, Trash2, UserRoundPlus } from "lucide-react";
+
+import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { SubmissionCoAuthorInput } from "@/features/submissions/types";
 
 export type CoauthorDraft = SubmissionCoAuthorInput & {
   clientId: string;
 };
 
+export type CoauthorFieldErrors = Array<
+  Partial<Record<keyof SubmissionCoAuthorInput, string>>
+>;
+
 type CoauthorFieldsProps = {
   value: CoauthorDraft[];
   onChange: (coauthors: CoauthorDraft[]) => void;
+  errors?: CoauthorFieldErrors;
   error?: string;
   disabled?: boolean;
 };
@@ -25,6 +35,7 @@ const emptyCoauthor = (): CoauthorDraft => ({
 export function CoauthorFields({
   value,
   onChange,
+  errors = [],
   error,
   disabled = false,
 }: CoauthorFieldsProps) {
@@ -47,97 +58,109 @@ export function CoauthorFields({
   }
 
   return (
-    <section className="rounded-xl border bg-white p-6 shadow-sm">
+    <section aria-labelledby="additional-authors-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Authors</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            You are the corresponding and first author. Add any additional
-            authors in publication order.
+          <h2
+            id="additional-authors-heading"
+            className="font-heading text-lg font-medium text-foreground"
+          >
+            Additional authors
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-text-secondary">
+            Add co-authors in publication order. The submitting author must not
+            be added again.
           </p>
         </div>
-
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="touch"
           disabled={disabled || value.length >= 20}
           onClick={() => onChange([...value, emptyCoauthor()])}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Add coauthor
-        </button>
+          <Plus aria-hidden="true" />
+          Add co-author
+        </Button>
       </div>
 
       {value.length === 0 ? (
-        <div className="mt-5 rounded-lg border border-dashed p-5 text-sm text-slate-500">
+        <div className="mt-5 flex items-center gap-3 rounded-lg border border-dashed border-border bg-surface-muted/45 p-5 text-sm text-muted-foreground">
+          <UserRoundPlus className="size-5 shrink-0" aria-hidden="true" />
           No additional authors have been added.
         </div>
       ) : (
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 grid gap-4">
           {value.map((coauthor, index) => (
             <fieldset
               key={coauthor.clientId}
               disabled={disabled}
-              className="rounded-lg border border-slate-200 p-4"
+              className="rounded-lg border border-border p-4"
             >
               <div className="flex items-center justify-between gap-4">
-                <legend className="text-sm font-semibold text-slate-950">
-                  Author {index + 2}
+                <legend className="font-heading text-sm font-medium text-foreground">
+                  Co-author {index + 1}
                 </legend>
-
-                <button
+                <Button
                   type="button"
+                  variant="destructive"
+                  size="touch"
                   onClick={() => removeCoauthor(coauthor.clientId)}
-                  className="text-sm font-medium text-red-600 hover:text-red-700"
+                  aria-label={`Remove co-author ${index + 1}`}
                 >
+                  <Trash2 aria-hidden="true" />
                   Remove
-                </button>
+                </Button>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="mt-4 grid gap-5 md:grid-cols-2">
                 <CoauthorInput
                   id={`coauthor-name-${coauthor.clientId}`}
                   label="Full name"
                   value={coauthor.full_name}
+                  error={errors[index]?.full_name}
                   required
                   onChange={(nextValue) =>
                     updateCoauthor(coauthor.clientId, "full_name", nextValue)
                   }
                 />
-
                 <CoauthorInput
                   id={`coauthor-email-${coauthor.clientId}`}
                   label="Email"
                   type="email"
+                  autoComplete="email"
                   value={coauthor.email}
+                  error={errors[index]?.email}
                   required
                   onChange={(nextValue) =>
                     updateCoauthor(coauthor.clientId, "email", nextValue)
                   }
                 />
-
                 <CoauthorInput
                   id={`coauthor-affiliation-${coauthor.clientId}`}
                   label="Affiliation"
                   value={coauthor.affiliation}
+                  error={errors[index]?.affiliation}
                   onChange={(nextValue) =>
                     updateCoauthor(coauthor.clientId, "affiliation", nextValue)
                   }
                 />
-
                 <CoauthorInput
                   id={`coauthor-orcid-${coauthor.clientId}`}
                   label="ORCID"
                   value={coauthor.orcid}
+                  error={errors[index]?.orcid}
                   placeholder="0000-0000-0000-0000"
                   onChange={(nextValue) =>
                     updateCoauthor(coauthor.clientId, "orcid", nextValue)
                   }
                 />
-
                 <CoauthorInput
                   id={`coauthor-country-${coauthor.clientId}`}
                   label="Country"
                   value={coauthor.country}
+                  error={errors[index]?.country}
+                  autoComplete="country-name"
                   onChange={(nextValue) =>
                     updateCoauthor(coauthor.clientId, "country", nextValue)
                   }
@@ -148,7 +171,14 @@ export function CoauthorFields({
         </div>
       )}
 
-      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="mt-3 text-sm font-medium text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <p className="mt-3 text-right text-xs text-muted-foreground">
+        {value.length}/20 additional authors
+      </p>
     </section>
   );
 }
@@ -158,34 +188,42 @@ function CoauthorInput({
   label,
   value,
   onChange,
+  error,
   type = "text",
   required = false,
   placeholder,
+  autoComplete,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
   type?: string;
   required?: boolean;
   placeholder?: string;
+  autoComplete?: string;
 }) {
   return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
-        {label}
-        {required ? " *" : ""}
-      </label>
-
-      <input
+    <FormField
+      htmlFor={id}
+      label={label}
+      error={error}
+      required={required}
+    >
+      <Input
         id={id}
         type={type}
         value={value}
-        required={required}
         placeholder={placeholder}
+        autoComplete={autoComplete}
+        aria-invalid={Boolean(error)}
+        aria-describedby={getFormFieldDescription({
+          id,
+          hasError: Boolean(error),
+        })}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
       />
-    </div>
+    </FormField>
   );
 }

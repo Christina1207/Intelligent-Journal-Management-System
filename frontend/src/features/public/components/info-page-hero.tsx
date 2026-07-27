@@ -1,17 +1,22 @@
-import Link from "next/link";
+import Link from "next/link"
+
+import { PageHeader } from "@/components/common/page-header"
+import { buttonVariants } from "@/components/ui/button"
+
+import { PublicBreadcrumbs } from "./public-breadcrumbs"
 
 type InfoPageHeroAction = {
-  label: string;
-  href: string;
-  variant?: "primary" | "secondary";
-};
+  label: string
+  href: string
+  variant?: "primary" | "secondary"
+}
 
 type InfoPageHeroProps = {
-  eyebrow: string;
-  title: string;
-  description: string;
-  actions?: InfoPageHeroAction[];
-};
+  eyebrow: string
+  title: string
+  description?: string
+  actions?: InfoPageHeroAction[]
+}
 
 export function InfoPageHero({
   eyebrow,
@@ -20,38 +25,43 @@ export function InfoPageHero({
   actions = [],
 }: InfoPageHeroProps) {
   return (
-    <section className="border-b bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          {eyebrow}
-        </p>
-
-        <h1 className="mt-3 max-w-4xl text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
-          {title}
-        </h1>
-
-        <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-          {description}
-        </p>
-
-        {actions.length > 0 ? (
-          <div className="mt-8 flex flex-wrap gap-3">
-            {actions.map((action) => (
-              <Link
-                key={action.href}
-                href={action.href}
-                className={
-                  action.variant === "secondary"
-                    ? "rounded-md border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                    : "rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                }
-              >
-                {action.label}
-              </Link>
-            ))}
-          </div>
-        ) : null}
+    <div className="border-b border-border bg-surface-elevated">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <PageHeader
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
+          breadcrumbs={
+            <PublicBreadcrumbs
+              items={[
+                { label: "Home", href: "/" },
+                { label: eyebrow },
+              ]}
+            />
+          }
+          actions={
+            actions.length > 0
+              ? actions.map((action) => (
+                  <Link
+                    key={`${action.href}-${action.label}`}
+                    href={action.href}
+                    className={buttonVariants({
+                      variant:
+                        action.variant === "secondary"
+                          ? "outline"
+                          : "default",
+                      size: "touch",
+                    })}
+                  >
+                    {action.label}
+                  </Link>
+                ))
+              : undefined
+          }
+        />
       </div>
-    </section>
-  );
+    </div>
+  )
 }
+
+export type { InfoPageHeroAction }

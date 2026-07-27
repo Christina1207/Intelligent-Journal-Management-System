@@ -18,7 +18,6 @@ import type {
   PublicPageApiDto,
   PublicSectionApiDto,
 } from "./public-api.types";
-import { fallbackJournalInfo } from "../data/public-fallbacks";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -28,6 +27,7 @@ if (!API_BASE_URL) {
 type RequestOptions = {
   revalidate?: number;
 };
+export const PUBLIC_ARTICLE_PAGE_SIZE = 10;
 export type PublicArticleExportFormat = "bibtex" | "ris" | "dc";
 
 export type PublicArticleDownloadResponse = {
@@ -111,7 +111,7 @@ export async function getPublicJournalSafe() {
     return await getPublicJournal();
   } catch (error) {
     reportPublicFallback("journal metadata", error);
-    return fallbackJournalInfo;
+    return null;
   }
 }
 
@@ -138,6 +138,7 @@ export async function getPublicArticles(query: PublicArticleListQuery = {}) {
       language: query.language,
       ordering,
       page: query.page,
+      page_size: query.pageSize ?? String(PUBLIC_ARTICLE_PAGE_SIZE),
     },
     { revalidate: 60 },
   );
@@ -250,17 +251,28 @@ export async function getPublicSection(slug: string) {
   }
 }
 
-export async function getPublicSectionArticles(slug: string) {
+export async function getPublicSectionArticles(
+  slug: string,
+  page?: string,
+  pageSize = PUBLIC_ARTICLE_PAGE_SIZE,
+) {
   const response = await publicFetch<PaginatedApiResponse<PublicArticleApiDto>>(
     "/public/articles/",
     {
       section: slug,
       ordering: "-published_at",
+      page,
+      page_size: String(pageSize),
     },
     { revalidate: 60 },
   );
 
-  return response.results.map(mapArticle);
+  return {
+    count: response.count,
+    next: response.next,
+    previous: response.previous,
+    results: response.results.map(mapArticle),
+  };
 }
 
 export async function getPublicIssues() {
@@ -309,17 +321,28 @@ export async function getPublicIssue(slug: string) {
   }
 }
 
-export async function getPublicIssueArticles(slug: string) {
+export async function getPublicIssueArticles(
+  slug: string,
+  page?: string,
+  pageSize = PUBLIC_ARTICLE_PAGE_SIZE,
+) {
   const response = await publicFetch<PaginatedApiResponse<PublicArticleApiDto>>(
     "/public/articles/",
     {
       issue: slug,
       ordering: "-published_at",
+      page,
+      page_size: String(pageSize),
     },
     { revalidate: 60 },
   );
 
-  return response.results.map(mapArticle);
+  return {
+    count: response.count,
+    next: response.next,
+    previous: response.previous,
+    results: response.results.map(mapArticle),
+  };
 }
 
 export async function getPublicPage(slug: string) {
@@ -337,15 +360,6 @@ export async function getPublicPage(slug: string) {
     }
 
     throw error;
-  }
-}
-
-export async function getPublicPageSafe(slug: string) {
-  try {
-    return await getPublicPage(slug);
-  } catch (error) {
-    reportPublicFallback(`public page "${slug}"`, error);
-    return null;
   }
 }
 
@@ -369,28 +383,19 @@ export async function getEditorialBoard() {
 }
 
 export async function getContactMethods() {
-  const response = await publicFetch<
-    ContactMethodApiDto[] | PaginatedApiResponse<ContactMethodApiDto>
-  >("/public/contact/", {}, { revalidate: 300 });
-
-  const contacts = Array.isArray(response) ? response : response.results;
-
-  return contacts.map(mapContactMethod);
-}
-export async function getEditorialBoardSafe() {
   try {
-    return await getEditorialBoard();
-  } catch (error) {
-    reportPublicFallback("editorial board", error);
-    return [];
-  }
-}
+    const response = await publicFetch<
+      ContactMethodApiDto[] | PaginatedApiResponse<ContactMethodApiDto>
+    >("/public/contact/", {}, { revalidate: 300 });
 
-export async function getContactMethodsSafe() {
-  try {
-    return await getContactMethods();
+    const contacts = Array.isArray(response) ? response : response.results;
+
+    return contacts.map(mapContactMethod);
   } catch (error) {
-    reportPublicFallback("contact methods", error);
-    return [];
+    if (isNotFoundError(error)) {
+      return [];
+    }
+
+    throw error;
   }
 }

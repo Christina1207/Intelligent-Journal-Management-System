@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CalendarDays,
   CheckCircle2,
   Clock3,
   RefreshCw,
@@ -12,25 +11,20 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  DeadlineIndicator,
+  InvitationStatusBadge,
+  isDeadlinePast,
+  ReviewRoundLabel,
+} from "@/features/editorial/components";
 import { useEditorReviewWorkspace } from "@/features/reviews/hooks";
-import type {
-  EditorReview,
-  ReviewerAssignment,
-  ReviewerAssignmentStatus,
-} from "@/features/reviews/types";
+import type { EditorReview, ReviewerAssignment } from "@/features/reviews/types";
 import { EditorDecisionForm } from "@/features/reviews/components/editor-decision-form";
+import { ReviewerAssignmentActions } from "@/features/reviews/components/reviewer-assignment-actions";
 
 interface EditorReviewProgressPanelProps {
   submissionId: string;
 }
-
-const STATUS_LABELS: Record<ReviewerAssignmentStatus, string> = {
-  PENDING: "Pending response",
-  ACCEPTED: "Accepted",
-  DECLINED: "Declined",
-  EXPIRED: "Expired",
-  CANCELLED: "Cancelled",
-};
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -43,40 +37,18 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function assignmentStatusVariant(
-  assignment: ReviewerAssignment,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (assignment.review_submitted) {
-    return "secondary";
-  }
-
-  if (assignment.is_overdue) {
-    return "destructive";
-  }
-
-  if (assignment.status === "ACCEPTED") {
-    return "default";
-  }
-
-  if (assignment.status === "DECLINED") {
-    return "destructive";
-  }
-
-  return "outline";
+function assignmentDeadline(assignment: ReviewerAssignment) {
+  return assignment.status === "ACCEPTED"
+    ? assignment.review_deadline
+    : assignment.response_deadline;
 }
 
-function assignmentStatusLabel(assignment: ReviewerAssignment) {
-  if (assignment.review_submitted) {
-    return "Review submitted";
-  }
-
-  if (assignment.is_overdue) {
-    return assignment.status === "PENDING"
-      ? "Response overdue"
-      : "Review overdue";
-  }
-
-  return STATUS_LABELS[assignment.status];
+function assignmentRequiresAttention(assignment: ReviewerAssignment) {
+  return (
+    !assignment.review_submitted &&
+    (assignment.status === "PENDING" || assignment.status === "ACCEPTED") &&
+    (assignment.is_overdue || isDeadlinePast(assignmentDeadline(assignment)))
+  );
 }
 
 function ReviewCard({ review }: { review: EditorReview }) {
@@ -84,7 +56,9 @@ function ReviewCard({ review }: { review: EditorReview }) {
     <article className="space-y-4 rounded-lg border bg-background p-4">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h4 className="font-medium">{review.reviewer.full_name}</h4>
+        <h4 className="font-medium" dir="auto">
+          {review.reviewer.full_name}
+        </h4>
           <p className="text-sm text-muted-foreground">
             {review.reviewer.email} · Submitted{" "}
             {formatDateTime(review.submitted_at)}
@@ -96,17 +70,23 @@ function ReviewCard({ review }: { review: EditorReview }) {
 
       <div>
         <h5 className="text-sm font-medium">Comments for the author</h5>
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+        <p
+          className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground"
+          dir="auto"
+        >
           {review.comments_for_author}
         </p>
       </div>
 
       {review.comments_for_editor ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-          <h5 className="text-sm font-medium text-amber-950">
+        <div className="rounded-md border border-status-warning-border bg-status-warning-subtle p-3">
+          <h5 className="text-sm font-medium text-status-warning-foreground">
             Confidential comments for the editor
           </h5>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-900">
+          <p
+            className="mt-2 whitespace-pre-wrap text-sm leading-6 text-status-warning-foreground"
+            dir="auto"
+          >
             {review.comments_for_editor}
           </p>
         </div>
@@ -123,8 +103,8 @@ export function EditorReviewProgressPanel({
   if (workspaceQuery.isPending) {
     return (
       <section className="space-y-3" aria-busy="true">
-        <div className="h-20 animate-pulse rounded-lg bg-muted" />
-        <div className="h-32 animate-pulse rounded-lg bg-muted" />
+        <div className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <div className="h-32 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
       </section>
     );
   }
@@ -158,30 +138,23 @@ export function EditorReviewProgressPanel({
   const assignments = workspace.assignments;
 
   const counts = {
-    total: assignments.length,
-    pending: assignments.filter((assignment) => assignment.status === "PENDING")
-      .length,
-    accepted: assignments.filter(
-      (assignment) => assignment.status === "ACCEPTED",
-    ).length,
-    declined: assignments.filter(
-      (assignment) => assignment.status === "DECLINED",
-    ).length,
-    expired: assignments.filter((assignment) => assignment.status === "EXPIRED")
-      .length,
-    cancelled: assignments.filter(
-      (assignment) => assignment.status === "CANCELLED",
-    ).length,
-    submitted: assignments.filter((assignment) => assignment.review_submitted)
-      .length,
+    total: workspace.progress.total_invitations,
+    pending: workspace.progress.pending,
+    accepted: workspace.progress.accepted,
+    declined: workspace.progress.declined,
+    expired: workspace.progress.expired,
+    cancelled: workspace.progress.cancelled,
+    submitted: workspace.progress.submitted,
     overdueInvitations: assignments.filter(
-      (assignment) => assignment.status === "PENDING" && assignment.is_overdue,
+      (assignment) =>
+        assignment.status === "PENDING" &&
+        assignmentRequiresAttention(assignment),
     ).length,
     overdueReviews: assignments.filter(
       (assignment) =>
         assignment.status === "ACCEPTED" &&
         !assignment.review_submitted &&
-        assignment.is_overdue,
+        assignmentRequiresAttention(assignment),
     ).length,
   };
 
@@ -201,19 +174,9 @@ export function EditorReviewProgressPanel({
             <h2 className="font-semibold">Peer-review progress</h2>
 
             {workspace.current_version ? (
-              <>
-                <Badge variant="outline">
-                  Version {workspace.current_version.version_number}
-                </Badge>
-
-                <Badge variant="secondary">
-                  {workspace.current_version.version_number === 1
-                    ? "Initial submission"
-                    : `Revision round ${
-                        workspace.current_version.version_number - 1
-                      }`}
-                </Badge>
-              </>
+              <ReviewRoundLabel
+                versionNumber={workspace.current_version.version_number}
+              />
             ) : null}
           </div>
 
@@ -233,7 +196,11 @@ export function EditorReviewProgressPanel({
           onClick={() => workspaceQuery.refetch()}
         >
           <RefreshCw
-            className={workspaceQuery.isFetching ? "animate-spin" : ""}
+            className={
+              workspaceQuery.isFetching
+                ? "animate-spin motion-reduce:animate-none"
+                : ""
+            }
             aria-hidden="true"
           />
           Refresh
@@ -281,7 +248,7 @@ export function EditorReviewProgressPanel({
           aria-valuenow={Math.min(counts.submitted, workspace.required_reviews)}
         >
           <div
-            className="h-full rounded-full bg-primary transition-[width]"
+            className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none"
             style={{ width: `${progressPercentage}%` }}
           />
         </div>
@@ -336,51 +303,52 @@ export function EditorReviewProgressPanel({
         ) : (
           <div className="divide-y rounded-lg border">
             {assignments.map((assignment) => {
-              const deadline =
-                assignment.status === "PENDING"
-                  ? assignment.response_deadline
-                  : assignment.review_deadline;
+              const deadline = assignmentDeadline(assignment);
 
               return (
                 <article
                   key={assignment.id}
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
-                  <div>
-                    <p className="font-medium">
+                  <div className="min-w-0">
+                    <p className="font-medium" dir="auto">
                       {assignment.reviewer.full_name}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {assignment.reviewer.email}
                     </p>
-                    <p className="mt-1 text-xs font-medium text-muted-foreground">
-                      Version {assignment.version.version_number}
-                      {assignment.version.version_number === 1
-                        ? " · Initial review"
-                        : ` · Revision round ${
-                            assignment.version.version_number - 1
-                          }`}
-                    </p>
-
-                    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {assignment.status === "PENDING" ? (
-                        <Clock3 className="size-3.5" aria-hidden="true" />
-                      ) : (
-                        <CalendarDays className="size-3.5" aria-hidden="true" />
-                      )}
-                      {assignment.status === "PENDING"
-                        ? "Response deadline"
-                        : "Review deadline"}
-                      : {formatDateTime(deadline)}
-                    </p>
+                    <div className="mt-2">
+                      <ReviewRoundLabel
+                        versionNumber={assignment.version.version_number}
+                      />
+                    </div>
+                    <DeadlineIndicator
+                      deadline={deadline}
+                      isOverdue={assignment.is_overdue}
+                      kind={
+                        assignment.status === "ACCEPTED" ? "review" : "response"
+                      }
+                      className="mt-3"
+                    />
                   </div>
 
-                  <Badge variant={assignmentStatusVariant(assignment)}>
-                    {assignment.review_submitted ? (
-                      <CheckCircle2 aria-hidden="true" />
-                    ) : null}
-                    {assignmentStatusLabel(assignment)}
-                  </Badge>
+                  <div className="shrink-0 space-y-2 sm:max-w-xs">
+                    <div className="flex justify-start sm:justify-end">
+                      <InvitationStatusBadge
+                        status={assignment.status}
+                        reviewSubmitted={assignment.review_submitted}
+                        isOverdue={assignmentRequiresAttention(assignment)}
+                      />
+                    </div>
+                    <ReviewerAssignmentActions
+                      assignment={assignment}
+                      submissionId={submissionId}
+                      responseDeadlinePassed={
+                        assignment.status === "PENDING" &&
+                        assignmentRequiresAttention(assignment)
+                      }
+                    />
+                  </div>
                 </article>
               );
             })}

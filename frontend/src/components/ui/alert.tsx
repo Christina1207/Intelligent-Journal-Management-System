@@ -8,9 +8,15 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
+        default: "border-border bg-card text-card-foreground",
+        info:
+          "border-status-info-border bg-status-info-subtle text-status-info-foreground *:data-[slot=alert-description]:text-status-info-foreground/85",
+        warning:
+          "border-status-action-border bg-status-action-subtle text-status-action-foreground *:data-[slot=alert-description]:text-status-action-foreground/85",
+        success:
+          "border-status-success-border bg-status-success-subtle text-status-success-foreground *:data-[slot=alert-description]:text-status-success-foreground/85",
         destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+          "border-status-danger-border bg-status-danger-subtle text-status-danger-foreground *:data-[slot=alert-description]:text-status-danger-foreground/85 *:[svg]:text-current",
       },
     },
     defaultVariants: {
@@ -73,4 +79,4 @@ function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-export { Alert, AlertTitle, AlertDescription, AlertAction }
+export { Alert, AlertTitle, AlertDescription, AlertAction, alertVariants }

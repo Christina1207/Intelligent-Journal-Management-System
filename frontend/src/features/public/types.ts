@@ -14,6 +14,7 @@ export type PublicArticle = {
   views: number;
   downloads: number;
   license: string;
+  licenseUrl?: string;
 
   volume?: string;
   issue?: string;
@@ -22,6 +23,16 @@ export type PublicArticle = {
   receivedAt?: string;
   acceptedAt?: string;
   affiliations?: string[];
+  authorDetails?: PublicArticleAuthor[];
+};
+
+export type PublicArticleAuthor = {
+  fullName: string;
+  orcid?: string;
+  affiliation?: string;
+  country?: string;
+  order: number;
+  isCorresponding: boolean;
 };
 
 export type PublicSection = {

@@ -4,6 +4,8 @@ import * as React from "react";
 import { RefreshCw, UserRound } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Notice } from "@/components/common/notice";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -85,13 +87,13 @@ export function EditorSelectionList({
               key={editor.id}
               htmlFor={inputId}
               className={cn(
-                "block rounded-lg border p-4 transition",
+                "block rounded-lg border p-4 transition focus-within:ring-3 focus-within:ring-ring/35",
                 unavailable
-                  ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-70"
-                  : "cursor-pointer hover:border-slate-400 hover:bg-slate-50",
+                  ? "cursor-not-allowed border-border/80 bg-muted/45 opacity-70"
+                  : "cursor-pointer border-border/80 hover:border-primary/45 hover:bg-muted/35",
                 selected &&
                   !unavailable &&
-                  "border-slate-950 bg-slate-50 ring-1 ring-slate-950",
+                  "border-primary bg-primary/5 ring-1 ring-primary",
               )}
             >
               <div className="flex items-start gap-3">
@@ -103,31 +105,31 @@ export function EditorSelectionList({
                   checked={selected}
                   disabled={unavailable}
                   onChange={() => onSelect(editor.id)}
-                  className="mt-1 size-4 accent-slate-950"
+                  className="mt-1 size-4 accent-primary"
                 />
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-950">
+                    <span className="font-semibold text-foreground" dir="auto">
                       {editor.full_name}
                     </span>
 
                     {editor.is_current_editor ? (
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                      <Badge variant="info">
                         Current editor
-                      </span>
+                      </Badge>
                     ) : null}
                   </div>
 
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-text-secondary" dir="auto">
                     {editor.affiliation || "No affiliation provided"}
                   </p>
 
-                  <p className="mt-1 break-all text-xs text-slate-500">
+                  <p className="mt-1 break-all text-xs text-muted-foreground">
                     {editor.email}
                   </p>
 
-                  <p className="mt-3 text-xs font-medium text-slate-600">
+                  <p className="mt-3 text-xs font-medium text-foreground">
                     {editor.active_assignment_count} active{" "}
                     {editor.active_assignment_count === 1
                       ? "assignment"
@@ -156,7 +158,10 @@ export function EditorAssignmentDialog({
 }) {
   const queryClient = useQueryClient();
   const [selectedEditorId, setSelectedEditorId] = React.useState("");
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [selectionError, setSelectionError] = React.useState<string | null>(
+    null,
+  );
+  const [apiError, setApiError] = React.useState<string | null>(null);
 
   const editorsQuery = useQuery({
     queryKey: managerQueryKeys.eligibleEditors(submissionId),
@@ -168,9 +173,10 @@ export function EditorAssignmentDialog({
     mutationFn: () =>
       assignEditor(submissionId, {
         editor_id: selectedEditorId,
-      }),
+    }),
     onSuccess: async (assignment) => {
-      setFormError(null);
+      setApiError(null);
+      setSelectionError(null);
 
       await Promise.all([
         queryClient.invalidateQueries({
@@ -191,7 +197,7 @@ export function EditorAssignmentDialog({
       onOpenChange(false);
     },
     onError: (error) => {
-      setFormError(getWorkflowErrorMessage(error));
+      setApiError(getWorkflowErrorMessage(error));
     },
   });
 
@@ -199,11 +205,11 @@ export function EditorAssignmentDialog({
     event.preventDefault();
 
     if (!selectedEditorId) {
-      setFormError("Select a Section Editor.");
+      setSelectionError("Select a Section Editor.");
       return;
     }
 
-    setFormError(null);
+    setApiError(null);
     assignmentMutation.mutate();
   }
 
@@ -213,7 +219,14 @@ export function EditorAssignmentDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!assignmentMutation.isPending) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Assign a Section Editor</DialogTitle>
@@ -232,19 +245,16 @@ export function EditorAssignmentDialog({
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-28 animate-pulse rounded-lg bg-slate-200"
+                className="h-28 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
               />
             ))}
           </div>
         ) : editorsQuery.isError ? (
-          <div
-            role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 p-4"
-          >
-            <p className="text-sm text-red-700">
-              {getWorkflowErrorMessage(editorsQuery.error)}
-            </p>
-
+          <Notice
+            tone="destructive"
+            title="Eligible editors could not be loaded"
+            description={getWorkflowErrorMessage(editorsQuery.error)}
+            action={
             <Button
               type="button"
               variant="outline"
@@ -254,30 +264,30 @@ export function EditorAssignmentDialog({
               <RefreshCw aria-hidden="true" />
               Try again
             </Button>
-          </div>
+            }
+          />
         ) : assignableEditors.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
+          <div className="rounded-lg border border-dashed border-border p-6 text-center">
             <UserRound
               aria-hidden="true"
-              className="mx-auto size-7 text-slate-400"
+              className="mx-auto size-7 text-muted-foreground"
             />
-            <h3 className="mt-3 font-semibold text-slate-950">
+            <h3 className="mt-3 font-semibold text-foreground">
               No eligible editors
             </h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               No active Section Editor membership is available for this
               manuscript’s section.
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            {formError ? (
-              <div
-                role="alert"
-                className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-              >
-                {formError}
-              </div>
+            {apiError ? (
+              <Notice
+                tone="destructive"
+                title="Editor assignment could not be completed"
+                description={apiError}
+              />
             ) : null}
 
             <EditorSelectionList
@@ -286,11 +296,20 @@ export function EditorAssignmentDialog({
               disabled={assignmentMutation.isPending}
               onSelect={(editorId) => {
                 setSelectedEditorId(editorId);
-                setFormError(null);
+                setSelectionError(null);
+                setApiError(null);
               }}
             />
+            {selectionError ? (
+              <p
+                className="text-xs font-medium text-destructive"
+                role="alert"
+              >
+                {selectionError}
+              </p>
+            ) : null}
 
-            <p className="text-xs leading-5 text-slate-500">
+            <p className="text-xs leading-5 text-muted-foreground">
               Confirming creates an append-only assignment record and moves the
               manuscript to Assigned status.
             </p>
@@ -299,6 +318,7 @@ export function EditorAssignmentDialog({
               <Button
                 type="button"
                 variant="outline"
+                size="touch"
                 disabled={assignmentMutation.isPending}
                 onClick={() => onOpenChange(false)}
               >
@@ -307,10 +327,11 @@ export function EditorAssignmentDialog({
 
               <Button
                 type="submit"
+                size="touch"
                 disabled={!selectedEditorId || assignmentMutation.isPending}
               >
                 {assignmentMutation.isPending
-                  ? "Assigning editor..."
+                  ? "Assigning editor…"
                   : "Confirm assignment"}
               </Button>
             </DialogFooter>

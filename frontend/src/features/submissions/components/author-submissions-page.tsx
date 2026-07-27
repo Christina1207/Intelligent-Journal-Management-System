@@ -3,13 +3,45 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FilePlus2,
+  FileSearch,
+  RefreshCw,
+  RotateCcw,
+  Search,
+} from "lucide-react";
 
-import { getMySubmissions } from "@/features/submissions/api/submissions-api";
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { PageHeader } from "@/components/common/page-header";
+import { SectionHeader } from "@/components/common/section-header";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getAllMySubmissions } from "@/features/submissions/api/submissions-api";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
+import { submissionQueryKeys } from "@/features/submissions/query-keys";
+import { formatSubmissionDate } from "@/features/submissions/submission-formatters";
 import type {
   AuthorSubmissionListItem,
   SubmissionStatus,
 } from "@/features/submissions/types";
+import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 10;
+const EMPTY_SUBMISSIONS: AuthorSubmissionListItem[] = [];
 
 const statusFilterOptions: Array<{
   label: string;
@@ -17,43 +49,13 @@ const statusFilterOptions: Array<{
 }> = [
   { label: "All statuses", value: "ALL" },
   { label: "Submitted", value: "SUBMITTED" },
-  { label: "Assigned to editor", value: "ASSIGNED" },
-  { label: "Under review", value: "UNDER_REVIEW" },
-  { label: "Reviews completed", value: "REVIEWED" },
+  { label: "Assigned to editorial handling", value: "ASSIGNED" },
+  { label: "Under peer review", value: "UNDER_REVIEW" },
+  { label: "Reviews received", value: "REVIEWED" },
   { label: "Revision requested", value: "UNDER_REVISION" },
   { label: "Accepted", value: "ACCEPTED" },
   { label: "Rejected", value: "REJECTED" },
 ];
-const EMPTY_SUBMISSIONS: AuthorSubmissionListItem[] = [];
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
-}
-
-function getSectionName(submission: AuthorSubmissionListItem) {
-  return submission.section?.name ?? "Unassigned section";
-}
-
-function matchesSearch(
-  submission: AuthorSubmissionListItem,
-  searchTerm: string,
-) {
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-
-  if (!normalizedSearch) {
-    return true;
-  }
-
-  return (
-    submission.title.toLowerCase().includes(normalizedSearch) ||
-    submission.abstract.toLowerCase().includes(normalizedSearch) ||
-    getSectionName(submission).toLowerCase().includes(normalizedSearch)
-  );
-}
 
 export function AuthorSubmissionsPage() {
   const [page, setPage] = React.useState(1);
@@ -61,177 +63,280 @@ export function AuthorSubmissionsPage() {
   const [statusFilter, setStatusFilter] = React.useState<
     SubmissionStatus | "ALL"
   >("ALL");
-
+  const [sectionFilter, setSectionFilter] = React.useState("ALL");
+  const deferredSearchTerm = React.useDeferredValue(searchTerm);
   const submissionsQuery = useQuery({
-    queryKey: ["author-submissions", page],
-    queryFn: () => getMySubmissions(page),
+    queryKey: submissionQueryKeys.list(),
+    queryFn: getAllMySubmissions,
   });
-
   const submissions = submissionsQuery.data?.results ?? EMPTY_SUBMISSIONS;
 
+  const sections = React.useMemo(
+    () =>
+      Array.from(
+        new Map(
+          submissions.map((submission) => [
+            submission.section.id,
+            submission.section,
+          ]),
+        ).values(),
+      ).sort((first, second) => first.name.localeCompare(second.name)),
+    [submissions],
+  );
+
   const filteredSubmissions = React.useMemo(() => {
+    const normalizedSearch = deferredSearchTerm.trim().toLocaleLowerCase();
+
     return submissions.filter((submission) => {
+      const titleMatches =
+        !normalizedSearch ||
+        submission.title.toLocaleLowerCase().includes(normalizedSearch);
       const statusMatches =
         statusFilter === "ALL" || submission.status === statusFilter;
+      const sectionMatches =
+        sectionFilter === "ALL" || submission.section.id === sectionFilter;
 
-      return statusMatches && matchesSearch(submission, searchTerm);
+      return titleMatches && statusMatches && sectionMatches;
     });
-  }, [searchTerm, statusFilter, submissions]);
+  }, [deferredSearchTerm, sectionFilter, statusFilter, submissions]);
 
-  const hasNextPage = Boolean(submissionsQuery.data?.next);
-  const hasPreviousPage = Boolean(submissionsQuery.data?.previous);
+  const totalPages = Math.max(1, Math.ceil(filteredSubmissions.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleSubmissions = filteredSubmissions.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+  const hasActiveFilters =
+    searchTerm.trim().length > 0 ||
+    statusFilter !== "ALL" ||
+    sectionFilter !== "ALL";
+
+  function resetPageAndSearch(value: string) {
+    setSearchTerm(value);
+    setPage(1);
+  }
+
+  function resetFilters() {
+    setSearchTerm("");
+    setStatusFilter("ALL");
+    setSectionFilter("ALL");
+    setPage(1);
+  }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              Author workspace
-            </p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-              My Submissions
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Review your manuscript history, track editorial progress, and
-              respond to revision requests.
-            </p>
-          </div>
-
+    <div className="space-y-7">
+      <PageHeader
+        eyebrow="Author workspace"
+        title="My submissions"
+        description="Search your manuscript record, check editorial status, and open any submission that needs attention."
+        actions={
           <Link
             href="/author/submissions/new"
-            className="inline-flex justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+            className={buttonVariants({ variant: "accent", size: "touch" })}
           >
-            Submit new manuscript
+            <FilePlus2 aria-hidden="true" />
+            New submission
           </Link>
-        </div>
-      </section>
+        }
+      />
 
-      <section className="rounded-xl border bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-[1fr_240px]">
-          <div>
-            <label
-              htmlFor="submission-search"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Search submissions
-            </label>
-            <input
-              id="submission-search"
-              type="search"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by title, abstract, or section"
-              className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="submission-status"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Status
-            </label>
-            <select
-              id="submission-status"
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as SubmissionStatus | "ALL")
-              }
-              className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-            >
-              {statusFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <div className="border-b px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-950">
-            Submission history
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {submissionsQuery.data
-              ? `${submissionsQuery.data.count} total submission${
-                  submissionsQuery.data.count === 1 ? "" : "s"
-                }`
-              : "Loading submissions..."}
-          </p>
-        </div>
-
-        {submissionsQuery.isLoading ? (
-          <SubmissionListSkeleton />
-        ) : submissionsQuery.isError ? (
-          <div className="p-6">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <h3 className="text-sm font-semibold text-red-900">
-                Could not load submissions
-              </h3>
-              <p className="mt-1 text-sm text-red-700">
-                Please check your connection and try again.
-              </p>
-            </div>
-          </div>
-        ) : submissions.length === 0 ? (
-          <EmptySubmissionsState />
-        ) : filteredSubmissions.length === 0 ? (
-          <div className="p-6">
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
-              <h3 className="text-sm font-semibold text-slate-950">
-                No matching submissions
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Try changing your search term or status filter.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <SubmissionsTable submissions={filteredSubmissions} />
-            </div>
-
-            <div className="divide-y md:hidden">
-              {filteredSubmissions.map((submission) => (
-                <SubmissionMobileCard
-                  key={submission.id}
-                  submission={submission}
+      <Card>
+        <CardContent className="grid gap-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_14rem_14rem]">
+            <div>
+              <label
+                htmlFor="submission-search"
+                className="text-sm font-medium text-foreground"
+              >
+                Search by manuscript title
+              </label>
+              <div className="relative mt-2">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
                 />
-              ))}
+                <Input
+                  id="submission-search"
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => resetPageAndSearch(event.target.value)}
+                  placeholder="Enter a title"
+                  className="pl-9"
+                />
+              </div>
             </div>
-          </>
-        )}
 
-        {submissionsQuery.data && submissions.length > 0 ? (
-          <div className="flex items-center justify-between border-t px-5 py-4">
-            <p className="text-sm text-slate-500">Page {page}</p>
+            <div>
+              <label
+                htmlFor="submission-status"
+                className="text-sm font-medium text-foreground"
+              >
+                Status
+              </label>
+              <Select
+                id="submission-status"
+                className="mt-2"
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(
+                    event.target.value as SubmissionStatus | "ALL",
+                  );
+                  setPage(1);
+                }}
+              >
+                {statusFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!hasPreviousPage}
-                onClick={() => setPage((currentPage) => currentPage - 1)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            <div>
+              <label
+                htmlFor="submission-section"
+                className="text-sm font-medium text-foreground"
               >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={!hasNextPage}
-                onClick={() => setPage((currentPage) => currentPage + 1)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                Section
+              </label>
+              <Select
+                id="submission-section"
+                className="mt-2"
+                value={sectionFilter}
+                onChange={(event) => {
+                  setSectionFilter(event.target.value);
+                  setPage(1);
+                }}
               >
-                Next
-              </button>
+                <option value="ALL">All sections</option>
+                {sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+              </Select>
             </div>
           </div>
+
+          <div className="flex min-h-8 flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <p className="text-sm text-text-secondary" role="status">
+              {submissionsQuery.data
+                ? `${filteredSubmissions.length} of ${submissions.length} submission${
+                    submissions.length === 1 ? "" : "s"
+                  }`
+                : "Loading submissions…"}
+            </p>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className={buttonVariants({ variant: "ghost", size: "touch" })}
+              >
+                <RotateCcw aria-hidden="true" />
+                Clear filters
+              </button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <section aria-labelledby="submission-history-heading">
+        <SectionHeader
+          title="Submission history"
+          titleId="submission-history-heading"
+          description="Only author-visible manuscript and workflow information is shown."
+        />
+
+        {submissionsQuery.isFetching && !submissionsQuery.isLoading ? (
+          <p
+            className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
+            role="status"
+          >
+            <RefreshCw
+              className="size-3.5 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            Updating submissions…
+          </p>
         ) : null}
+
+        <div className="mt-4">
+          {submissionsQuery.isLoading ? (
+            <SubmissionListSkeleton />
+          ) : submissionsQuery.isError ? (
+            <ErrorState
+              title="Could not load submissions"
+              description="Check your connection and try loading your submission history again."
+              action={
+                <button
+                  type="button"
+                  className={buttonVariants({
+                    variant: "outline",
+                    size: "touch",
+                  })}
+                  onClick={() => submissionsQuery.refetch()}
+                >
+                  <RefreshCw aria-hidden="true" />
+                  Try again
+                </button>
+              }
+            />
+          ) : submissions.length === 0 ? (
+            <EmptyState
+              icon={<FilePlus2 aria-hidden="true" />}
+              title="No submissions yet"
+              description="Your manuscripts will appear here after they enter the journal workflow."
+              action={
+                <Link
+                  href="/author/submissions/new"
+                  className={buttonVariants({
+                    variant: "accent",
+                    size: "touch",
+                  })}
+                >
+                  Submit your first manuscript
+                </Link>
+              }
+            />
+          ) : filteredSubmissions.length === 0 ? (
+            <EmptyState
+              icon={<FileSearch aria-hidden="true" />}
+              title="No submissions match"
+              description="Try a different title, status, or section."
+              action={
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className={buttonVariants({
+                    variant: "outline",
+                    size: "touch",
+                  })}
+                >
+                  Clear filters
+                </button>
+              }
+            />
+          ) : (
+            <>
+              <Card className="hidden py-0 md:block">
+                <SubmissionsTable submissions={visibleSubmissions} />
+              </Card>
+              <Card className="divide-y divide-border py-0 md:hidden">
+                {visibleSubmissions.map((submission) => (
+                  <SubmissionMobileRow
+                    key={submission.id}
+                    submission={submission}
+                  />
+                ))}
+              </Card>
+              <SubmissionPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </>
+          )}
+        </div>
       </section>
     </div>
   );
@@ -243,160 +348,178 @@ function SubmissionsTable({
   submissions: AuthorSubmissionListItem[];
 }) {
   return (
-    <table className="min-w-full divide-y divide-slate-200">
-      <thead className="bg-slate-50">
-        <tr>
-          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Manuscript
-          </th>
-          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Section
-          </th>
-          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Status
-          </th>
-          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Submitted
-          </th>
-          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Action
-          </th>
-        </tr>
-      </thead>
+    <Table>
+      <TableHeader className="bg-surface-muted">
+        <TableRow>
+          <TableHead className="px-4">Manuscript</TableHead>
+          <TableHead>Section</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Submitted</TableHead>
+          <TableHead className="px-4 text-right">
+            <span className="sr-only">Open submission</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {submissions.map((submission) => {
+          const submittedDate = formatSubmissionDate(submission.submitted_at);
 
-      <tbody className="divide-y divide-slate-200 bg-white">
-        {submissions.map((submission) => (
-          <tr key={submission.id} className="hover:bg-slate-50">
-            <td className="max-w-md px-5 py-4">
-              <Link
-                href={`/author/submissions/${submission.id}`}
-                className="font-medium text-slate-950 hover:underline"
-              >
-                {submission.title}
-              </Link>
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500">
-                {submission.abstract}
-              </p>
-            </td>
-
-            <td className="px-5 py-4 text-sm text-slate-600">
-              {getSectionName(submission)}
-            </td>
-
-            <td className="px-5 py-4">
-              <SubmissionStatusBadge status={submission.status} />
-            </td>
-
-            <td className="px-5 py-4 text-sm text-slate-600">
-              {formatDate(submission.submitted_at)}
-            </td>
-
-            <td className="px-5 py-4 text-right">
-              <div className="flex justify-end gap-2">
-                {submission.status === "UNDER_REVISION" ? (
-                  <Link
-                    href={`/author/submissions/${submission.id}`}
-                    className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-700"
-                  >
-                    Upload revision
-                  </Link>
-                ) : null}
-
+          return (
+            <TableRow key={submission.id}>
+              <TableCell className="max-w-lg px-4 py-4 whitespace-normal">
                 <Link
                   href={`/author/submissions/${submission.id}`}
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  className="font-heading font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  dir="auto"
                 >
-                  View
+                  {submission.title}
                 </Link>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              </TableCell>
+              <TableCell className="max-w-48 whitespace-normal text-text-secondary">
+                <span dir="auto">{submission.section.name}</span>
+                {submission.topic?.label ? (
+                  <span
+                    className="mt-1 block text-xs text-muted-foreground"
+                    dir="auto"
+                  >
+                    {submission.topic.label}
+                  </span>
+                ) : null}
+              </TableCell>
+              <TableCell className="whitespace-normal">
+                <SubmissionStatusBadge status={submission.status} />
+              </TableCell>
+              <TableCell className="text-text-secondary">
+                {submittedDate ?? "—"}
+              </TableCell>
+              <TableCell className="px-4 text-right">
+                <Link
+                  href={`/author/submissions/${submission.id}${
+                    submission.status === "UNDER_REVISION"
+                      ? "#revision-upload"
+                      : ""
+                  }`}
+                  className={buttonVariants({
+                    variant:
+                      submission.status === "UNDER_REVISION"
+                        ? "default"
+                        : "outline",
+                    size: "touch",
+                  })}
+                >
+                  {submission.status === "UNDER_REVISION"
+                    ? "Review request"
+                    : "View details"}
+                </Link>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 
-function SubmissionMobileCard({
+function SubmissionMobileRow({
   submission,
 }: {
   submission: AuthorSubmissionListItem;
 }) {
+  const submittedDate = formatSubmissionDate(submission.submitted_at);
+
   return (
-    <article className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            href={`/author/submissions/${submission.id}`}
-            className="font-medium text-slate-950 hover:underline"
-          >
-            {submission.title}
-          </Link>
-          <p className="mt-1 text-sm text-slate-500">
-            {getSectionName(submission)} - {formatDate(submission.submitted_at)}
-          </p>
-        </div>
-
+    <article className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
         <SubmissionStatusBadge status={submission.status} />
-      </div>
-
-      <p className="mt-3 line-clamp-3 text-sm text-slate-600">
-        {submission.abstract}
-      </p>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {submission.status === "UNDER_REVISION" ? (
-          <Link
-            href={`/author/submissions/${submission.id}`}
-            className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-700"
-          >
-            Upload revision
-          </Link>
+        {submittedDate ? (
+          <span className="text-xs text-muted-foreground">
+            Submitted {submittedDate}
+          </span>
         ) : null}
-
-        <Link
-          href={`/author/submissions/${submission.id}`}
-          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          View details
-        </Link>
       </div>
+      <h3 className="mt-3 font-heading font-medium text-foreground" dir="auto">
+        {submission.title}
+      </h3>
+      <p className="mt-1 text-sm text-text-secondary" dir="auto">
+        {submission.section.name}
+        {submission.topic?.label ? ` · ${submission.topic.label}` : ""}
+      </p>
+      <Link
+        href={`/author/submissions/${submission.id}${
+          submission.status === "UNDER_REVISION" ? "#revision-upload" : ""
+        }`}
+        className={cn(
+          buttonVariants({
+            variant:
+              submission.status === "UNDER_REVISION" ? "default" : "outline",
+            size: "touch",
+          }),
+          "mt-4 w-full",
+        )}
+      >
+        {submission.status === "UNDER_REVISION"
+          ? "Review request"
+          : "View details"}
+      </Link>
     </article>
   );
 }
 
-function EmptySubmissionsState() {
+function SubmissionPagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
   return (
-    <div className="p-6">
-      <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
-        <h3 className="text-base font-semibold text-slate-950">
-          No submissions yet
-        </h3>
-        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-          Once you submit a manuscript, it will appear here with its editorial
-          status and version history.
-        </p>
-        <Link
-          href="/author/submissions/new"
-          className="mt-5 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
-          Submit your first manuscript
-        </Link>
-      </div>
-    </div>
+    <nav
+      className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-5"
+      aria-label="Submission history pagination"
+    >
+      <button
+        type="button"
+        className={buttonVariants({ variant: "outline", size: "touch" })}
+        disabled={currentPage === 1}
+        onClick={() => onPageChange(currentPage - 1)}
+      >
+        <ChevronLeft aria-hidden="true" />
+        Previous
+      </button>
+      <p className="text-sm text-muted-foreground" aria-live="polite">
+        Page {currentPage} of {totalPages}
+      </p>
+      <button
+        type="button"
+        className={buttonVariants({ variant: "outline", size: "touch" })}
+        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+      >
+        Next
+        <ChevronRight aria-hidden="true" />
+      </button>
+    </nav>
   );
 }
 
 function SubmissionListSkeleton() {
   return (
-    <div className="divide-y">
+    <Card className="divide-y divide-border py-0" aria-label="Loading submissions">
       {Array.from({ length: 5 }).map((_, index) => (
-        <div key={index} className="p-5">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
-          <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-slate-200" />
-          <div className="mt-4 h-3 w-full animate-pulse rounded bg-slate-200" />
+        <div key={index} className="grid gap-3 p-4 sm:grid-cols-[1fr_12rem]">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-3 w-2/5" />
+          </div>
+          <Skeleton className="h-7 w-32 sm:justify-self-end" />
         </div>
       ))}
-    </div>
+    </Card>
   );
 }

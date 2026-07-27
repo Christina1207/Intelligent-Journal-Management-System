@@ -1,29 +1,32 @@
-import type { PublicArticle } from "../types";
+import type { PublicArticle } from "../types"
 
 type ArticleAbstractSectionProps = {
-  article: PublicArticle;
-};
+  article: PublicArticle
+}
 
 export function ArticleAbstractSection({
   article,
 }: ArticleAbstractSectionProps) {
-  const isArabic = article.language === "Arabic";
-
   return (
-    <section
-      className="rounded-2xl border bg-white p-6 shadow-sm"
-      aria-labelledby="abstract-title"
-    >
-      <h2 id="abstract-title" className="text-2xl font-bold text-slate-950">
+    <section aria-labelledby="abstract-title">
+      <h2
+        id="abstract-title"
+        className="text-2xl font-semibold tracking-tight text-foreground"
+      >
         Abstract
       </h2>
-
-      <p
-        className="mt-4 text-base leading-8 text-slate-700"
-        dir={isArabic ? "rtl" : "ltr"}
-      >
-        {article.abstract}
-      </p>
+      {article.abstract ? (
+        <p
+          className="mt-4 whitespace-pre-line text-base leading-8 text-text-secondary"
+          dir="auto"
+        >
+          {article.abstract}
+        </p>
+      ) : (
+        <p className="mt-4 text-sm text-muted-foreground">
+          No abstract has been published for this article.
+        </p>
+      )}
     </section>
-  );
+  )
 }

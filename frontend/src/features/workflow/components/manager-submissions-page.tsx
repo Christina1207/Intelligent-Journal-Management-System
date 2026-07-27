@@ -5,19 +5,38 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Filter,
   RefreshCw,
   Search,
-  TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { PageHeader } from "@/components/common/page-header";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
+import {
+  ManuscriptSummary,
+  ResponsiveQueue,
+} from "@/features/editorial/components";
 import { getManagerQueue } from "@/features/workflow/api/manager-api";
 import { managerQueryKeys } from "@/features/workflow/api/manager-query-keys";
+import {
+  getManagerQueueActionLabel,
+  getManagerQueueStage,
+  ManagerQueueStageBadge,
+  type ManagerQueueStage,
+} from "@/features/workflow/components/manager-queue-stage";
+import {
+  type QueueTriageQueryState,
+  useManagerQueueTriageStates,
+} from "@/features/workflow/hooks";
 import type { ManagerQueueSubmission } from "@/features/workflow/types";
+import { cn } from "@/lib/utils";
+
+type TriageFilter = "ALL" | Exclude<ManagerQueueStage, "UNAVAILABLE">;
 
 const EMPTY_QUEUE: ManagerQueueSubmission[] = [];
 
@@ -31,6 +50,23 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(value));
+}
+
+function formatWaitingAge(value: string) {
+  const submittedAt = new Date(value).getTime();
+
+  if (!Number.isFinite(submittedAt)) {
+    return "Waiting time unavailable";
+  }
+
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - submittedAt) / (24 * 60 * 60 * 1000)),
+  );
+
+  return days === 0
+    ? "Submitted today"
+    : `${days} ${days === 1 ? "day" : "days"} waiting`;
 }
 
 function formatLanguage(languageCode: string) {
@@ -52,9 +88,28 @@ function matchesSearch(submission: ManagerQueueSubmission, searchTerm: string) {
   );
 }
 
+function matchesTriageFilter(
+  submission: ManagerQueueSubmission,
+  filter: TriageFilter,
+  triageStates: Map<string, QueueTriageQueryState>,
+) {
+  if (filter === "ALL") {
+    return true;
+  }
+
+  const state = triageStates.get(submission.id);
+
+  if (!state || state.isPending) {
+    return true;
+  }
+
+  return !state.isError && getManagerQueueStage(state.data) === filter;
+}
+
 export function ManagerSubmissionsPage() {
   const [page, setPage] = React.useState(1);
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [triageFilter, setTriageFilter] = React.useState<TriageFilter>("ALL");
 
   const queueQuery = useQuery({
     queryKey: managerQueryKeys.queue(page),
@@ -62,159 +117,243 @@ export function ManagerSubmissionsPage() {
   });
 
   const submissions = queueQuery.data?.results ?? EMPTY_QUEUE;
+  const triageQueries = useManagerQueueTriageStates(
+    submissions.map((submission) => submission.id),
+  );
 
   const filteredSubmissions = React.useMemo(
     () =>
-      submissions.filter((submission) => matchesSearch(submission, searchTerm)),
-    [searchTerm, submissions],
+      submissions.filter(
+        (submission) =>
+          matchesSearch(submission, searchTerm) &&
+          matchesTriageFilter(
+            submission,
+            triageFilter,
+            triageQueries.bySubmissionId,
+          ),
+      ),
+    [
+      searchTerm,
+      submissions,
+      triageFilter,
+      triageQueries.bySubmissionId,
+    ],
   );
 
   const hasPreviousPage = Boolean(queueQuery.data?.previous);
   const hasNextPage = Boolean(queueQuery.data?.next);
+  const filtersActive = Boolean(searchTerm.trim()) || triageFilter !== "ALL";
 
-  function goToPreviousPage() {
-    if (!hasPreviousPage) {
-      return;
-    }
-
+  function changePage(nextPage: number) {
     setSearchTerm("");
-    setPage((currentPage) => Math.max(1, currentPage - 1));
+    setTriageFilter("ALL");
+    setPage(nextPage);
   }
 
-  function goToNextPage() {
-    if (!hasNextPage) {
-      return;
-    }
-
+  function clearFilters() {
     setSearchTerm("");
-    setPage((currentPage) => currentPage + 1);
+    setTriageFilter("ALL");
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium text-slate-500">Initial screening</p>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Initial screening"
+        title="Submitted manuscript queue"
+        description="Review scope, completeness, basic scholarly quality, guideline compliance, and ethics disclosures before assigning editorial responsibility."
+      />
 
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-          New manuscript queue
-        </h1>
-
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          Review newly submitted manuscripts for scope, completeness, guideline
-          compliance, basic scholarly quality, and required ethics disclosures.
-        </p>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <label
-          htmlFor="manager-submission-search"
-          className="block text-sm font-medium text-slate-700"
-        >
-          Search this page
-        </label>
-
-        <div className="relative mt-2">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
-          />
-
-          <Input
-            id="manager-submission-search"
-            type="search"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search by title, abstract, section, or language"
-            aria-describedby="manager-search-scope"
-            className="h-10 pl-9"
-          />
-        </div>
-
-        <p id="manager-search-scope" className="mt-2 text-xs text-slate-500">
-          Search applies only to manuscripts loaded on the current page.
-        </p>
-      </section>
-
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">
-                Awaiting screening
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500" aria-live="polite">
-                {queueQuery.data
-                  ? `${queueQuery.data.count} manuscript${
-                      queueQuery.data.count === 1 ? "" : "s"
-                    } waiting across your managed sections`
-                  : "Loading screening queue..."}
-              </p>
-            </div>
-
-            {queueQuery.data && submissions.length > 0 ? (
-              <p className="text-sm text-slate-500">
-                Page {page}
-                {searchTerm.trim()
-                  ? ` · ${filteredSubmissions.length} matching on this page`
-                  : ""}
-              </p>
-            ) : null}
+      <section
+        aria-label="Screening queue filters"
+        className="grid gap-4 rounded-xl border border-border/80 bg-card p-4 shadow-xs md:grid-cols-[minmax(0,1fr)_18rem_auto] md:items-end"
+      >
+        <div>
+          <label
+            htmlFor="manager-submission-search"
+            className="text-sm font-medium text-foreground"
+          >
+            Search loaded manuscripts
+          </label>
+          <div className="relative mt-2">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="manager-submission-search"
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Title, abstract, section, or language"
+              aria-describedby="manager-search-scope"
+              className="min-h-11 pl-9"
+            />
           </div>
         </div>
+
+        <div>
+          <label
+            htmlFor="manager-triage-filter"
+            className="text-sm font-medium text-foreground"
+          >
+            Required next step
+          </label>
+          <div className="relative mt-2">
+            <Filter
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <select
+              id="manager-triage-filter"
+              value={triageFilter}
+              disabled={triageQueries.isPending}
+              onChange={(event) =>
+                setTriageFilter(event.target.value as TriageFilter)
+              }
+              className="block min-h-11 w-full appearance-none rounded-lg border border-input bg-background py-2 pl-9 pr-9 text-sm text-foreground outline-none transition focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35 disabled:opacity-60"
+            >
+              <option value="ALL">All next steps</option>
+              <option value="AWAITING_TRIAGE">Triage required</option>
+              <option value="READY_FOR_ASSIGNMENT">
+                Editor assignment required
+              </option>
+            </select>
+            <ChevronRight
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 rotate-90 text-muted-foreground"
+            />
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="touch"
+          disabled={!filtersActive}
+          onClick={clearFilters}
+        >
+          Clear filters
+        </Button>
+
+        <p
+          id="manager-search-scope"
+          className="text-xs leading-5 text-muted-foreground md:col-span-3"
+        >
+          Search and next-step filters apply to the current API page. Page
+          changes clear these filters.
+        </p>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs">
+        <header className="flex flex-col gap-2 border-b border-border/80 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-heading text-lg font-semibold text-foreground">
+              Manager action queue
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
+              {queueQuery.data
+                ? `${queueQuery.data.count} submitted manuscript${
+                    queueQuery.data.count === 1 ? "" : "s"
+                  } across your managed sections`
+                : "Loading submitted manuscripts"}
+            </p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Page {page}
+            {filtersActive
+              ? ` · ${filteredSubmissions.length} shown on this page`
+              : ""}
+            {queueQuery.isFetching && !queueQuery.isLoading
+              ? " · Refreshing"
+              : ""}
+          </p>
+        </header>
 
         {queueQuery.isLoading ? (
           <ScreeningQueueSkeleton />
         ) : queueQuery.isError ? (
-          <ScreeningQueueError
-            onRetry={() => {
-              void queueQuery.refetch();
-            }}
-          />
+          <div className="p-5">
+            <ErrorState
+              title="Could not load the submitted queue"
+              description="Check your connection and try loading the manuscripts again."
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void queueQuery.refetch()}
+                >
+                  <RefreshCw aria-hidden="true" />
+                  Try again
+                </Button>
+              }
+            />
+          </div>
         ) : submissions.length === 0 ? (
-          <EmptyScreeningQueue />
-        ) : filteredSubmissions.length === 0 ? (
-          <NoMatchingSubmissions onClearSearch={() => setSearchTerm("")} />
-        ) : (
-          <>
-            <div className="hidden overflow-x-auto lg:block">
-              <ScreeningQueueTable submissions={filteredSubmissions} />
-            </div>
-
-            <div className="divide-y divide-slate-200 lg:hidden">
-              {filteredSubmissions.map((submission) => (
-                <ScreeningQueueMobileCard
-                  key={submission.id}
-                  submission={submission}
+          <div className="p-5">
+            <EmptyState
+              title="Submitted queue is clear"
+              description="There are no manuscripts awaiting triage or initial editor assignment in your managed sections."
+              action={
+                <ClipboardCheck
+                  className="size-6 text-muted-foreground"
+                  aria-hidden="true"
                 />
-              ))}
-            </div>
-          </>
+              }
+            />
+          </div>
+        ) : filteredSubmissions.length === 0 ? (
+          <div className="p-5">
+            <EmptyState
+              title="No manuscripts match these filters"
+              description="Adjust the search term or required-next-step filter."
+              action={
+                <Button type="button" variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <ResponsiveQueue
+            table={
+              <ScreeningQueueTable
+                submissions={filteredSubmissions}
+                triageStates={triageQueries.bySubmissionId}
+              />
+            }
+            cards={filteredSubmissions.map((submission) => (
+              <ScreeningQueueMobileCard
+                key={submission.id}
+                submission={submission}
+                triageState={triageQueries.bySubmissionId.get(submission.id)}
+              />
+            ))}
+          />
         )}
 
         {queueQuery.data && submissions.length > 0 ? (
           <nav
-            aria-label="Screening queue pagination"
-            className="flex items-center justify-between gap-4 border-t border-slate-200 px-5 py-4"
+            aria-label="Submitted queue pagination"
+            className="flex flex-col gap-3 border-t border-border/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
           >
-            <p className="text-sm text-slate-500">Page {page}</p>
-
-            <div className="flex gap-2">
+            <p className="text-sm text-muted-foreground">Page {page}</p>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
               <Button
                 type="button"
                 variant="outline"
+                size="touch"
                 disabled={!hasPreviousPage || queueQuery.isFetching}
-                onClick={goToPreviousPage}
+                onClick={() => changePage(Math.max(1, page - 1))}
               >
                 <ChevronLeft aria-hidden="true" />
                 Previous
               </Button>
-
               <Button
                 type="button"
                 variant="outline"
+                size="touch"
                 disabled={!hasNextPage || queueQuery.isFetching}
-                onClick={goToNextPage}
+                onClick={() => changePage(page + 1)}
               >
                 Next
                 <ChevronRight aria-hidden="true" />
@@ -229,95 +368,76 @@ export function ManagerSubmissionsPage() {
 
 function ScreeningQueueTable({
   submissions,
+  triageStates,
 }: {
   submissions: ManagerQueueSubmission[];
+  triageStates: Map<string, QueueTriageQueryState>;
 }) {
   return (
-    <table className="min-w-full divide-y divide-slate-200">
+    <table className="min-w-full divide-y divide-border/80">
       <caption className="sr-only">
-        Newly submitted manuscripts awaiting initial screening
+        Submitted manuscripts awaiting triage or editor assignment
       </caption>
-
-      <thead className="bg-slate-50">
+      <thead className="bg-muted/45">
         <tr>
-          <th
-            scope="col"
-            className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Manuscript
-          </th>
-          <th
-            scope="col"
-            className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Section
-          </th>
-          <th
-            scope="col"
-            className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Language
-          </th>
-          <th
-            scope="col"
-            className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Submitted
-          </th>
-          <th
-            scope="col"
-            className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Status
-          </th>
-          <th
-            scope="col"
-            className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Action
-          </th>
+          {["Manuscript", "Next step", "Language", "Submitted", "Action"].map(
+            (heading) => (
+              <th
+                key={heading}
+                scope="col"
+                className={cn(
+                  "px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground",
+                  heading === "Action" && "text-right",
+                )}
+              >
+                {heading}
+              </th>
+            ),
+          )}
         </tr>
       </thead>
+      <tbody className="divide-y divide-border/80">
+        {submissions.map((submission) => {
+          const triageState = triageStates.get(submission.id);
 
-      <tbody className="divide-y divide-slate-200 bg-white">
-        {submissions.map((submission) => (
-          <tr key={submission.id} className="hover:bg-slate-50">
-            <td className="max-w-md px-5 py-4 align-top">
-              <h3 className="line-clamp-2 font-medium text-slate-950">
-                {submission.title}
-              </h3>
-
-              <p className="mt-1 line-clamp-2 text-sm leading-5 text-slate-500">
-                {submission.abstract}
-              </p>
-            </td>
-
-            <td className="px-5 py-4 align-top text-sm text-slate-600">
-              {submission.section.name}
-            </td>
-
-            <td className="px-5 py-4 align-top text-sm text-slate-600">
-              {formatLanguage(submission.language)}
-            </td>
-
-            <td className="whitespace-nowrap px-5 py-4 align-top text-sm text-slate-600">
-              {formatDate(submission.submitted_at)}
-            </td>
-
-            <td className="px-5 py-4 align-top">
-              <SubmissionStatusBadge status={submission.status} />
-            </td>
-
-            <td className="px-5 py-4 text-right align-top">
-              <Link
-                href={`/manager/submissions/${submission.id}`}
-                className="inline-flex justify-center rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-              >
-                Begin screening
-              </Link>
-            </td>
-          </tr>
-        ))}
+          return (
+            <tr key={submission.id} className="hover:bg-muted/25">
+              <td className="max-w-xl px-5 py-4 align-top">
+                <ManuscriptSummary
+                  title={submission.title}
+                  abstract={submission.abstract}
+                  metadata={submission.section.name}
+                />
+              </td>
+              <td className="px-5 py-4 align-top">
+                <ManagerQueueStageBadge state={triageState} />
+              </td>
+              <td className="px-5 py-4 align-top text-sm text-text-secondary">
+                {formatLanguage(submission.language)}
+              </td>
+              <td className="whitespace-nowrap px-5 py-4 align-top">
+                <p className="text-sm text-text-secondary">
+                  {formatDate(submission.submitted_at)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatWaitingAge(submission.submitted_at)}
+                </p>
+              </td>
+              <td className="px-5 py-4 text-right align-top">
+                <Link
+                  href={`/manager/submissions/${submission.id}`}
+                  className={buttonVariants({
+                    variant: "outline",
+                    size: "touch",
+                  })}
+                >
+                  {getManagerQueueActionLabel(triageState)}
+                  <ChevronRight aria-hidden="true" />
+                </Link>
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -325,162 +445,72 @@ function ScreeningQueueTable({
 
 function ScreeningQueueMobileCard({
   submission,
+  triageState,
 }: {
   submission: ManagerQueueSubmission;
+  triageState: QueueTriageQueryState | undefined;
 }) {
   return (
     <article className="p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-medium leading-6 text-slate-950">
-            {submission.title}
-          </h2>
+      <ManuscriptSummary
+        title={submission.title}
+        abstract={submission.abstract}
+        headingLevel={2}
+        metadata={submission.section.name}
+      />
 
-          <p className="mt-1 text-sm text-slate-500">
-            {submission.section.name}
-          </p>
-        </div>
-
-        <SubmissionStatusBadge status={submission.status} />
+      <div className="mt-3">
+        <ManagerQueueStageBadge state={triageState} />
       </div>
 
-      <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
-        {submission.abstract}
-      </p>
-
-      <dl className="mt-4 grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-3">
+      <dl className="mt-4 grid grid-cols-2 gap-4 rounded-lg bg-muted/45 p-4">
         <div>
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Language
           </dt>
-          <dd className="mt-1 text-sm text-slate-700">
+          <dd className="mt-1 text-sm text-foreground">
             {formatLanguage(submission.language)}
           </dd>
         </div>
-
         <div>
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Submitted
           </dt>
-          <dd className="mt-1 text-sm text-slate-700">
+          <dd className="mt-1 text-sm text-foreground">
             {formatDate(submission.submitted_at)}
+          </dd>
+          <dd className="mt-1 text-xs text-muted-foreground">
+            {formatWaitingAge(submission.submitted_at)}
           </dd>
         </div>
       </dl>
 
       <Link
         href={`/manager/submissions/${submission.id}`}
-        className="mt-4 inline-flex w-full justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+        className={cn(
+          buttonVariants({ size: "touch" }),
+          "mt-4 w-full justify-center",
+        )}
       >
-        Begin screening
+        {getManagerQueueActionLabel(triageState)}
+        <ChevronRight aria-hidden="true" />
       </Link>
     </article>
-  );
-}
-
-function ScreeningQueueError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="p-6">
-      <div
-        role="alert"
-        className="rounded-lg border border-red-200 bg-red-50 p-5"
-      >
-        <div className="flex items-start gap-3">
-          <TriangleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-5 shrink-0 text-red-700"
-          />
-
-          <div>
-            <h3 className="font-semibold text-red-900">
-              Could not load the screening queue
-            </h3>
-
-            <p className="mt-1 text-sm leading-6 text-red-700">
-              Check your connection and try loading the manuscripts again.
-            </p>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onRetry}
-              className="mt-4 border-red-300 bg-white text-red-800 hover:bg-red-100"
-            >
-              <RefreshCw aria-hidden="true" />
-              Try again
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyScreeningQueue() {
-  return (
-    <div className="p-6">
-      <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
-        <ClipboardCheck
-          aria-hidden="true"
-          className="mx-auto size-8 text-slate-400"
-        />
-
-        <h3 className="mt-4 text-base font-semibold text-slate-950">
-          Screening queue is clear
-        </h3>
-
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-          There are currently no newly submitted manuscripts awaiting initial
-          screening in your managed sections.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function NoMatchingSubmissions({
-  onClearSearch,
-}: {
-  onClearSearch: () => void;
-}) {
-  return (
-    <div className="p-6">
-      <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
-        <Search aria-hidden="true" className="mx-auto size-7 text-slate-400" />
-
-        <h3 className="mt-4 text-base font-semibold text-slate-950">
-          No matching manuscripts
-        </h3>
-
-        <p className="mt-2 text-sm text-slate-500">
-          Try a different search term or clear the current search.
-        </p>
-
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClearSearch}
-          className="mt-4"
-        >
-          Clear search
-        </Button>
-      </div>
-    </div>
   );
 }
 
 function ScreeningQueueSkeleton() {
   return (
     <div
-      aria-label="Loading screening queue"
+      aria-label="Loading submitted manuscripts"
       aria-busy="true"
-      className="divide-y divide-slate-200"
+      className="divide-y divide-border/80"
     >
       {Array.from({ length: 5 }).map((_, index) => (
         <div key={index} className="p-5">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
-          <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-slate-200" />
-          <div className="mt-4 h-3 w-full animate-pulse rounded bg-slate-200" />
+          <div className="h-4 w-2/3 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+          <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+          <div className="mt-4 h-3 w-full animate-pulse rounded bg-muted motion-reduce:animate-none" />
         </div>
       ))}
     </div>

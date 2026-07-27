@@ -1,52 +1,69 @@
-"use client";
+"use client"
 
-import { useState } from "react";
+import { Download, LoaderCircle } from "lucide-react"
+import { useState } from "react"
 
-import { requestPublicArticleDownload } from "../api/public-api";
+import { Button } from "@/components/ui/button"
 
-type DownloadState = "idle" | "loading" | "failed";
+import { requestPublicArticleDownload } from "../api/public-api"
+
+type DownloadState = "idle" | "loading" | "failed"
 
 type ArticleCardDownloadButtonProps = {
-  slug: string;
-};
+  slug: string
+}
 
 export function ArticleCardDownloadButton({
   slug,
 }: ArticleCardDownloadButtonProps) {
-  const [state, setState] = useState<DownloadState>("idle");
+  const [state, setState] = useState<DownloadState>("idle")
 
   async function handleDownload() {
     if (state === "loading") {
-      return;
+      return
     }
 
-    setState("loading");
+    setState("loading")
 
     try {
-      const download = await requestPublicArticleDownload(slug);
-
-      setState("idle");
-      window.location.assign(download.download_url);
+      const download = await requestPublicArticleDownload(slug)
+      setState("idle")
+      window.location.assign(download.download_url)
     } catch {
-      setState("failed");
+      setState("failed")
     }
   }
 
   return (
-    <button
-      type="button"
-      disabled={state === "loading"}
-      aria-busy={state === "loading"}
-      onClick={() => {
-        void handleDownload();
-      }}
-      className="rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-    >
-      {state === "loading"
-        ? "Preparing PDF..."
-        : state === "failed"
-          ? "Retry download"
-          : "Download PDF"}
-    </button>
-  );
+    <div>
+      <Button
+        type="button"
+        variant="soft"
+        size="touch"
+        disabled={state === "loading"}
+        aria-busy={state === "loading"}
+        onClick={() => void handleDownload()}
+      >
+        {state === "loading" ? (
+          <LoaderCircle
+            className="animate-spin"
+            data-icon="inline-start"
+            aria-hidden="true"
+          />
+        ) : (
+          <Download data-icon="inline-start" aria-hidden="true" />
+        )}
+        {state === "loading"
+          ? "Preparing…"
+          : state === "failed"
+            ? "Retry PDF"
+            : "PDF"}
+      </Button>
+      <span className="sr-only" role="status" aria-live="polite">
+        {state === "failed"
+          ? "The PDF could not be prepared. Activate the button to retry."
+          : ""}
+      </span>
+    </div>
+  )
 }

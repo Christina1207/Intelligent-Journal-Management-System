@@ -1,4 +1,5 @@
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import type { TriageCheck, TriageResult } from "@/features/workflow/types";
 import { cn } from "@/lib/utils";
 
@@ -57,33 +58,36 @@ export function TriageChecklist({
             key={check.code}
             disabled={disabled}
             className={cn(
-              "rounded-xl border bg-white p-5 shadow-sm",
+              "rounded-xl border bg-card p-5 shadow-xs",
               check.result === "CONCERN"
-                ? "border-amber-300"
-                : "border-slate-200",
+                ? "border-status-action-border"
+                : "border-border/80",
             )}
           >
             <legend className="sr-only">{check.label}</legend>
 
             <div className="flex items-start gap-3">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
                 {index + 1}
               </span>
 
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-slate-950">
+                  <h3 className="font-heading font-semibold text-foreground">
                     {check.label}
                   </h3>
 
                   {check.required ? (
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    <Badge variant="outline">
                       Required
-                    </span>
+                    </Badge>
                   ) : null}
                 </div>
 
-                <p className="mt-1 text-sm leading-6 text-slate-600">
+                <p
+                  id={`${check.code}-description`}
+                  className="mt-1 text-sm leading-6 text-text-secondary"
+                >
                   {check.description}
                 </p>
               </div>
@@ -99,18 +103,18 @@ export function TriageChecklist({
                     key={option.value}
                     htmlFor={inputId}
                     className={cn(
-                      "flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition",
+                      "flex min-h-16 cursor-pointer items-start gap-2 rounded-lg border p-3 transition",
                       "has-disabled:cursor-not-allowed has-disabled:opacity-60",
                       selected &&
                         option.value === "PASS" &&
-                        "border-emerald-300 bg-emerald-50",
+                        "border-status-success-border bg-status-success-subtle",
                       selected &&
                         option.value === "CONCERN" &&
-                        "border-amber-300 bg-amber-50",
+                        "border-status-action-border bg-status-action-subtle",
                       selected &&
                         option.value === "NOT_APPLICABLE" &&
-                        "border-slate-400 bg-slate-50",
-                      !selected && "border-slate-200 hover:bg-slate-50",
+                        "border-border bg-muted/50",
+                      !selected && "border-border/80 hover:bg-muted/35",
                     )}
                   >
                     <input
@@ -119,19 +123,20 @@ export function TriageChecklist({
                       name={`triage-${check.code}`}
                       value={option.value}
                       checked={selected}
+                      aria-describedby={`${check.code}-description`}
                       onChange={() =>
                         updateCheck(check.code, {
                           result: option.value,
                         })
                       }
-                      className="mt-0.5 size-4 accent-slate-950"
+                      className="mt-0.5 size-4 accent-primary"
                     />
 
                     <span>
-                      <span className="block text-sm font-medium text-slate-900">
+                      <span className="block text-sm font-medium text-foreground">
                         {option.label}
                       </span>
-                      <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
                         {option.description}
                       </span>
                     </span>
@@ -143,13 +148,14 @@ export function TriageChecklist({
             <div className="mt-4">
               <label
                 htmlFor={`${check.code}-note`}
-                className="text-sm font-medium text-slate-700"
+                className="text-sm font-medium text-foreground"
               >
                 Item note
               </label>
 
               <Textarea
                 id={`${check.code}-note`}
+                dir="auto"
                 value={check.note}
                 maxLength={2000}
                 disabled={disabled}

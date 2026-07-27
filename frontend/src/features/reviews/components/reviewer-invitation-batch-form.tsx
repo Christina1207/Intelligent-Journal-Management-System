@@ -1,12 +1,22 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 
+import {
+  FormField,
+  getFormFieldDescription,
+} from "@/components/common/form-field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAssignReviewers } from "@/features/reviews/hooks";
+import {
+  deadlineAfterDays,
+  toDateTimeLocal,
+} from "@/features/reviews/review-deadlines";
+import { ApiError } from "@/lib/api/errors";
 
 export type ReviewerSelection = {
   id: string;
@@ -23,28 +33,70 @@ interface ReviewerInvitationBatchFormProps {
   onAssigned: (count: number) => void;
 }
 
-function toDateTimeLocal(date: Date) {
-  const localDate = new Date(
-    date.getTime() - date.getTimezoneOffset() * 60_000,
-  );
+const invitationSchema = z
+  .object({
+    responseDeadline: z.string().min(1, "Select a response deadline."),
+    reviewDeadline: z.string().min(1, "Select a review deadline."),
+  })
+  .superRefine((values, context) => {
+    const responseDate = new Date(values.responseDeadline);
+    const reviewDate = new Date(values.reviewDeadline);
+    const now = new Date();
 
-  return localDate.toISOString().slice(0, 16);
-}
+    if (!Number.isFinite(responseDate.getTime())) {
+      context.addIssue({
+        code: "custom",
+        path: ["responseDeadline"],
+        message: "Provide a valid invitation response deadline.",
+      });
+    } else if (responseDate <= now) {
+      context.addIssue({
+        code: "custom",
+        path: ["responseDeadline"],
+        message: "The invitation response deadline must be in the future.",
+      });
+    }
 
-function deadlineAfterDays(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(17, 0, 0, 0);
+    if (!Number.isFinite(reviewDate.getTime())) {
+      context.addIssue({
+        code: "custom",
+        path: ["reviewDeadline"],
+        message: "Provide a valid review submission deadline.",
+      });
+    } else if (
+      Number.isFinite(responseDate.getTime()) &&
+      reviewDate <= responseDate
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["reviewDeadline"],
+        message: "The review deadline must be later than the response deadline.",
+      });
+    }
+  });
 
-  return toDateTimeLocal(date);
-}
+type InvitationFormValues = z.infer<typeof invitationSchema>;
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
+  return error instanceof Error
+    ? error.message
+    : "The reviewer invitations could not be sent.";
+}
+
+function getApiDetails(error: unknown) {
+  if (!(error instanceof ApiError) || !error.details) {
+    return {};
   }
 
-  return "The reviewer invitations could not be sent.";
+  return error.details as Record<string, unknown>;
+}
+
+function detailMessage(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map(String).join(" ");
+  }
+
+  return typeof value === "string" ? value : undefined;
 }
 
 export function ReviewerInvitationBatchForm({
@@ -54,75 +106,72 @@ export function ReviewerInvitationBatchForm({
   onAssigned,
 }: ReviewerInvitationBatchFormProps) {
   const assignReviewers = useAssignReviewers();
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<InvitationFormValues>({
+    resolver: zodResolver(invitationSchema),
+    defaultValues: {
+      responseDeadline: deadlineAfterDays(3),
+      reviewDeadline: deadlineAfterDays(14),
+    },
+  });
 
-  const [responseDeadline, setResponseDeadline] = useState(() =>
-    deadlineAfterDays(3),
-  );
-  const [reviewDeadline, setReviewDeadline] = useState(() =>
-    deadlineAfterDays(14),
-  );
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const responseDeadlineId = `batch-response-deadline-${submissionId}`;
+  const reviewDeadlineId = `batch-review-deadline-${submissionId}`;
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setValidationError(null);
-
+  const submitInvitations = handleSubmit(async (values) => {
     if (reviewers.length === 0) {
-      setValidationError("Select at least one reviewer.");
       return;
     }
 
-    const responseDate = new Date(responseDeadline);
-    const reviewDate = new Date(reviewDeadline);
-    const now = new Date();
-
-    if (
-      Number.isNaN(responseDate.getTime()) ||
-      Number.isNaN(reviewDate.getTime())
-    ) {
-      setValidationError("Provide valid invitation and review deadlines.");
-      return;
-    }
-
-    if (responseDate <= now) {
-      setValidationError(
-        "The invitation response deadline must be in the future.",
-      );
-      return;
-    }
-
-    if (reviewDate <= responseDate) {
-      setValidationError(
-        "The review deadline must be later than the response deadline.",
-      );
-      return;
-    }
-
-    assignReviewers.mutate(
-      {
+    try {
+      const response = await assignReviewers.mutateAsync({
         submissionId,
         payload: {
           reviewer_ids: reviewers.map((reviewer) => reviewer.id),
-          response_deadline: responseDate.toISOString(),
-          review_deadline: reviewDate.toISOString(),
+          response_deadline: new Date(values.responseDeadline).toISOString(),
+          review_deadline: new Date(values.reviewDeadline).toISOString(),
         },
-      },
-      {
-        onSuccess: (response) => onAssigned(response.count),
-      },
-    );
-  };
+      });
+      onAssigned(response.count);
+    } catch (error) {
+      const details = getApiDetails(error);
+      const responseError = detailMessage(details.response_deadline);
+      const reviewError = detailMessage(details.review_deadline);
 
-  const error = validationError
-    ? validationError
-    : assignReviewers.isError
-      ? getErrorMessage(assignReviewers.error)
-      : null;
+      if (responseError) {
+        setError("responseDeadline", {
+          type: "server",
+          message: responseError,
+        });
+      }
+
+      if (reviewError) {
+        setError("reviewDeadline", {
+          type: "server",
+          message: reviewError,
+        });
+      }
+    }
+  });
+
+  const reviewerError = detailMessage(
+    getApiDetails(assignReviewers.error).reviewer_ids,
+  );
+  const showGeneralError =
+    assignReviewers.isError &&
+    !reviewerError &&
+    !errors.responseDeadline &&
+    !errors.reviewDeadline;
 
   return (
     <form
       className="space-y-5 rounded-lg border bg-muted/20 p-4"
-      onSubmit={handleSubmit}
+      onSubmit={submitInvitations}
+      noValidate
     >
       <div>
         <h3 className="font-medium">
@@ -135,10 +184,12 @@ export function ReviewerInvitationBatchForm({
         </p>
       </div>
 
-      {error ? (
+      {showGeneralError || reviewerError ? (
         <Alert variant="destructive">
           <AlertTitle>Invitations not sent</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {reviewerError ?? getErrorMessage(assignReviewers.error)}
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -148,7 +199,9 @@ export function ReviewerInvitationBatchForm({
             key={reviewer.id}
             className="rounded-md border bg-background px-3 py-2"
           >
-            <p className="text-sm font-medium">{reviewer.fullName}</p>
+            <p className="text-sm font-medium" dir="auto">
+              {reviewer.fullName}
+            </p>
             <p className="text-xs text-muted-foreground">
               {reviewer.email}
               {reviewer.affiliation ? ` · ${reviewer.affiliation}` : ""}
@@ -158,46 +211,56 @@ export function ReviewerInvitationBatchForm({
       </ul>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="batch-response-deadline">
-            Invitation response deadline
-          </Label>
+        <FormField
+          htmlFor={responseDeadlineId}
+          label="Invitation response deadline"
+          description="Every selected reviewer must accept or decline by this time."
+          error={errors.responseDeadline?.message}
+          required
+        >
           <Input
-            id="batch-response-deadline"
+            id={responseDeadlineId}
             type="datetime-local"
             min={toDateTimeLocal(new Date())}
-            value={responseDeadline}
             disabled={assignReviewers.isPending}
-            onChange={(event) => setResponseDeadline(event.target.value)}
+            aria-invalid={Boolean(errors.responseDeadline)}
+            aria-describedby={getFormFieldDescription({
+              id: responseDeadlineId,
+              hasDescription: true,
+              hasError: Boolean(errors.responseDeadline),
+            })}
+            {...register("responseDeadline")}
           />
-          <p className="text-xs text-muted-foreground">
-            Every selected reviewer must accept or decline by this time.
-          </p>
-        </div>
+        </FormField>
 
-        <div className="space-y-2">
-          <Label htmlFor="batch-review-deadline">
-            Review submission deadline
-          </Label>
+        <FormField
+          htmlFor={reviewDeadlineId}
+          label="Review submission deadline"
+          description="This deadline applies after each invitation is accepted."
+          error={errors.reviewDeadline?.message}
+          required
+        >
           <Input
-            id="batch-review-deadline"
+            id={reviewDeadlineId}
             type="datetime-local"
-            min={responseDeadline}
-            value={reviewDeadline}
             disabled={assignReviewers.isPending}
-            onChange={(event) => setReviewDeadline(event.target.value)}
+            aria-invalid={Boolean(errors.reviewDeadline)}
+            aria-describedby={getFormFieldDescription({
+              id: reviewDeadlineId,
+              hasDescription: true,
+              hasError: Boolean(errors.reviewDeadline),
+            })}
+            {...register("reviewDeadline")}
           />
-          <p className="text-xs text-muted-foreground">
-            This deadline applies after each invitation is accepted.
-          </p>
-        </div>
+        </FormField>
       </div>
 
       <Alert>
         <AlertTitle>Atomic invitation batch</AlertTitle>
         <AlertDescription>
-          If any selected reviewer is no longer eligible, no invitations will be
-          created. Review the selection and retry.
+          If any selected reviewer is no longer eligible, no invitations will
+          be created. Duplicate and conflicted reviewers remain blocked by the
+          backend.
         </AlertDescription>
       </Alert>
 

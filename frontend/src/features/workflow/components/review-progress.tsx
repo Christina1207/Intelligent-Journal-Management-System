@@ -29,8 +29,8 @@ export function ReviewProgress({
     >
       <div>
         <div className="flex items-center justify-between gap-3 text-xs">
-          <span className="font-medium text-slate-700">Reviews submitted</span>
-          <span className="text-slate-500">
+          <span className="font-medium text-foreground">Reviews submitted</span>
+          <span className="text-muted-foreground">
             {progress.reviews_submitted} of {progress.invitations_accepted}{" "}
             accepted
           </span>
@@ -43,15 +43,15 @@ export function ReviewProgress({
             aria-valuemin={0}
             aria-valuemax={progress.invitations_accepted}
             aria-valuenow={progress.reviews_submitted}
-            className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"
+            className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
           >
             <div
-              className="h-full rounded-full bg-teal-600 transition-[width]"
+              className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none"
               style={{ width: `${completionPercentage}%` }}
             />
           </div>
         ) : (
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-muted-foreground">
             No reviewer invitations have been accepted yet.
           </p>
         )}
@@ -59,49 +59,49 @@ export function ReviewProgress({
 
       <dl className="grid grid-cols-3 gap-x-3 gap-y-2">
         <div>
-          <dt className="text-xs text-slate-500">Invited</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Invited</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.invitations_total}
           </dd>
         </div>
 
         <div>
-          <dt className="text-xs text-slate-500">Pending</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Pending</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.invitations_pending}
           </dd>
         </div>
 
         <div>
-          <dt className="text-xs text-slate-500">Accepted</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Accepted</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.invitations_accepted}
           </dd>
         </div>
 
         <div>
-          <dt className="text-xs text-slate-500">Submitted</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Submitted</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.reviews_submitted}
           </dd>
         </div>
 
         <div>
-          <dt className="text-xs text-slate-500">Declined</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Declined</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.invitations_declined}
           </dd>
         </div>
 
         <div>
-          <dt className="text-xs text-slate-500">Expired</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Expired</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.invitations_expired}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Cancelled</dt>
-          <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+          <dt className="text-xs text-muted-foreground">Cancelled</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-foreground">
             {progress.invitations_cancelled}
           </dd>
         </div>
@@ -110,7 +110,7 @@ export function ReviewProgress({
       {hasOverdueItems ? (
         <div
           aria-label="Overdue review warnings"
-          className="space-y-1 rounded-md border border-red-200 bg-red-50 p-2 text-xs font-medium text-red-700"
+          className="space-y-1 rounded-md border border-status-danger-border bg-status-danger-subtle p-2 text-xs font-medium text-status-danger-foreground"
         >
           {progress.overdue_invitations > 0 ? (
             <p>

@@ -40,37 +40,25 @@ export const DASHBOARD_NAVIGATION_ITEMS: readonly NavigationItem[] = [
     title: "Managed Submissions",
     href: "/manager/submissions",
     icon: "submissions",
-    roles: [
-      USER_ROLE.SECTION_MANAGER,
-      USER_ROLE.EDITOR_IN_CHIEF,
-      USER_ROLE.ADMIN,
-    ],
+    roles: [USER_ROLE.SECTION_MANAGER],
   },
   {
     title: "Section Intelligence",
     href: "/manager/intelligence",
     icon: "intelligence",
-    roles: [
-      USER_ROLE.SECTION_MANAGER,
-      USER_ROLE.EDITOR_IN_CHIEF,
-      USER_ROLE.ADMIN,
-    ],
+    roles: [USER_ROLE.SECTION_MANAGER],
   },
   {
     title: "Editorial Assignments",
     href: "/section-editor/assignments",
     icon: "assignments",
-    roles: [
-      USER_ROLE.SECTION_EDITOR,
-      USER_ROLE.EDITOR_IN_CHIEF,
-      USER_ROLE.ADMIN,
-    ],
+    roles: [USER_ROLE.SECTION_EDITOR],
   },
   {
     title: "Review Invitations",
     href: "/reviewer/invitations",
     icon: "invitations",
-    roles: [USER_ROLE.REVIEWER, USER_ROLE.ADMIN],
+    roles: [USER_ROLE.REVIEWER],
   },
   {
     title: "Publishing Drafts",
@@ -89,7 +77,7 @@ export function hasAnyRole(
 
 export function getNavigationItemsForRoles(userRoles: readonly UserRole[]) {
   if (userRoles.length === 0) {
-    return DASHBOARD_NAVIGATION_ITEMS;
+    return [];
   }
 
   return DASHBOARD_NAVIGATION_ITEMS.filter((item) =>

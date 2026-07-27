@@ -55,7 +55,10 @@ export type ReviewerAssignment = {
   can_download_manuscript: boolean;
   can_submit_review: boolean;
   cancelled_at: string | null;
+  cancelled_by?: ReviewerUserSummary | null;
   cancellation_reason: string;
+  assigned_by?: ReviewerUserSummary;
+  replaces?: string | null;
 };
 
 export type RespondToReviewInvitationPayload = {
@@ -188,6 +191,16 @@ export type EditorReviewWorkspaceResponse = {
     response_to_reviewers?: string;
   } | null;
   required_reviews: number;
+  progress: {
+    total_invitations: number;
+    pending: number;
+    accepted: number;
+    declined: number;
+    expired: number;
+    cancelled: number;
+    submitted: number;
+    overdue: number;
+  };
   assignments: ReviewerAssignment[];
   reviews_available: boolean;
   reviews_unavailable_reason: string | null;
@@ -221,4 +234,17 @@ export type EditorDecisionResponse = {
       full_name: string;
     };
   };
+};
+
+export type CancelReviewerAssignmentPayload = {
+  reason: string;
+};
+
+export type ReplaceReviewerAssignmentPayload = AssignReviewerPayload & {
+  reason: string;
+};
+
+export type ReplaceReviewerAssignmentResponse = {
+  cancelled_assignment: ReviewerAssignment;
+  replacement_assignment: ReviewerAssignment;
 };

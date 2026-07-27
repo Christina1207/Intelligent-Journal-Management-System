@@ -4,6 +4,11 @@ import * as React from "react";
 import { RefreshCw } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  FormField,
+  getFormFieldDescription,
+} from "@/components/common/form-field";
+import { Notice } from "@/components/common/notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,7 +61,11 @@ export function EditorReassignmentDialog({
   const [reason, setReason] = React.useState<ManagerReassignmentReason | "">(
     "",
   );
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = React.useState<{
+    editor?: string;
+    reason?: string;
+  }>({});
+  const [apiError, setApiError] = React.useState<string | null>(null);
 
   const editorsQuery = useQuery({
     queryKey: managerQueryKeys.eligibleEditors(submissionId),
@@ -76,7 +85,8 @@ export function EditorReassignmentDialog({
       });
     },
     onSuccess: async () => {
-      setFormError(null);
+      setApiError(null);
+      setValidationErrors({});
 
       await Promise.all([
         queryClient.invalidateQueries({
@@ -86,6 +96,9 @@ export function EditorReassignmentDialog({
           queryKey: managerQueryKeys.submission(submissionId),
         }),
         queryClient.invalidateQueries({
+          queryKey: managerQueryKeys.queueRoot,
+        }),
+        queryClient.invalidateQueries({
           queryKey: managerQueryKeys.monitoringRoot,
         }),
       ]);
@@ -93,24 +106,27 @@ export function EditorReassignmentDialog({
       onOpenChange(false);
     },
     onError: (error) => {
-      setFormError(getWorkflowErrorMessage(error));
+      setApiError(getWorkflowErrorMessage(error));
     },
   });
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!selectedEditorId) {
-      setFormError("Select a replacement Section Editor.");
+    const nextErrors = {
+      editor: !selectedEditorId
+        ? "Select a replacement Section Editor."
+        : undefined,
+      reason: !reason ? "Select a reassignment reason." : undefined,
+    };
+
+    setValidationErrors(nextErrors);
+
+    if (nextErrors.editor || nextErrors.reason) {
       return;
     }
 
-    if (!reason) {
-      setFormError("Select a reassignment reason.");
-      return;
-    }
-
-    setFormError(null);
+    setApiError(null);
     reassignmentMutation.mutate();
   }
 
@@ -120,22 +136,34 @@ export function EditorReassignmentDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!reassignmentMutation.isPending) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Reassign Section Editor</DialogTitle>
+          <DialogTitle>Reassign the Section Editor?</DialogTitle>
           <DialogDescription>
             Replace the current editor while preserving the previous assignment
             in the manuscript’s audit history.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="line-clamp-2 text-sm font-medium text-slate-950">
+        <div className="rounded-lg border border-border/80 bg-muted/45 p-4">
+          <p
+            className="line-clamp-2 text-sm font-medium text-foreground"
+            dir="auto"
+          >
             {submissionTitle}
           </p>
-          <p className="mt-2 text-xs text-slate-500">Current Section Editor</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">
+          <p className="mt-2 text-xs text-muted-foreground">
+            Current Section Editor
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground" dir="auto">
             {currentEditor.full_name}
           </p>
         </div>
@@ -145,18 +173,16 @@ export function EditorReassignmentDialog({
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-28 animate-pulse rounded-lg bg-slate-200"
+                className="h-28 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
               />
             ))}
           </div>
         ) : editorsQuery.isError ? (
-          <div
-            role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 p-4"
-          >
-            <p className="text-sm text-red-700">
-              {getWorkflowErrorMessage(editorsQuery.error)}
-            </p>
+          <Notice
+            tone="destructive"
+            title="Replacement editors could not be loaded"
+            description={getWorkflowErrorMessage(editorsQuery.error)}
+            action={
             <Button
               type="button"
               variant="outline"
@@ -166,30 +192,30 @@ export function EditorReassignmentDialog({
               <RefreshCw aria-hidden="true" />
               Try again
             </Button>
-          </div>
+            }
+          />
         ) : replacementEditors.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
-            <p className="font-semibold text-slate-950">
+          <div className="rounded-lg border border-dashed border-border p-6 text-center">
+            <p className="font-semibold text-foreground">
               No replacement editor is available
             </p>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               The current editor is the only active eligible editor for this
               section.
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
-            {formError ? (
-              <div
-                role="alert"
-                className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-              >
-                {formError}
-              </div>
+            {apiError ? (
+              <Notice
+                tone="destructive"
+                title="Reassignment could not be completed"
+                description={apiError}
+              />
             ) : null}
 
             <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">
+              <h3 className="mb-3 text-sm font-semibold text-foreground">
                 Replacement editor
               </h3>
 
@@ -199,30 +225,51 @@ export function EditorReassignmentDialog({
                 disabled={reassignmentMutation.isPending}
                 onSelect={(editorId) => {
                   setSelectedEditorId(editorId);
-                  setFormError(null);
+                  setValidationErrors((current) => ({
+                    ...current,
+                    editor: undefined,
+                  }));
+                  setApiError(null);
                 }}
               />
+              {validationErrors.editor ? (
+                <p
+                  className="mt-2 text-xs font-medium text-destructive"
+                  role="alert"
+                >
+                  {validationErrors.editor}
+                </p>
+              ) : null}
             </div>
 
-            <div>
-              <label
-                htmlFor="reassignment-reason"
-                className="text-sm font-medium text-slate-700"
-              >
-                Reassignment reason
-              </label>
-
+            <FormField
+              htmlFor="reassignment-reason"
+              label="Reassignment reason"
+              required
+              description="The reason is stored with the append-only assignment history."
+              error={validationErrors.reason}
+            >
               <select
                 id="reassignment-reason"
                 value={reason}
                 disabled={reassignmentMutation.isPending}
+                aria-invalid={Boolean(validationErrors.reason)}
+                aria-describedby={getFormFieldDescription({
+                  id: "reassignment-reason",
+                  hasDescription: true,
+                  hasError: Boolean(validationErrors.reason),
+                })}
                 onChange={(event) => {
                   setReason(
                     event.target.value as ManagerReassignmentReason | "",
                   );
-                  setFormError(null);
+                  setValidationErrors((current) => ({
+                    ...current,
+                    reason: undefined,
+                  }));
+                  setApiError(null);
                 }}
-                className="mt-2 block h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
+                className="block min-h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35"
               >
                 <option value="">Select a reason</option>
 
@@ -232,17 +279,19 @@ export function EditorReassignmentDialog({
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
 
-            <p className="text-xs leading-5 text-slate-500">
-              Reassignment changes only the current responsible editor. The
-              manuscript remains in its existing workflow status.
-            </p>
+            <Notice
+              tone="warning"
+              title="Editorial responsibility changes immediately"
+              description="The current workflow status is preserved, and the previous assignment remains available in the audit history."
+            />
 
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
+                size="touch"
                 disabled={reassignmentMutation.isPending}
                 onClick={() => onOpenChange(false)}
               >
@@ -251,12 +300,13 @@ export function EditorReassignmentDialog({
 
               <Button
                 type="submit"
+                size="touch"
                 disabled={
                   !selectedEditorId || !reason || reassignmentMutation.isPending
                 }
               >
                 {reassignmentMutation.isPending
-                  ? "Reassigning editor..."
+                  ? "Reassigning editor…"
                   : "Confirm reassignment"}
               </Button>
             </DialogFooter>

@@ -1,76 +1,52 @@
-import Link from "next/link";
-import type { PublicSection } from "../types";
+import { ArrowRight, LayoutList } from "lucide-react"
+import Link from "next/link"
+
+import { EmptyState } from "@/components/common/empty-state"
+import { SectionHeader } from "@/components/common/section-header"
+import { buttonVariants } from "@/components/ui/button"
+
+import type { PublicSection } from "../types"
+import { PublicSectionCard } from "./public-section-card"
 
 type BrowseSectionsSectionProps = {
-  sections: PublicSection[];
-};
+  sections: PublicSection[]
+}
 
 export function BrowseSectionsSection({
   sections,
 }: BrowseSectionsSectionProps) {
   return (
-    <section
-      className="border-y bg-slate-50 py-16 sm:py-20"
-      aria-labelledby="sections-title"
-    >
+    <section className="bg-background py-12 sm:py-16" aria-labelledby="sections-title">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Explore by Discipline
-            </p>
-            <h2
-              id="sections-title"
-              className="mt-2 text-3xl font-bold tracking-tight text-slate-950"
-            >
-              Browse by Section
-            </h2>
-            <p className="mt-3 max-w-2xl text-slate-600">
-              Navigate published research by journal section and research area.
-            </p>
-          </div>
-
-          <Link
-            href="/sections"
-            className="text-sm font-semibold text-slate-950 underline-offset-4 hover:underline"
-          >
-            View all sections
-          </Link>
-        </div>
-
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {sections.map((section) => (
+        <SectionHeader
+          titleId="sections-title"
+          title="Browse by section"
+          description="Explore published research by journal discipline and subject area."
+          action={
             <Link
-              key={section.id}
-              href={`/sections/${section.slug}`}
-              className="rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              href="/sections"
+              className={buttonVariants({ variant: "outline", size: "touch" })}
             >
-              <div className="flex items-start justify-between gap-4">
-                <h3 className="font-semibold text-slate-950">{section.name}</h3>
-
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                  {section.articleCount}
-                </span>
-              </div>
-
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                {section.description}
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {section.topics.map((topic) => (
-                  <span
-                    key={topic}
-                    className="rounded-full border px-2.5 py-1 text-xs text-slate-600"
-                  >
-                    {topic}
-                  </span>
-                ))}
-              </div>
+              All sections
+              <ArrowRight data-icon="inline-end" aria-hidden="true" />
             </Link>
-          ))}
-        </div>
+          }
+        />
+        {sections.length > 0 ? (
+          <div className="mt-7 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {sections.slice(0, 6).map((section) => (
+              <PublicSectionCard key={section.id} section={section} compact />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            className="mt-7"
+            icon={<LayoutList aria-hidden="true" />}
+            title="No journal sections available"
+            description="Active journal sections will appear here when configured."
+          />
+        )}
       </div>
     </section>
-  );
+  )
 }

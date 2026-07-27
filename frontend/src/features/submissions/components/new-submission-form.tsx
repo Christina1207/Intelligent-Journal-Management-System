@@ -3,594 +3,436 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  ArrowRight,
+  FilePlus2,
+  LoaderCircle,
+  Send,
+} from "lucide-react";
+import {
+  useForm,
+  type FieldErrors,
+  type FieldPath,
+} from "react-hook-form";
 
+import { Notice } from "@/components/common/notice";
+import { PageHeader } from "@/components/common/page-header";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/features/auth/hooks/use-auth";
 import { getPublicSections } from "@/features/journals/api/journals-api";
 import { createSubmission } from "@/features/submissions/api/submissions-api";
-import { ApiError } from "@/lib/api/errors";
 import {
-  CoauthorFields,
-  type CoauthorDraft,
-} from "@/features/submissions/components/coauthor-fields";
-import { KeywordInput } from "@/features/submissions/components/keyword-input";
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+  AuthorsStep,
+  FilesStep,
+  ManuscriptDetailsStep,
+  ReviewSubmissionStep,
+} from "@/features/submissions/components/new-submission-steps";
+import {
+  submissionSteps,
+  SubmissionStepProgress,
+} from "@/features/submissions/components/submission-step-progress";
+import {
+  createNewSubmissionSchema,
+  type NewSubmissionFormValues,
+} from "@/features/submissions/new-submission-schema";
+import { submissionQueryKeys } from "@/features/submissions/query-keys";
+import { ApiError } from "@/lib/api/errors";
 
-const languageOptions = [
-  { label: "English", value: "en" },
-  { label: "Arabic", value: "ar" },
-  { label: "French", value: "fr" },
+const stepFields: Array<Array<FieldPath<NewSubmissionFormValues>>> = [
+  ["title", "abstract", "keywords", "language", "section", "cover_letter"],
+  ["coauthors"],
+  ["file", "blinded_file"],
+  [
+    "confirm_original",
+    "confirm_authors",
+    "confirm_guidelines",
+    "confirm_files",
+    "confirm_workflow",
+  ],
 ];
 
-type FormErrors = Partial<Record<string, string>>;
+const fieldStep: Partial<Record<FieldPath<NewSubmissionFormValues>, number>> = {
+  title: 0,
+  abstract: 0,
+  keywords: 0,
+  language: 0,
+  section: 0,
+  cover_letter: 0,
+  coauthors: 1,
+  file: 2,
+  blinded_file: 2,
+  confirm_original: 3,
+  confirm_authors: 3,
+  confirm_guidelines: 3,
+  confirm_files: 3,
+  confirm_workflow: 3,
+};
 
-function isPdfFile(file: File) {
-  return (
-    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-  );
-}
-
-function getApiFieldErrors(error: unknown): FormErrors {
-  if (!(error instanceof ApiError)) {
-    return {};
-  }
-
-  if (
-    typeof error.details !== "object" ||
-    error.details === null ||
-    Array.isArray(error.details)
-  ) {
-    return {};
-  }
-
-  const errors: FormErrors = {};
-
-  for (const [field, value] of Object.entries(error.details)) {
-    if (Array.isArray(value)) {
-      errors[field] = value.map(String).join(" ");
-    } else if (typeof value === "string") {
-      errors[field] = value;
-    }
-  }
-
-  return errors;
-}
-
-function getGeneralErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Something went wrong. Please try again.";
-}
+const apiFields = new Set<FieldPath<NewSubmissionFormValues>>([
+  "title",
+  "abstract",
+  "keywords",
+  "language",
+  "section",
+  "cover_letter",
+  "coauthors",
+  "file",
+  "blinded_file",
+]);
 
 export function NewSubmissionForm() {
   const router = useRouter();
   const queryClient = useQueryClient();
-
-  const [file, setFile] = React.useState<File | null>(null);
-  const [blindedFile, setBlindedFile] = React.useState<File | null>(null);
-  const [formError, setFormError] = React.useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = React.useState<FormErrors>({});
-  const [keywords, setKeywords] = React.useState<string[]>([]);
-  const [coauthors, setCoauthors] = React.useState<CoauthorDraft[]>([]);
+  const { user } = useAuth();
+  const [currentStep, setCurrentStep] = React.useState(0);
+  const [submissionError, setSubmissionError] = React.useState<string | null>(
+    null,
+  );
+  const stepHeadingRef = React.useRef<HTMLDivElement>(null);
+  const schema = React.useMemo(
+    () => createNewSubmissionSchema(user?.email),
+    [user?.email],
+  );
+  const form = useForm<NewSubmissionFormValues>({
+    resolver: zodResolver(schema),
+    mode: "onTouched",
+    defaultValues: {
+      title: "",
+      abstract: "",
+      keywords: [],
+      language: "en",
+      section: "",
+      cover_letter: "",
+      coauthors: [],
+      file: null,
+      blinded_file: null,
+      confirm_original: false,
+      confirm_authors: false,
+      confirm_guidelines: false,
+      confirm_files: false,
+      confirm_workflow: false,
+    },
+  });
   const sectionsQuery = useQuery({
     queryKey: ["public-sections"],
     queryFn: getPublicSections,
+    staleTime: 5 * 60 * 1000,
   });
+
+  React.useEffect(() => {
+    stepHeadingRef.current?.focus();
+  }, [currentStep]);
 
   const createSubmissionMutation = useMutation({
     mutationFn: createSubmission,
     onSuccess: async (submission) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["author-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["author-submissions"] }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.dashboard(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: submissionQueryKeys.lists(),
+        }),
       ]);
-
       router.replace(`/author/submissions/${submission.id}`);
     },
     onError: (error) => {
-      setFormError(getGeneralErrorMessage(error));
-      setFieldErrors(getApiFieldErrors(error));
+      const apiFieldErrors = getApiFieldErrors(error);
+      let earliestStep = 3;
+
+      Object.entries(apiFieldErrors).forEach(([fieldName, message]) => {
+        if (!apiFields.has(fieldName as FieldPath<NewSubmissionFormValues>)) {
+          return;
+        }
+
+        const field = fieldName as FieldPath<NewSubmissionFormValues>;
+        form.setError(field, { type: "server", message });
+        earliestStep = Math.min(earliestStep, fieldStep[field] ?? 3);
+      });
+
+      setSubmissionError(getGeneralErrorMessage(error));
+      setCurrentStep(earliestStep);
     },
   });
-
-  function validateForm(formData: FormData) {
-    const errors: FormErrors = {};
-
-    const title = String(formData.get("title") ?? "").trim();
-    const abstract = String(formData.get("abstract") ?? "").trim();
-    const language = String(formData.get("language") ?? "").trim();
-    const section = String(formData.get("section") ?? "").trim();
-
-    if (!title) {
-      errors.title = "Title is required.";
-    }
-
-    if (!abstract) {
-      errors.abstract = "Abstract is required.";
-    }
-
-    if (!language) {
-      errors.language = "Language is required.";
-    }
-
-    if (!section) {
-      errors.section = "Section is required.";
-    }
-    if (keywords.length < 3 || keywords.length > 8) {
-      errors.keywords = "Provide between 3 and 8 distinct keywords.";
-    }
-
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const orcidPattern = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
-    const seenEmails = new Set<string>();
-
-    for (const coauthor of coauthors) {
-      const fullName = coauthor.full_name.trim();
-      const email = coauthor.email.trim().toLocaleLowerCase();
-      const orcid = coauthor.orcid.trim();
-
-      if (!fullName || !email) {
-        errors.coauthors =
-          "Each coauthor must have a full name and email address.";
-        break;
-      }
-
-      if (!emailPattern.test(email)) {
-        errors.coauthors = `Enter a valid email address for ${fullName}.`;
-        break;
-      }
-
-      if (seenEmails.has(email)) {
-        errors.coauthors = `The email ${coauthor.email} is listed more than once.`;
-        break;
-      }
-
-      if (orcid && !orcidPattern.test(orcid)) {
-        errors.coauthors = `Enter a valid ORCID for ${fullName}.`;
-        break;
-      }
-
-      seenEmails.add(email);
-    }
-
-    if (!file) {
-      errors.file = "Please upload the manuscript PDF.";
-    } else if (!isPdfFile(file)) {
-      errors.file = "Only PDF files are accepted.";
-    } else if (file.size > MAX_FILE_SIZE_BYTES) {
-      errors.file = "The manuscript file must be 50MB or smaller.";
-    }
-
-    if (!blindedFile) {
-      errors.blinded_file = "Please upload the blinded manuscript PDF.";
-    } else if (!isPdfFile(blindedFile)) {
-      errors.blinded_file = "Only PDF files are accepted.";
-    } else if (blindedFile.size > MAX_FILE_SIZE_BYTES) {
-      errors.blinded_file =
-        "The blinded manuscript file must be 50MB or smaller.";
-    }
-
-    const confirmations = [
-      "confirm_original",
-      "confirm_authors",
-      "confirm_guidelines",
-      "confirm_pdf",
-    ];
-
-    const missingConfirmation = confirmations.some(
-      (confirmation) => formData.get(confirmation) !== "on",
-    );
-
-    if (missingConfirmation) {
-      errors.confirmations =
-        "Please confirm all manuscript submission requirements.";
-    }
-
-    return errors;
-  }
-
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0] ?? null;
-    setFile(selectedFile);
-
-    if (!selectedFile) {
-      return;
-    }
-
-    setFieldErrors((currentErrors) => {
-      const nextErrors = { ...currentErrors };
-      delete nextErrors.file;
-      return nextErrors;
-    });
-  }
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const errors = validateForm(formData);
-
-    setFormError(null);
-    setFieldErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      setFormError("Please fix the highlighted fields before submitting.");
-      return;
-    }
-
-    createSubmissionMutation.mutate({
-      title: String(formData.get("title") ?? "").trim(),
-      abstract: String(formData.get("abstract") ?? "").trim(),
-      language: String(formData.get("language") ?? "").trim(),
-      section: String(formData.get("section") ?? "").trim(),
-      cover_letter: String(formData.get("cover_letter") ?? "").trim(),
-      keywords,
-      coauthors: coauthors.map(({ clientId: _clientId, ...coauthor }) => ({
-        full_name: coauthor.full_name.trim(),
-        email: coauthor.email.trim(),
-        affiliation: coauthor.affiliation.trim(),
-        orcid: coauthor.orcid.trim(),
-        country: coauthor.country.trim(),
-      })),
-      file: file as File,
-      blinded_file: blindedFile as File,
-    });
-  }
 
   const sections = sectionsQuery.data ?? [];
   const isSubmitting = createSubmissionMutation.isPending;
 
+  async function goToNextStep() {
+    setSubmissionError(null);
+    const isValid = await form.trigger(stepFields[currentStep], {
+      shouldFocus: true,
+    });
+
+    if (isValid) {
+      setCurrentStep((step) => Math.min(step + 1, submissionSteps.length - 1));
+    }
+  }
+
+  function goToPreviousStep() {
+    setSubmissionError(null);
+    setCurrentStep((step) => Math.max(step - 1, 0));
+  }
+
+  function handleInvalid(errors: FieldErrors<NewSubmissionFormValues>) {
+    const earliestStep = getEarliestErrorStep(errors);
+    setSubmissionError(
+      "Review the highlighted fields before submitting the manuscript.",
+    );
+    setCurrentStep(earliestStep);
+  }
+
+  function handleValidSubmit(values: NewSubmissionFormValues) {
+    if (!values.file || !values.blinded_file || isSubmitting) {
+      return;
+    }
+
+    setSubmissionError(null);
+    createSubmissionMutation.mutate({
+      title: values.title.trim(),
+      abstract: values.abstract.trim(),
+      language: values.language,
+      section: values.section,
+      cover_letter: values.cover_letter.trim(),
+      keywords: values.keywords.map((keyword) => keyword.trim()),
+      coauthors: values.coauthors.map((coauthor) => ({
+        full_name: coauthor.full_name.trim(),
+        email: coauthor.email.trim(),
+        affiliation: coauthor.affiliation.trim(),
+        orcid: coauthor.orcid.trim().toUpperCase(),
+        country: coauthor.country.trim(),
+      })),
+      file: values.file,
+      blinded_file: values.blinded_file,
+    });
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <div>
-          <p className="text-sm font-medium text-slate-500">New manuscript</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-            Submit Manuscript
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Provide the manuscript metadata, choose the appropriate journal
-            section, and upload the final PDF for editorial screening.
-          </p>
-        </div>
-
-        {formError ? (
-          <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {formError}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">
-          Manuscript information
-        </h2>
-
-        <div className="mt-5 space-y-5">
-          <div>
-            <label
-              htmlFor="title"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Manuscript title
-            </label>
-            <input
-              id="title"
-              name="title"
-              type="text"
-              maxLength={500}
-              required
-              className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-            />
-            {fieldErrors.title ? (
-              <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p>
-            ) : (
-              <p className="mt-1 text-xs text-slate-500">
-                Use the complete title exactly as it appears in the manuscript.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="abstract"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Abstract
-            </label>
-            <textarea
-              id="abstract"
-              name="abstract"
-              rows={8}
-              required
-              className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-            />
-            {fieldErrors.abstract ? (
-              <p className="mt-1 text-sm text-red-600">
-                {fieldErrors.abstract}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-slate-500">
-                The abstract is used for editorial screening, topic analysis,
-                and reviewer recommendation.
-              </p>
-            )}
-          </div>
-          <KeywordInput
-            value={keywords}
-            disabled={isSubmitting}
-            error={fieldErrors.keywords}
-            onChange={(nextKeywords) => {
-              setKeywords(nextKeywords);
-
-              setFieldErrors((currentErrors) => {
-                const nextErrors = { ...currentErrors };
-                delete nextErrors.keywords;
-                return nextErrors;
-              });
-            }}
-          />
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <div>
-              <label
-                htmlFor="section"
-                className="block text-sm font-medium text-slate-700"
-              >
-                Journal section
-              </label>
-              <select
-                id="section"
-                name="section"
-                required
-                disabled={sectionsQuery.isLoading}
-                className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:bg-slate-50"
-              >
-                <option value="">
-                  {sectionsQuery.isLoading
-                    ? "Loading sections..."
-                    : "Select a section"}
-                </option>
-                {sections.map((section) => (
-                  <option key={section.id} value={section.id}>
-                    {section.name}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.section ? (
-                <p className="mt-1 text-sm text-red-600">
-                  {fieldErrors.section}
-                </p>
-              ) : null}
-              {sectionsQuery.isError ? (
-                <p className="mt-1 text-sm text-red-600">
-                  Could not load journal sections. Please refresh the page.
-                </p>
-              ) : null}
-            </div>
-
-            <div>
-              <label
-                htmlFor="language"
-                className="block text-sm font-medium text-slate-700"
-              >
-                Manuscript language
-              </label>
-              <select
-                id="language"
-                name="language"
-                defaultValue="en"
-                required
-                className="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-              >
-                {languageOptions.map((language) => (
-                  <option key={language.value} value={language.value}>
-                    {language.label}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.language ? (
-                <p className="mt-1 text-sm text-red-600">
-                  {fieldErrors.language}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
-      <CoauthorFields
-        value={coauthors}
-        disabled={isSubmitting}
-        error={fieldErrors.coauthors}
-        onChange={(nextCoauthors) => {
-          setCoauthors(nextCoauthors);
-
-          setFieldErrors((currentErrors) => {
-            const nextErrors = { ...currentErrors };
-            delete nextErrors.coauthors;
-            return nextErrors;
-          });
-        }}
+    <div className="space-y-7">
+      <PageHeader
+        eyebrow="New manuscript"
+        title="Submit a manuscript"
+        description="Complete four local steps, then send one final submission to the journal. This form does not create a server-side draft."
+        actions={
+          <Link
+            href="/author/submissions"
+            className={buttonVariants({ variant: "outline", size: "touch" })}
+          >
+            Cancel
+          </Link>
+        }
       />
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">
-          Manuscript file
-        </h2>
 
-        <div className="mt-5 space-y-5">
-          <label
-            htmlFor="file"
-            className="block text-sm font-medium text-slate-700"
-          >
-            Full manuscript PDF - may contain author names, affiliations and
-            acknowledgements.
-          </label>
-          <input
-            id="file"
-            name="file"
-            type="file"
-            accept="application/pdf,.pdf"
-            required
-            onChange={handleFileChange}
-            className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
-          />
-          {fieldErrors.file ? (
-            <p className="mt-1 text-sm text-red-600">{fieldErrors.file}</p>
-          ) : (
-            <p className="mt-1 text-xs text-slate-500">
-              PDF only. Maximum file size: 50MB.
-            </p>
-          )}
-        </div>
+      <Card>
+        <CardContent>
+          <SubmissionStepProgress currentStep={currentStep} />
+        </CardContent>
+      </Card>
 
-        <div>
-          <label
-            htmlFor="blinded_file"
-            className="block text-sm font-medium text-slate-700"
-          >
-            Blinded manuscript PDF - must remove author names, affiliations,
-            acknowledgements and identifying metadata.
-          </label>
-          <input
-            id="blinded_file"
-            name="blinded_file"
-            type="file"
-            accept="application/pdf,.pdf"
-            required
-            onChange={(event) => {
-              const selectedFile = event.target.files?.[0] ?? null;
-              setBlindedFile(selectedFile);
-
-              if (!selectedFile) {
-                return;
-              }
-
-              setFieldErrors((currentErrors) => {
-                const nextErrors = { ...currentErrors };
-                delete nextErrors.blinded_file;
-                return nextErrors;
-              });
-            }}
-            className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
-          />
-          {fieldErrors.blinded_file ? (
-            <p className="mt-1 text-sm text-red-600">
-              {fieldErrors.blinded_file}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-slate-500">
-              PDF only. Maximum file size: 50MB.
-            </p>
-          )}
-        </div>
-
-        {file ? (
-          <div className="mt-4 rounded-lg border bg-slate-50 p-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-950">{file.name}</p>
-            <p className="mt-1 text-slate-500">
-              {(file.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-          </div>
-        ) : null}
-
-        {blindedFile ? (
-          <div className="mt-4 rounded-lg border bg-slate-50 p-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-950">{blindedFile.name}</p>
-            <p className="mt-1 text-slate-500">
-              {(blindedFile.size / 1024 / 1024).toFixed(2)} MB
-            </p>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Cover letter</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Optional message to the editorial team.
-        </p>
-
-        <textarea
-          id="cover_letter"
-          name="cover_letter"
-          rows={6}
-          className="mt-5 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
+      {submissionError ? (
+        <Notice
+          tone="destructive"
+          title="Submission could not continue"
+          description={submissionError}
         />
-      </section>
+      ) : null}
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">
-          Author confirmation
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Confirm the manuscript is ready for editorial screening.
-        </p>
+      {isSubmitting ? (
+        <Notice
+          tone="info"
+          icon={LoaderCircle}
+          title="Uploading your manuscript"
+          description="Keep this page open while both PDFs and the manuscript metadata are sent. A percentage is not available from the current request layer."
+          className="[&_svg]:animate-spin motion-reduce:[&_svg]:animate-none"
+        />
+      ) : null}
 
-        <div className="mt-5 space-y-3">
-          <ConfirmationCheckbox
-            name="confirm_original"
-            label="I confirm this manuscript has not been published elsewhere and is not under review by another journal."
-          />
-          <ConfirmationCheckbox
-            name="confirm_authors"
-            label="I confirm all authors have approved this submission."
-          />
-          <ConfirmationCheckbox
-            name="confirm_guidelines"
-            label="I confirm the manuscript follows the journal author guidelines."
-          />
-          <ConfirmationCheckbox
-            name="confirm_pdf"
-            label="I confirm the uploaded PDF is the correct manuscript file for review."
-          />
-        </div>
+      <form
+        onSubmit={form.handleSubmit(handleValidSubmit, handleInvalid)}
+        aria-busy={isSubmitting}
+        noValidate
+      >
+        <Card>
+          <CardContent>
+            <div
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="outline-none"
+              aria-label={`Step ${currentStep + 1}: ${submissionSteps[currentStep]}`}
+            >
+              <div hidden={currentStep !== 0}>
+                <ManuscriptDetailsStep
+                  form={form}
+                  sections={sections}
+                  sectionsLoading={sectionsQuery.isLoading}
+                  sectionsError={sectionsQuery.isError}
+                  disabled={isSubmitting}
+                  onRetrySections={() => sectionsQuery.refetch()}
+                />
+              </div>
+              <div hidden={currentStep !== 1}>
+                <AuthorsStep form={form} user={user} disabled={isSubmitting} />
+              </div>
+              <div hidden={currentStep !== 2}>
+                <FilesStep form={form} disabled={isSubmitting} />
+              </div>
+              <div hidden={currentStep !== 3}>
+                <ReviewSubmissionStep
+                  form={form}
+                  user={user}
+                  sections={sections}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
 
-        {fieldErrors.confirmations ? (
-          <p className="mt-3 text-sm text-red-600">
-            {fieldErrors.confirmations}
-          </p>
-        ) : null}
-      </section>
+            <div className="mt-7 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+              {currentStep === 0 ? (
+                <Link
+                  href="/author/submissions"
+                  className={buttonVariants({
+                    variant: "ghost",
+                    size: "touch",
+                  })}
+                >
+                  Cancel
+                </Link>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="touch"
+                  onClick={goToPreviousStep}
+                  disabled={isSubmitting}
+                >
+                  <ArrowLeft aria-hidden="true" />
+                  Back
+                </Button>
+              )}
 
-      <div className="flex flex-col-reverse gap-3 rounded-xl border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <Link
-          href="/author/submissions"
-          className="inline-flex justify-center rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          Cancel
-        </Link>
+              {currentStep < submissionSteps.length - 1 ? (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="touch"
+                  onClick={goToNextStep}
+                  disabled={
+                    isSubmitting ||
+                    sectionsQuery.isLoading ||
+                    sectionsQuery.isError
+                  }
+                >
+                  Continue
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="accent"
+                  size="touch"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <LoaderCircle
+                      className="animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Send aria-hidden="true" />
+                  )}
+                  {isSubmitting ? "Submitting…" : "Submit manuscript"}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </form>
 
-        <button
-          type="submit"
-          disabled={isSubmitting || sectionsQuery.isLoading}
-          className="inline-flex justify-center rounded-md bg-slate-950 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Submitting manuscript..." : "Submit manuscript"}
-        </button>
-      </div>
-    </form>
+      <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <FilePlus2 className="size-4" aria-hidden="true" />
+        One multipart request is sent only after final confirmation.
+      </p>
+    </div>
   );
 }
 
-function ConfirmationCheckbox({
-  name,
-  label,
-}: {
-  name: string;
-  label: string;
-}) {
-  return (
-    <label className="flex gap-3 rounded-lg border border-slate-200 p-3 text-sm text-slate-700">
-      <input
-        type="checkbox"
-        name={name}
-        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-950"
-      />
-      <span>{label}</span>
-    </label>
-  );
+function getApiFieldErrors(error: unknown) {
+  const errors: Record<string, string> = {};
+
+  if (
+    !(error instanceof ApiError) ||
+    !error.details ||
+    typeof error.details !== "object" ||
+    Array.isArray(error.details)
+  ) {
+    return errors;
+  }
+
+  Object.entries(error.details).forEach(([field, value]) => {
+    const message = extractErrorMessage(value);
+
+    if (message) {
+      errors[field] = message;
+    }
+  });
+
+  return errors;
+}
+
+function extractErrorMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = extractErrorMessage(item);
+
+      if (message) {
+        return message;
+      }
+    }
+  }
+
+  if (value && typeof value === "object") {
+    for (const nestedValue of Object.values(value)) {
+      const message = extractErrorMessage(nestedValue);
+
+      if (message) {
+        return message;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getGeneralErrorMessage(error: unknown) {
+  if (error instanceof ApiError || error instanceof Error) {
+    return error.message;
+  }
+
+  return "The journal could not receive this submission. Please try again.";
+}
+
+function getEarliestErrorStep(errors: FieldErrors<NewSubmissionFormValues>) {
+  for (let step = 0; step < stepFields.length; step += 1) {
+    if (stepFields[step].some((field) => hasFieldError(errors, field))) {
+      return step;
+    }
+  }
+
+  return 3;
+}
+
+function hasFieldError(
+  errors: FieldErrors<NewSubmissionFormValues>,
+  field: FieldPath<NewSubmissionFormValues>,
+) {
+  const [rootField] = field.split(".");
+  return Boolean(errors[rootField as keyof FieldErrors<NewSubmissionFormValues>]);
 }

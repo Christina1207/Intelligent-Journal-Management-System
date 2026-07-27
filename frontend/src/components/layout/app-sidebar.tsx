@@ -13,7 +13,6 @@ import {
 import * as React from "react";
 
 import {
-  DASHBOARD_NAVIGATION_ITEMS,
   getNavigationItemsForRoles,
   type NavigationIcon,
 } from "@/lib/auth/permissions";
@@ -54,10 +53,7 @@ export function AppSidebar() {
   );
   const roles = currentUser?.roles ?? [];
 
-  const navigationItems =
-    roles.length > 0
-      ? getNavigationItemsForRoles(roles)
-      : DASHBOARD_NAVIGATION_ITEMS;
+  const navigationItems = getNavigationItemsForRoles(roles);
 
   return (
     <aside className="hidden w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground md:block">

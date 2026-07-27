@@ -1,167 +1,155 @@
-"use client";
+"use client"
 
-import { useState } from "react";
+import {
+  Check,
+  Copy,
+  Download,
+  FileCode2,
+  LoaderCircle,
+} from "lucide-react"
+import { useState } from "react"
+
+import { Button, buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 import {
   getPublicArticleExportUrl,
   requestPublicArticleDownload,
-} from "../api/public-api";
-import type { PublicArticle } from "../types";
-import { buildPlainTextCitation } from "../utils/article-details";
+} from "../api/public-api"
+import type { PublicArticle } from "../types"
 
 type ArticleActionPanelProps = {
-  article: PublicArticle;
-};
+  article: PublicArticle
+}
 
-type CopyState = "idle" | "copied" | "failed";
-type DownloadState = "idle" | "loading" | "failed";
-
-const secondaryActionStyles =
-  "rounded-lg border px-4 py-2.5 text-center text-sm font-semibold " +
-  "text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2";
+type CopyState = "idle" | "copied" | "failed"
+type DownloadState = "idle" | "loading" | "failed"
 
 export function ArticleActionPanel({ article }: ArticleActionPanelProps) {
-  const [citationCopyState, setCitationCopyState] = useState<CopyState>("idle");
-  const [linkCopyState, setLinkCopyState] = useState<CopyState>("idle");
-  const [downloadState, setDownloadState] = useState<DownloadState>("idle");
+  const [linkCopyState, setLinkCopyState] = useState<CopyState>("idle")
+  const [downloadState, setDownloadState] = useState<DownloadState>("idle")
 
-  async function copyText(text: string, onChange: (state: CopyState) => void) {
+  async function copyArticleLink() {
     try {
-      await navigator.clipboard.writeText(text);
-      onChange("copied");
-
-      window.setTimeout(() => {
-        onChange("idle");
-      }, 1800);
+      await navigator.clipboard.writeText(window.location.href)
+      setLinkCopyState("copied")
     } catch {
-      onChange("failed");
-
-      window.setTimeout(() => {
-        onChange("idle");
-      }, 1800);
+      setLinkCopyState("failed")
     }
-  }
 
-  function copyCitation() {
-    void copyText(buildPlainTextCitation(article), setCitationCopyState);
-  }
-
-  function copyArticleLink() {
-    void copyText(window.location.href, setLinkCopyState);
+    window.setTimeout(() => setLinkCopyState("idle"), 1800)
   }
 
   async function downloadPdf() {
     if (downloadState === "loading") {
-      return;
+      return
     }
 
-    setDownloadState("loading");
+    setDownloadState("loading")
 
     try {
-      const download = await requestPublicArticleDownload(article.slug);
-
-      /*
-       * Navigation occurs only after the backend confirms that the
-       * article is published and returns its temporary storage URL.
-       */
-      window.location.assign(download.download_url);
+      const download = await requestPublicArticleDownload(article.slug)
+      window.location.assign(download.download_url)
     } catch {
-      setDownloadState("failed");
-
-      window.setTimeout(() => {
-        setDownloadState("idle");
-      }, 3000);
+      setDownloadState("failed")
+      window.setTimeout(() => setDownloadState("idle"), 3000)
     }
   }
 
-  const bibtexUrl = getPublicArticleExportUrl(article.slug, "bibtex");
-  const risUrl = getPublicArticleExportUrl(article.slug, "ris");
-  const dublinCoreUrl = getPublicArticleExportUrl(article.slug, "dc");
+  const exports = [
+    {
+      label: "BibTeX",
+      href: getPublicArticleExportUrl(article.slug, "bibtex"),
+      filename: `${article.slug}.bib`,
+    },
+    {
+      label: "RIS",
+      href: getPublicArticleExportUrl(article.slug, "ris"),
+      filename: `${article.slug}.ris`,
+    },
+    {
+      label: "Dublin Core",
+      href: getPublicArticleExportUrl(article.slug, "dc"),
+      filename: `${article.slug}.xml`,
+    },
+  ]
 
   return (
-    <aside className="rounded-2xl border bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-bold text-slate-950">Article Actions</h2>
+    <aside className="rounded-xl border border-border bg-card p-5 shadow-xs">
+      <h2 className="font-sans text-base font-semibold text-foreground">
+        Read and export
+      </h2>
 
-      <div className="mt-5 grid gap-3">
-        <button
-          type="button"
-          disabled={downloadState === "loading"}
-          aria-busy={downloadState === "loading"}
-          onClick={() => {
-            void downloadPdf();
-          }}
-          className="rounded-lg bg-slate-950 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
-        >
-          {downloadState === "loading" ? "Preparing PDF..." : "Download PDF"}
-        </button>
+      <Button
+        type="button"
+        variant="accent"
+        size="touch"
+        className="mt-4 w-full"
+        disabled={downloadState === "loading"}
+        aria-busy={downloadState === "loading"}
+        onClick={() => void downloadPdf()}
+      >
+        {downloadState === "loading" ? (
+          <LoaderCircle
+            className="animate-spin"
+            data-icon="inline-start"
+            aria-hidden="true"
+          />
+        ) : (
+          <Download data-icon="inline-start" aria-hidden="true" />
+        )}
+        {downloadState === "loading" ? "Preparing PDF…" : "Download PDF"}
+      </Button>
 
-        <button
-          type="button"
-          onClick={copyCitation}
-          className={secondaryActionStyles}
-        >
-          {citationCopyState === "copied"
-            ? "Citation copied"
-            : citationCopyState === "failed"
-              ? "Could not copy"
-              : "Copy Citation"}
-        </button>
+      <Button
+        type="button"
+        variant="outline"
+        size="touch"
+        className="mt-2 w-full"
+        onClick={() => void copyArticleLink()}
+      >
+        {linkCopyState === "copied" ? (
+          <Check data-icon="inline-start" aria-hidden="true" />
+        ) : (
+          <Copy data-icon="inline-start" aria-hidden="true" />
+        )}
+        {linkCopyState === "copied"
+          ? "Link copied"
+          : linkCopyState === "failed"
+            ? "Could not copy"
+            : "Copy article link"}
+      </Button>
 
-        <button
-          type="button"
-          onClick={copyArticleLink}
-          className={secondaryActionStyles}
-        >
-          {linkCopyState === "copied"
-            ? "Link copied"
-            : linkCopyState === "failed"
-              ? "Could not copy"
-              : "Copy Link"}
-        </button>
-
-        <a
-          href={bibtexUrl}
-          download={`${article.slug}.bib`}
-          className={secondaryActionStyles}
-        >
-          Export BibTeX
-        </a>
-
-        <a
-          href={risUrl}
-          download={`${article.slug}.ris`}
-          className={secondaryActionStyles}
-        >
-          Export RIS
-        </a>
-
-        <a
-          href={dublinCoreUrl}
-          download={`${article.slug}.xml`}
-          className={secondaryActionStyles}
-        >
-          Export Dublin Core
-        </a>
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          <FileCode2 className="size-4" aria-hidden="true" />
+          Export metadata
+        </p>
+        <div className="mt-3 grid gap-2">
+          {exports.map((item) => (
+            <a
+              key={item.label}
+              href={item.href}
+              download={item.filename}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "touch" }),
+                "justify-start"
+              )}
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
       </div>
 
-      <p
-        role={downloadState === "failed" ? "alert" : "status"}
-        aria-live="polite"
-        className={
-          downloadState === "failed"
-            ? "mt-4 text-xs leading-5 text-red-700"
-            : "sr-only"
-        }
-      >
-        {downloadState === "failed"
-          ? "The article PDF is currently unavailable. Please try again."
-          : ""}
-      </p>
-
-      <p className="mt-4 text-xs leading-5 text-slate-500">
-        Citation files use the article metadata preserved at publication time.
-      </p>
+      {downloadState === "failed" ? (
+        <p
+          className="mt-4 text-xs leading-5 text-status-danger-foreground"
+          role="alert"
+        >
+          The article PDF is currently unavailable. Please try again.
+        </p>
+      ) : null}
     </aside>
-  );
+  )
 }

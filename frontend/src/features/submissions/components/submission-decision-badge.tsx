@@ -1,19 +1,47 @@
+import {
+  CircleCheck,
+  CircleX,
+  Clock3,
+  FilePenLine,
+  type LucideIcon,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
 import type { SubmissionDecision } from "@/features/submissions/types";
 
-const decisionLabels: Record<SubmissionDecision, string> = {
-  PENDING: "Pending",
-  ACCEPTED: "Accepted",
-  REJECTED: "Rejected",
-  MAJOR_REVISION: "Major revision",
-  MINOR_REVISION: "Minor revision",
-};
-
-const decisionClasses: Record<SubmissionDecision, string> = {
-  PENDING: "border-slate-200 bg-slate-50 text-slate-700",
-  ACCEPTED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  REJECTED: "border-red-200 bg-red-50 text-red-700",
-  MAJOR_REVISION: "border-orange-200 bg-orange-50 text-orange-700",
-  MINOR_REVISION: "border-amber-200 bg-amber-50 text-amber-700",
+const decisionPresentation: Record<
+  SubmissionDecision,
+  { label: string; icon: LucideIcon; className: string }
+> = {
+  PENDING: {
+    label: "Decision pending",
+    icon: Clock3,
+    className: "border-border bg-surface-muted text-text-secondary",
+  },
+  ACCEPTED: {
+    label: "Accepted",
+    icon: CircleCheck,
+    className:
+      "border-status-success-border bg-status-success-subtle text-status-success-foreground",
+  },
+  REJECTED: {
+    label: "Rejected",
+    icon: CircleX,
+    className:
+      "border-status-danger-border bg-status-danger-subtle text-status-danger-foreground",
+  },
+  MAJOR_REVISION: {
+    label: "Major revision",
+    icon: FilePenLine,
+    className:
+      "border-status-action-border bg-status-action-subtle text-status-action-foreground",
+  },
+  MINOR_REVISION: {
+    label: "Minor revision",
+    icon: FilePenLine,
+    className:
+      "border-status-action-border bg-status-action-subtle text-status-action-foreground",
+  },
 };
 
 type SubmissionDecisionBadgeProps = {
@@ -23,15 +51,20 @@ type SubmissionDecisionBadgeProps = {
 export function SubmissionDecisionBadge({
   decision,
 }: SubmissionDecisionBadgeProps) {
+  const presentation = decisionPresentation[decision];
+  const Icon = presentation.icon;
+
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${decisionClasses[decision]}`}
+    <Badge
+      variant="outline"
+      className={`h-auto min-h-6 gap-1.5 rounded-md px-2 py-1 whitespace-normal ${presentation.className}`}
     >
-      {decisionLabels[decision]}
-    </span>
+      <Icon aria-hidden="true" />
+      {presentation.label}
+    </Badge>
   );
 }
 
 export function getSubmissionDecisionLabel(decision: SubmissionDecision) {
-  return decisionLabels[decision];
+  return decisionPresentation[decision].label;
 }
