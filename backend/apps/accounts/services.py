@@ -1,7 +1,11 @@
 import logging
 from django.utils import timezone
 from django.db import transaction
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import (
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 
 from apps.core.embeddings import EmbeddingService
 from apps.core.orcid import ORCIDClient
@@ -202,15 +206,18 @@ class ReviewerApplicationService:
             )
 
     @staticmethod
-    def _get_application_for_update(*, user=None, application_id=None):
+    def _get_application_for_update(
+        *,
+        user=None,
+        application_id=None,
+    ):
         queryset = (
             ReviewerApplication.objects
-            .select_for_update()
             .select_related(
                 "user",
                 "section",
-                "reviewed_by",
             )
+            .select_for_update(of=("self",))
         )
 
         if user is not None:
@@ -221,8 +228,8 @@ class ReviewerApplicationService:
         try:
             return queryset.get(**lookup)
         except ReviewerApplication.DoesNotExist as exc:
-            raise ValidationError(
-                {"detail": "Reviewer application not found."}
+            raise NotFound(
+                "Reviewer application not found."
             ) from exc
 
     @classmethod

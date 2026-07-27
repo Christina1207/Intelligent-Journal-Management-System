@@ -117,6 +117,9 @@ SPECTACULAR_SETTINGS = {
         "ReviewerSyncStatusEnum": (
             "apps.accounts.models.ReviewerProfile.SyncStatus"
         ),
+        "ReviewerApplicationStatusEnum": (
+            "apps.accounts.models.ReviewerApplication.Status"
+        ),
         "IssueStatusEnum": "apps.journals.models.Issue.Status",
         "PublishedArticleStatusEnum": (
             "apps.publishing.models.PublishedArticle.Status"

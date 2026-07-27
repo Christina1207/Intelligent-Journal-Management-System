@@ -218,6 +218,30 @@ class ReviewerApplicationSubmitSerializer(serializers.Serializer):
     The service layer remains responsible for eligibility checks,
     persistence, and application state transitions.
     """
+    allowed_fields = {
+        "section_id",
+        "keywords",
+        "biography",
+    }
+
+    def to_internal_value(self, data):
+        if not hasattr(data, "keys"):
+            raise serializers.ValidationError(
+                "Expected an object of application fields."
+            )
+
+        unsupported_fields = set(data.keys()) - self.allowed_fields
+
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field cannot be submitted here."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+
+        return super().to_internal_value(data)
+
 
     section_id = serializers.PrimaryKeyRelatedField(
         queryset=Section.objects.all(),

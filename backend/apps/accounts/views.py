@@ -1,26 +1,34 @@
-from rest_framework import status
+from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import NotFound, ValidationError
+
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
+    OpenApiParameter,
     OpenApiResponse,
     extend_schema,
     extend_schema_view,
 )
 
-from .models import Role,ReviewerProfile
+from .models import Role,ReviewerProfile,ReviewerApplication
 from .tasks import generate_reviewer_expertise_embedding
 from .serializers import (
     CurrentUserProfileUpdateSerializer,
+    DetailMessageSerializer,
     RegisterSerializer,
+    RegistrationResponseSerializer,
+    ReviewerApplicationApprovalSerializer,
+    ReviewerApplicationRejectionSerializer,
+    ReviewerApplicationSerializer,
+    ReviewerApplicationSubmitSerializer,
     ReviewerProfileSerializer,
     UserProfileSerializer,
-    RegistrationResponseSerializer,
-    DetailMessageSerializer,
 )
-from .services import ReviewerProfileService
-
+from .services import ReviewerProfileService,ReviewerApplicationService
+from .permissions import CanManageReviewerApplications
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -79,6 +87,279 @@ def me_view(request):
 
     return Response(UserProfileSerializer(user).data)
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Reviewer Applications"],
+        responses={
+            200: ReviewerApplicationSerializer,
+            404: OpenApiResponse(
+                description="The authenticated user has no application."
+            ),
+        },
+        description=(
+            "Return the authenticated user's reviewer application."
+        ),
+    ),
+    post=extend_schema(
+        tags=["Reviewer Applications"],
+        request=ReviewerApplicationSubmitSerializer,
+        responses={
+            201: ReviewerApplicationSerializer,
+            400: OpenApiResponse(
+                description="Invalid application or ineligible applicant."
+            ),
+        },
+        description=(
+            "Submit a reviewer application for one active section."
+        ),
+    ),
+    patch=extend_schema(
+        tags=["Reviewer Applications"],
+        request=ReviewerApplicationSubmitSerializer,
+        responses={
+            200: ReviewerApplicationSerializer,
+            400: OpenApiResponse(
+                description="Invalid update or immutable application."
+            ),
+            404: OpenApiResponse(
+                description="Reviewer application not found."
+            ),
+        },
+        description=(
+            "Update a pending application or resubmit a rejected one."
+        ),
+    ),
+)
+class ReviewerApplicationView(generics.GenericAPIView):
+    serializer_class = ReviewerApplicationSubmitSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            application = (
+                ReviewerApplication.objects
+                .select_related(
+                    "user",
+                    "section",
+                    "reviewed_by",
+                )
+                .get(user=request.user)
+            )
+        except ReviewerApplication.DoesNotExist as exc:
+            raise NotFound(
+                "You have not submitted a reviewer application."
+            ) from exc
+
+        return Response(
+            ReviewerApplicationSerializer(
+                application,
+                context=self.get_serializer_context(),
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        serializer = self.get_serializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        application = (
+            ReviewerApplicationService.submit_application(
+                user=request.user,
+                **serializer.validated_data,
+            )
+        )
+
+        return Response(
+            ReviewerApplicationSerializer(
+                application,
+                context=self.get_serializer_context(),
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def patch(self, request):
+        serializer = self.get_serializer(
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        application = (
+            ReviewerApplicationService.update_application(
+                user=request.user,
+                **serializer.validated_data,
+            )
+        )
+
+        return Response(
+            ReviewerApplicationSerializer(
+                application,
+                context=self.get_serializer_context(),
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+@extend_schema(
+    tags=["Reviewer Applications"],
+    parameters=[
+        OpenApiParameter(
+            name="status",
+            location=OpenApiParameter.QUERY,
+            required=False,
+            type=OpenApiTypes.STR,
+            enum=ReviewerApplication.Status.values,
+            description=(
+                "Optionally filter applications by status."
+            ),
+        ),
+    ],
+    responses={
+        200: ReviewerApplicationSerializer(many=True),
+        403: OpenApiResponse(
+            description=(
+                "Only journal-wide editorial administrators "
+                "can list applications."
+            )
+        ),
+    },
+)
+class ReviewerApplicationListView(generics.ListAPIView):
+    serializer_class = ReviewerApplicationSerializer
+    permission_classes = [CanManageReviewerApplications]
+
+    queryset = (
+        ReviewerApplication.objects
+        .select_related(
+            "user",
+            "section",
+            "reviewed_by",
+        )
+        .order_by("-submitted_at")
+    )
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        raw_status = self.request.query_params.get("status")
+
+        if not raw_status:
+            return queryset
+
+        normalized_status = raw_status.strip().upper()
+
+        if normalized_status not in ReviewerApplication.Status.values:
+            allowed_statuses = ", ".join(
+                ReviewerApplication.Status.values
+            )
+
+            raise ValidationError(
+                {
+                    "status": (
+                        f"Invalid status. Use one of: "
+                        f"{allowed_statuses}."
+                    )
+                }
+            )
+
+        return queryset.filter(
+            status=normalized_status,
+        )
+
+@extend_schema(
+    tags=["Reviewer Applications"],
+    request=ReviewerApplicationApprovalSerializer,
+    responses={
+        200: ReviewerApplicationSerializer,
+        400: OpenApiResponse(
+            description="The application cannot be approved."
+        ),
+        403: OpenApiResponse(
+            description=(
+                "The authenticated user cannot manage "
+                "reviewer applications."
+            )
+        ),
+        404: OpenApiResponse(
+            description="Reviewer application not found."
+        ),
+    },
+)
+class ReviewerApplicationApproveView(
+    generics.GenericAPIView
+):
+    serializer_class = ReviewerApplicationApprovalSerializer
+    permission_classes = [CanManageReviewerApplications]
+
+    def post(self, request, application_id):
+        serializer = self.get_serializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        application = (
+            ReviewerApplicationService.approve_application(
+                application_id=application_id,
+                reviewed_by=request.user,
+                **serializer.validated_data,
+            )
+        )
+
+        return Response(
+            ReviewerApplicationSerializer(
+                application,
+                context=self.get_serializer_context(),
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+@extend_schema(
+    tags=["Reviewer Applications"],
+    request=ReviewerApplicationRejectionSerializer,
+    responses={
+        200: ReviewerApplicationSerializer,
+        400: OpenApiResponse(
+            description="The application cannot be rejected."
+        ),
+        403: OpenApiResponse(
+            description=(
+                "The authenticated user cannot manage "
+                "reviewer applications."
+            )
+        ),
+        404: OpenApiResponse(
+            description="Reviewer application not found."
+        ),
+    },
+)
+class ReviewerApplicationRejectView(
+    generics.GenericAPIView
+):
+    serializer_class = ReviewerApplicationRejectionSerializer
+    permission_classes = [CanManageReviewerApplications]
+
+    def post(self, request, application_id):
+        serializer = self.get_serializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        application = (
+            ReviewerApplicationService.reject_application(
+                application_id=application_id,
+                reviewed_by=request.user,
+                **serializer.validated_data,
+            )
+        )
+
+        return Response(
+            ReviewerApplicationSerializer(
+                application,
+                context=self.get_serializer_context(),
+            ).data,
+            status=status.HTTP_200_OK,
+        )
 
 @extend_schema(
     tags=["Auth"],
