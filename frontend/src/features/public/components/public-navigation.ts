@@ -1,12 +1,15 @@
-export const submissionLoginHref =
-  "/login?next=/author/submissions/new"
+export const submissionLoginHref = "/login?next=/author/submissions/new";
 
 export const publicPrimaryNavigation = [
   { label: "Articles", href: "/articles" },
   { label: "Sections", href: "/sections" },
+  {
+    label: "Reviewers",
+    href: "/reviewers/apply",
+  },
   { label: "Archives", href: "/archives" },
   { label: "About", href: "/about" },
-] as const
+] as const;
 
 export const publicFooterNavigation = [
   {
@@ -33,6 +36,7 @@ export const publicFooterNavigation = [
       { label: "Open Access", href: "/open-access" },
       { label: "Contact the Journal", href: "/contact" },
       { label: "Author Login", href: "/login" },
+      { label: "Become a Reviewer", href: "/reviewers/apply" },
     ],
   },
-] as const
+] as const;
