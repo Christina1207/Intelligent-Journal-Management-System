@@ -36,7 +36,7 @@ export function EditorAssignmentPanel({
       <section
         aria-label="Loading editor assignment"
         aria-busy="true"
-        className="h-52 animate-pulse rounded-xl bg-muted"
+        className="h-52 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"
       />
     );
   }

@@ -103,8 +103,8 @@ export function EditorReviewProgressPanel({
   if (workspaceQuery.isPending) {
     return (
       <section className="space-y-3" aria-busy="true">
-        <div className="h-20 animate-pulse rounded-lg bg-muted" />
-        <div className="h-32 animate-pulse rounded-lg bg-muted" />
+        <div className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <div className="h-32 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
       </section>
     );
   }
@@ -196,7 +196,11 @@ export function EditorReviewProgressPanel({
           onClick={() => workspaceQuery.refetch()}
         >
           <RefreshCw
-            className={workspaceQuery.isFetching ? "animate-spin" : ""}
+            className={
+              workspaceQuery.isFetching
+                ? "animate-spin motion-reduce:animate-none"
+                : ""
+            }
             aria-hidden="true"
           />
           Refresh
@@ -244,7 +248,7 @@ export function EditorReviewProgressPanel({
           aria-valuenow={Math.min(counts.submitted, workspace.required_reviews)}
         >
           <div
-            className="h-full rounded-full bg-primary transition-[width]"
+            className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none"
             style={{ width: `${progressPercentage}%` }}
           />
         </div>

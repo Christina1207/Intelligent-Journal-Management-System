@@ -162,6 +162,7 @@ export function DeskRejectDialog({
 
             <Textarea
               id="desk-rejection-message"
+              dir="auto"
               value={authorMessage}
               maxLength={5000}
               disabled={isPending}
@@ -180,7 +181,6 @@ export function DeskRejectDialog({
               }}
               placeholder="Explain the decision clearly and constructively."
               className="min-h-36"
-              dir="auto"
             />
           </FormField>
 

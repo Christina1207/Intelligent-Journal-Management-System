@@ -12,7 +12,7 @@ export function DashboardPage() {
     return (
       <div
         aria-label="Loading dashboard"
-        className="h-64 animate-pulse rounded-xl bg-slate-100"
+        className="h-64 animate-pulse rounded-xl bg-slate-100 motion-reduce:animate-none"
       />
     );
   }

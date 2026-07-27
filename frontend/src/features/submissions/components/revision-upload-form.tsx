@@ -122,7 +122,7 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
 
         {isSubmitting ? (
           <Notice
-            className="mb-5 [&_svg]:animate-spin"
+            className="mb-5 [&_svg]:animate-spin motion-reduce:[&_svg]:animate-none"
             tone="info"
             icon={LoaderCircle}
             title="Uploading revised files"
@@ -203,7 +203,10 @@ export function RevisionUploadForm({ submissionId }: RevisionUploadFormProps) {
               disabled={isSubmitting}
             >
               {isSubmitting ? (
-                <LoaderCircle className="animate-spin" aria-hidden="true" />
+                <LoaderCircle
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 <Send aria-hidden="true" />
               )}

@@ -50,7 +50,10 @@ export function ManagerQueueStageBadge({
   if (!state || state.isPending) {
     return (
       <Badge variant="outline">
-        <LoaderCircle className="animate-spin" aria-hidden="true" />
+        <LoaderCircle
+          className="animate-spin motion-reduce:animate-none"
+          aria-hidden="true"
+        />
         Checking workflow
       </Badge>
     );

@@ -46,7 +46,7 @@ export function ReviewProgress({
             className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
           >
             <div
-              className="h-full rounded-full bg-primary transition-[width]"
+              className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none"
               style={{ width: `${completionPercentage}%` }}
             />
           </div>

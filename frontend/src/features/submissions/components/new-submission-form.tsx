@@ -247,7 +247,7 @@ export function NewSubmissionForm() {
           icon={LoaderCircle}
           title="Uploading your manuscript"
           description="Keep this page open while both PDFs and the manuscript metadata are sent. A percentage is not available from the current request layer."
-          className="[&_svg]:animate-spin"
+          className="[&_svg]:animate-spin motion-reduce:[&_svg]:animate-none"
         />
       ) : null}
 
@@ -337,7 +337,10 @@ export function NewSubmissionForm() {
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                    <LoaderCircle
+                      className="animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
                   ) : (
                     <Send aria-hidden="true" />
                   )}

@@ -252,7 +252,10 @@ export function AuthorSubmissionsPage() {
             className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
             role="status"
           >
-            <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+            <RefreshCw
+              className="size-3.5 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
             Updating submissions…
           </p>
         ) : null}

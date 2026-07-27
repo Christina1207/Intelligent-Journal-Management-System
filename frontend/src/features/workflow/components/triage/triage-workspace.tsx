@@ -293,13 +293,25 @@ function TriageWorkspaceContent({
 
   const completeMutation = useMutation({
     mutationFn: () => completeTriage(submission.id),
-    onSuccess: (nextTriage) => {
+    onSuccess: async (nextTriage) => {
       storeTriageState(nextTriage);
       setCompleteDialogOpen(false);
       setFeedback({
         type: "success",
         message: "Triage completed. A Section Editor can now be assigned.",
       });
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: managerQueryKeys.submission(submission.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: managerQueryKeys.queueRoot,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: managerQueryKeys.monitoringRoot,
+        }),
+      ]);
     },
     onError: (error) => {
       setFeedback({
@@ -506,6 +518,7 @@ function TriageWorkspaceContent({
             </label>
             <Textarea
               id="triage-internal-notes"
+              dir="auto"
               value={internalNotes}
               maxLength={10000}
               disabled={isReadOnly || isBusy}

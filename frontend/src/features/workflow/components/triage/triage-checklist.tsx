@@ -155,6 +155,7 @@ export function TriageChecklist({
 
               <Textarea
                 id={`${check.code}-note`}
+                dir="auto"
                 value={check.note}
                 maxLength={2000}
                 disabled={disabled}
@@ -169,7 +170,6 @@ export function TriageChecklist({
                     : "Optional internal note for this checklist item."
                 }
                 className="mt-2 min-h-20"
-                dir="auto"
               />
             </div>
           </fieldset>

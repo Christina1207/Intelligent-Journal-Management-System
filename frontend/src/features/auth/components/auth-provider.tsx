@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   clearAuthData,
   getAccessToken,
@@ -22,34 +23,58 @@ import {
 } from "@/features/auth/api/auth-api";
 import { AuthContext } from "@/features/auth/hooks/use-auth";
 
+function getAuthScope(user: AuthUser | null) {
+  if (!user) {
+    return null;
+  }
+
+  return `${user.id}|${[...user.roles].sort().join(",")}|${user.status}`;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = React.useState<AuthUser | null>(() =>
     getStoredCurrentUser(),
   );
   const [isLoading, setIsLoading] = React.useState(true);
+  const authScopeRef = React.useRef(getAuthScope(user));
+
+  const applyUser = React.useCallback(
+    (nextUser: AuthUser | null) => {
+      const nextScope = getAuthScope(nextUser);
+
+      if (authScopeRef.current !== nextScope) {
+        queryClient.clear();
+      }
+
+      authScopeRef.current = nextScope;
+      setUser(nextUser);
+    },
+    [queryClient],
+  );
 
   const refreshCurrentUser = React.useCallback(async () => {
     const token = getAccessToken();
 
     if (!token) {
-      setUser(null);
+      applyUser(null);
       setIsLoading(false);
       return null;
     }
 
     try {
       const currentUser = await getCurrentUser();
-      setUser(currentUser);
+      applyUser(currentUser);
       saveCurrentUser(currentUser);
       return currentUser;
     } catch {
       clearAuthData();
-      setUser(null);
+      applyUser(null);
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [applyUser]);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -57,39 +82,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 0);
 
     const unsubscribe = subscribeToAuthStorage(() => {
-      setUser(getStoredCurrentUser());
+      applyUser(getStoredCurrentUser());
     });
 
     return () => {
       window.clearTimeout(timeoutId);
       unsubscribe();
     };
-  }, [refreshCurrentUser]);
+  }, [applyUser, refreshCurrentUser]);
 
-  const login = React.useCallback(async (payload: LoginPayload) => {
-    const tokens = await loginRequest(payload);
-    saveAuthTokens(tokens);
+  const login = React.useCallback(
+    async (payload: LoginPayload) => {
+      const tokens = await loginRequest(payload);
+      saveAuthTokens(tokens);
 
-    const currentUser = await getCurrentUser();
-    saveCurrentUser(currentUser);
-    setUser(currentUser);
+      const currentUser = await getCurrentUser();
+      saveCurrentUser(currentUser);
+      applyUser(currentUser);
 
-    return currentUser;
-  }, []);
+      return currentUser;
+    },
+    [applyUser],
+  );
 
-  const register = React.useCallback(async (payload: RegisterPayload) => {
-    const response = await registerRequest(payload);
-    saveAuthTokens(response.tokens);
-    saveCurrentUser(response.user);
-    setUser(response.user);
+  const register = React.useCallback(
+    async (payload: RegisterPayload) => {
+      const response = await registerRequest(payload);
+      saveAuthTokens(response.tokens);
+      saveCurrentUser(response.user);
+      applyUser(response.user);
 
-    return response.user;
-  }, []);
+      return response.user;
+    },
+    [applyUser],
+  );
 
   const logout = React.useCallback(() => {
     clearAuthData();
-    setUser(null);
-  }, []);
+    applyUser(null);
+  }, [applyUser]);
 
   const value = React.useMemo(
     () => ({

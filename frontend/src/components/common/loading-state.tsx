@@ -20,7 +20,10 @@ export function LoadingState({
       role="status"
       aria-live="polite"
     >
-      <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+      <LoaderCircle
+        className="size-4 animate-spin motion-reduce:animate-none"
+        aria-hidden="true"
+      />
       <span>{label}</span>
     </div>
   )

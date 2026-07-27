@@ -773,9 +773,9 @@ function MonitoringSkeleton() {
     >
       {Array.from({ length: 4 }).map((_, index) => (
         <div key={index} className="p-5">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-          <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-muted" />
-          <div className="mt-5 h-24 animate-pulse rounded bg-muted/60" />
+          <div className="h-4 w-2/3 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+          <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+          <div className="mt-5 h-24 animate-pulse rounded bg-muted/60 motion-reduce:animate-none" />
         </div>
       ))}
     </div>

@@ -256,6 +256,7 @@ export function EditorDecisionForm({ submissionId }: EditorDecisionFormProps) {
         >
           <Textarea
             id={letterId}
+            dir="auto"
             rows={7}
             disabled={makeDecision.isPending}
             placeholder={

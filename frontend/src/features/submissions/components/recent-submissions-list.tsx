@@ -77,7 +77,7 @@ export function RecentSubmissionsList({
                   <div className="flex items-center gap-3 sm:ml-auto">
                     <SubmissionStatusBadge status={submission.status} />
                     <ArrowRight
-                      className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                      className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
                       aria-hidden="true"
                     />
                   </div>

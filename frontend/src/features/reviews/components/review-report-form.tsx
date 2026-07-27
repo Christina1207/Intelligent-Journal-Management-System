@@ -293,6 +293,7 @@ export function ReviewReportForm({
           >
             <Textarea
               id={authorCommentsId}
+              dir="auto"
               rows={10}
               disabled={submitReview.isPending}
               placeholder="Describe the manuscript’s strengths, weaknesses, and specific changes required."
@@ -336,6 +337,7 @@ export function ReviewReportForm({
           >
             <Textarea
               id={editorCommentsId}
+              dir="auto"
               rows={6}
               disabled={submitReview.isPending}
               placeholder="Add confidential concerns or editorial guidance."

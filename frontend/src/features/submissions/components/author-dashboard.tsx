@@ -106,7 +106,10 @@ export function AuthorDashboard() {
           className="flex items-center gap-2 text-xs text-muted-foreground"
           role="status"
         >
-          <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+          <RefreshCw
+            className="size-3.5 animate-spin motion-reduce:animate-none"
+            aria-hidden="true"
+          />
           Updating submission activity…
         </p>
       ) : null}
@@ -170,7 +173,7 @@ function ResourceLink({
         </span>
       </span>
       <ArrowRight
-        className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+        className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
         aria-hidden="true"
       />
     </Link>

@@ -245,7 +245,7 @@ export function EditorAssignmentDialog({
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-28 animate-pulse rounded-lg bg-muted"
+                className="h-28 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
               />
             ))}
           </div>

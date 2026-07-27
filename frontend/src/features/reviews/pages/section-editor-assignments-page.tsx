@@ -429,7 +429,7 @@ export function SectionEditorAssignmentsPage() {
             <RefreshCw
               className={cn(
                 (queueQuery.isFetching || workspaceQueries.isFetching) &&
-                  "animate-spin",
+                  "animate-spin motion-reduce:animate-none",
               )}
               aria-hidden="true"
             />

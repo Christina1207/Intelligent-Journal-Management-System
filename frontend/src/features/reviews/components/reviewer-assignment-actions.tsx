@@ -231,6 +231,7 @@ function CancelAssignmentDialog({
         >
           <Textarea
             id={fieldId}
+            dir="auto"
             value={reason}
             rows={5}
             maxLength={2000}
@@ -480,6 +481,7 @@ function ReplaceAssignmentDialog({
           >
             <Textarea
               id={`replacement-reason-${assignment.id}`}
+              dir="auto"
               value={reason}
               rows={4}
               maxLength={2000}

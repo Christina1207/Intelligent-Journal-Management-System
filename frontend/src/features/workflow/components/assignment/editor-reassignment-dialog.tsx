@@ -96,6 +96,9 @@ export function EditorReassignmentDialog({
           queryKey: managerQueryKeys.submission(submissionId),
         }),
         queryClient.invalidateQueries({
+          queryKey: managerQueryKeys.queueRoot,
+        }),
+        queryClient.invalidateQueries({
           queryKey: managerQueryKeys.monitoringRoot,
         }),
       ]);
@@ -170,7 +173,7 @@ export function EditorReassignmentDialog({
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-28 animate-pulse rounded-lg bg-muted"
+                className="h-28 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
               />
             ))}
           </div>
