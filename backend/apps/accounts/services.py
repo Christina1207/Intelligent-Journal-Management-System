@@ -516,7 +516,8 @@ class ReviewerApplicationService:
         transaction.on_commit(
             lambda: generate_reviewer_expertise_embedding.delay(
                 reviewer_user_id
-            )
+            ),
+            robust=True,
         )
 
         return application

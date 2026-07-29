@@ -26,13 +26,29 @@ export async function getOwnReviewerApplication() {
 }
 
 export async function getReviewerApplicationSections() {
-  const response = await apiClient.get<
-    ReviewerApplicationSection[] | PaginatedResponse<ReviewerApplicationSection>
-  >("/public/sections/", {
-    skipAuth: true,
-  });
+  const sections: ReviewerApplicationSection[] = [];
+  let nextUrl: string | null = "/public/sections/";
 
-  return Array.isArray(response) ? response : response.results;
+  while (nextUrl) {
+    const response:
+      | ReviewerApplicationSection[]
+      | PaginatedResponse<ReviewerApplicationSection> = await apiClient.get(
+      nextUrl,
+      {
+        skipAuth: true,
+      },
+    );
+
+    if (Array.isArray(response)) {
+      sections.push(...response);
+      break;
+    }
+
+    sections.push(...response.results);
+    nextUrl = response.next;
+  }
+
+  return sections;
 }
 
 export function submitReviewerApplication(payload: ReviewerApplicationPayload) {

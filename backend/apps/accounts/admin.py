@@ -33,12 +33,6 @@ class ReviewerApplicationAdmin(admin.ModelAdmin):
         "section__name",
     ]
 
-    readonly_fields = [
-        "submitted_at",
-        "updated_at",
-        "reviewed_at",
-    ]
-
     list_select_related = [
         "user",
         "section",
@@ -48,6 +42,17 @@ class ReviewerApplicationAdmin(admin.ModelAdmin):
     ordering = [
         "-submitted_at",
     ]
+    def get_readonly_fields(self, request, obj=None):
+        return [
+            field.name
+            for field in self.model._meta.concrete_fields
+        ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 @admin.register(ReviewerProfile)
 class ReviewerProfileAdmin(admin.ModelAdmin):
