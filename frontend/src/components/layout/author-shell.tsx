@@ -4,12 +4,15 @@ import * as React from "react";
 import {
   BookOpen,
   ChevronDown,
+  ClipboardCheck,
   ExternalLink,
   LogOut,
   Menu,
   UserRound,
   X,
 } from "lucide-react";
+
+import { USER_ROLE } from "@/types/roles";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -276,6 +279,15 @@ export function AuthorShell({
                     <UserRound aria-hidden="true" />
                     Profile
                   </DropdownMenuItem>
+                  {user?.roles.includes(USER_ROLE.REVIEWER) ? (
+                    <DropdownMenuItem
+                      className="min-h-10 px-2"
+                      onClick={() => router.push("/reviewer/invitations")}
+                    >
+                      <ClipboardCheck aria-hidden="true" />
+                      Reviewer workspace
+                    </DropdownMenuItem>
+                  ) : null}
 
                   <DropdownMenuItem
                     className="min-h-10 px-2"

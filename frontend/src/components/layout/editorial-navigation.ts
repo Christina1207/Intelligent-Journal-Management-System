@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Library,
   Send,
+  UserRoundCheck,
 } from "lucide-react";
 
 import type { UserRole } from "@/types/roles";
@@ -46,6 +47,11 @@ export const EDITORIAL_WORKSPACES: Record<
         href: "/manager/submissions",
         label: "Initial screening",
         icon: FileSearch,
+      },
+      {
+        href: "/manager/reviewer-applications",
+        label: "Reviewer applications",
+        icon: UserRoundCheck,
       },
       {
         href: "/manager/monitoring",

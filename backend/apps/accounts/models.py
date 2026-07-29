@@ -62,15 +62,98 @@ class User(AbstractUser):
     class Meta:
         ordering = ["username"]
 
+class ReviewerApplication(models.Model):
+    """
+    Represents a user's request to become an approved reviewer
+    for one journal section.
+
+    An approved application results in the user receiving the REVIEWER
+    role and a ReviewerProfile configured for the selected section.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="reviewer_application",
+    )
+
+    section = models.ForeignKey(
+        "journals.Section",
+        on_delete=models.PROTECT,
+        related_name="reviewer_applications",
+        help_text=(
+            "The single journal section for which the applicant "
+            "is requesting reviewer approval."
+        ),
+    )
+
+    keywords = ArrayField(
+        base_field=models.CharField(max_length=100),
+        default=list,
+    )
+
+    biography = models.TextField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    decision_note = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewer_applications_reviewed",
+    )
+
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    def __str__(self):
+        return (
+            f"{self.user.email} — {self.section.name} "
+            f"({self.get_status_display()})"
+        )
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "submitted_at"],
+                name="rev_app_status_time_idx",
+            ),
+        ]
 
 class ReviewerProfile(models.Model):
     """
-    Stores reviewer-specific expertise data and ORCID publication cache.
-    One row per reviewer, created lazily on first sync or task execution.
+    Stores expertise, section eligibility, publications, and embedding data
+    for an approved reviewer.
 
-    # TODO: ReviewerProfile creation should be moved to UserService.assign_role()
-    # once the reviewer application workflow is implemented (deferred to Sprint 4).
-    # Currently created via get_or_create in the Celery task and sync endpoint.
+    Reviewer profiles are created when reviewer applications are approved.
+    The existing get-or-create behavior is retained as a defensive fallback
+    for legacy reviewer accounts.
     """
 
     class SyncStatus(models.TextChoices):
