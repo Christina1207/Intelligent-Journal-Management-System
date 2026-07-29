@@ -7,10 +7,13 @@ import {
   BookOpen,
   ChevronDown,
   ExternalLink,
+  FileText,
   LogOut,
   Menu,
   X,
 } from "lucide-react";
+
+import { USER_ROLE } from "@/types/roles";
 
 import {
   EDITORIAL_WORKSPACES,
@@ -242,7 +245,16 @@ export function EditorialWorkspaceShell({
                       </span>
                     ) : null}
                   </DropdownMenuLabel>
-
+                  {role === USER_ROLE.REVIEWER &&
+                  user?.roles.includes(USER_ROLE.AUTHOR) ? (
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => router.push("/author")}
+                    >
+                      <FileText className="size-4" aria-hidden="true" />
+                      Author workspace
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuItem
                     className="gap-2"
                     onClick={() => router.push("/")}
