@@ -9,10 +9,21 @@ from .models import PublishedArticle, PublishedArticleAuthor
 
 
 class PublicJournalSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source="journal_title", read_only=True)
-    publisher = serializers.CharField(source="publisher_name", read_only=True)
+    name = serializers.CharField(
+        source="journal_title",
+        read_only=True,
+    )
+    publisher = serializers.CharField(
+        source="publisher_name",
+        read_only=True,
+    )
+    logo_url = serializers.SerializerMethodField()
     issn = serializers.SerializerMethodField()
     license = serializers.SerializerMethodField()
+    license_url = serializers.CharField(
+        source="default_license_url",
+        read_only=True,
+    )
 
     class Meta:
         model = JournalMetadataSettings
@@ -20,14 +31,30 @@ class PublicJournalSerializer(serializers.ModelSerializer):
             "name",
             "short_name",
             "description",
+            "logo_url",
+            "primary_color",
+            "default_language",
             "issn",
             "publisher",
             "access_policy",
             "peer_review_policy",
             "publication_frequency",
             "license",
+            "license_url",
         ]
         read_only_fields = fields
+
+    def get_logo_url(self, obj) -> Optional[str]:
+        if not obj.logo:
+            return None
+
+        logo_url = obj.logo.url
+        request = self.context.get("request")
+
+        if request:
+            return request.build_absolute_uri(logo_url)
+
+        return logo_url
 
     def get_issn(self, obj) -> str:
         return obj.online_issn or obj.print_issn or ""
