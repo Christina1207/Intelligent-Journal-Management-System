@@ -62,8 +62,21 @@ The supported pages are:
 - Author Guidelines
 - Publication Ethics
 - Open Access
+- Editorial Board
+- Contact
 
-Pages are stored as plain text. Lines beginning with `#`, `##`, or `###` are displayed as headings.
+Pages are stored as plain text and rendered consistently by the public portal.
+
+The supported formatting is:
+
+- Lines beginning with `#`, `##`, or `###` are displayed as headings.
+- Consecutive lines beginning with `-` or `*` are displayed as bullet lists.
+- Labels followed by a colon, such as `Email:` or `Section:`, are emphasized automatically.
+- Email addresses are displayed as clickable `mailto:` links.
+- Web addresses beginning with `http://` or `https://` are displayed as clickable external links.
+- Blank lines separate paragraphs and content blocks.
+
+Keep consecutive bullet-list items together without blank lines between them. The content renderer does not accept raw HTML and is not intended to be a general-purpose Markdown editor.
 
 Draft pages are not publicly accessible. A page becomes public only when `is_published` is enabled.
 
@@ -138,7 +151,8 @@ After changing journal configuration:
 2. Confirm the journal name and logo are displayed.
 3. Confirm the configured primary color is applied.
 4. Confirm browser titles use the configured journal name.
-5. Confirm published policy pages are accessible.
-6. Confirm draft policy pages return `404`.
-7. Confirm inactive sections are unavailable for new submissions.
-8. Confirm role-based editorial permissions still apply.
+5. Confirm all published public information and policy pages are accessible.
+6. Confirm unpublished content pages return `404`.
+7. Confirm headings, bullet lists, emphasized labels, email links, and web links are displayed correctly.
+8. Confirm inactive sections are unavailable for new submissions.
+9. Confirm role-based editorial permissions still apply.
