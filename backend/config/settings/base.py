@@ -31,6 +31,7 @@ LOCAL_APPS = [
     "apps.accounts",
     "apps.journals",
     "apps.submissions",
+    "apps.integrity",
     "apps.workflow",
     "apps.reviews",
     "apps.publishing",
