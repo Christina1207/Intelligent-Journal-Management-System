@@ -60,12 +60,16 @@ export type JournalInfo = {
   name: string;
   shortName: string;
   description: string;
+  logoUrl?: string;
+  primaryColor: string;
+  defaultLanguage: string;
   issn: string;
   publisher: string;
   accessPolicy: string;
   peerReviewPolicy: string;
   publicationFrequency: string;
   license: string;
+  licenseUrl?: string;
 };
 
 export type PublicPageContent = {

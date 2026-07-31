@@ -26,12 +26,16 @@ export function mapJournal(dto: PublicJournalApiDto): JournalInfo {
     name: valueOrFallback(dto.name, "Journal"),
     shortName: valueOrFallback(dto.short_name, dto.name),
     description: valueOrFallback(dto.description, ""),
+    logoUrl: dto.logo_url || undefined,
+    primaryColor: valueOrFallback(dto.primary_color, "#17324d"),
+    defaultLanguage: valueOrFallback(dto.default_language, "en"),
     issn: valueOrFallback(dto.issn, ""),
     publisher: valueOrFallback(dto.publisher, ""),
     accessPolicy: valueOrFallback(dto.access_policy, ""),
     peerReviewPolicy: valueOrFallback(dto.peer_review_policy, ""),
     publicationFrequency: valueOrFallback(dto.publication_frequency, ""),
     license: valueOrFallback(dto.license, ""),
+    licenseUrl: dto.license_url || undefined,
   };
 }
 

@@ -96,12 +96,23 @@ export function PublicHeader({ journal }: PublicHeaderProps) {
           className="group flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
           aria-label={`${fullName} home`}
         >
-          <span
-            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary font-sans text-xs font-bold tracking-[0.12em] text-primary-foreground"
-            aria-hidden="true"
-          >
-            {mark}
-          </span>
+          {journal?.logoUrl ? (
+            <span className="flex size-10 shrink-0 overflow-hidden rounded-lg border border-border bg-white p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={journal.logoUrl}
+                alt={`${shortName} logo`}
+                className="size-full object-contain"
+              />
+            </span>
+          ) : (
+            <span
+              className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary font-sans text-xs font-bold tracking-[0.12em] text-primary-foreground"
+              aria-hidden="true"
+            >
+              {mark}
+            </span>
+          )}
           <span className="min-w-0">
             <span className="block truncate font-heading text-lg leading-5 font-semibold text-foreground group-hover:text-accent">
               {shortName}

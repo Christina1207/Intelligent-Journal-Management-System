@@ -9,12 +9,16 @@ export type PublicJournalApiDto = {
   name: string;
   short_name?: string;
   description?: string;
+  logo_url?: string | null;
+  primary_color?: string;
+  default_language?: string;
   issn?: string;
   publisher?: string;
   access_policy?: string;
   peer_review_policy?: string;
   publication_frequency?: string;
   license?: string;
+  license_url?: string;
 };
 
 export type PublicArticleApiDto = {
