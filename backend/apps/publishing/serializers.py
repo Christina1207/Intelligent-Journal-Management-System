@@ -3,7 +3,12 @@ from typing import Optional
 from django.urls import reverse
 from rest_framework import serializers
 
-from apps.journals.models import Issue, JournalMetadataSettings, Section
+from apps.journals.models import (
+    Issue,
+    JournalContentPage,
+    JournalMetadataSettings,
+    Section,
+)
 
 from .models import PublishedArticle, PublishedArticleAuthor
 
@@ -62,6 +67,18 @@ class PublicJournalSerializer(serializers.ModelSerializer):
     def get_license(self, obj) -> str:
         return obj.default_license_name or ""
 
+
+class JournalContentPagePublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JournalContentPage
+        fields = [
+            "slug",
+            "title",
+            "excerpt",
+            "content",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 class PublicSectionSerializer(serializers.ModelSerializer):
     article_count = serializers.IntegerField(read_only=True)

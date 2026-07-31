@@ -385,3 +385,57 @@ class JournalMetadataSettings(models.Model):
                 name="priority_weights_not_all_zero",
             ),
         ]
+class JournalContentPage(models.Model):
+    """
+    A small set of institution-configurable public journal pages.
+
+    The available page types are intentionally fixed. This provides the
+    required policy customization without introducing a general-purpose CMS.
+    """
+
+    class PageType(models.TextChoices):
+        ABOUT = "about", "About the Journal"
+        AUTHOR_GUIDELINES = (
+            "author-guidelines",
+            "Author Guidelines",
+        )
+        PUBLICATION_ETHICS = (
+            "publication-ethics",
+            "Publication Ethics",
+        )
+        OPEN_ACCESS = "open-access", "Open Access"
+
+    slug = models.SlugField(
+        max_length=80,
+        choices=PageType.choices,
+        unique=True,
+    )
+    title = models.CharField(max_length=255)
+    excerpt = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Short introduction displayed below the page title.",
+    )
+    content = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Plain text content. Lines beginning with #, ##, or ### "
+            "are displayed as section headings."
+        ),
+    )
+    is_published = models.BooleanField(
+        default=False,
+        help_text="Only published pages are visible on the public portal.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        ordering = ["slug"]
+        verbose_name = "Journal content page"
+        verbose_name_plural = "Journal content pages"

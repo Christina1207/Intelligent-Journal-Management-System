@@ -29,6 +29,13 @@ urlpatterns = [
         views.PublicJournalView.as_view(),
         name="public-journal",
     ),
+
+        path(
+        "public/pages/<slug:slug>/",
+        views.PublicJournalContentPageView.as_view(),
+        name="public-journal-content-page",
+    ),
+    
     path(
         "public/sections/",
         views.PublicSectionListView.as_view(),

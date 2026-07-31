@@ -15,7 +15,12 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role
-from apps.journals.models import Issue, JournalMetadataSettings, Section
+from apps.journals.models import (
+    Issue,
+    JournalContentPage,
+    JournalMetadataSettings,
+    Section,
+)
 from apps.submissions.models import (
     Submission,
     SubmissionCoAuthor,
@@ -2261,3 +2266,86 @@ class PublicJournalCustomizationApiTests(TestCase):
             response.data,
         )
         self.assertNotIn("oai_admin_email", response.data)
+
+class PublicJournalContentPageApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.about_page = JournalContentPage.objects.create(
+            slug=JournalContentPage.PageType.ABOUT,
+            title="About the Journal",
+            excerpt="The journal mission and scope.",
+            content=(
+                "# Mission\n\n"
+                "The journal supports high-quality scientific research.\n\n"
+                "## Scope\n\n"
+                "The journal accepts interdisciplinary research."
+            ),
+            is_published=True,
+        )
+
+        self.draft_page = JournalContentPage.objects.create(
+            slug=JournalContentPage.PageType.PUBLICATION_ETHICS,
+            title="Publication Ethics",
+            excerpt="Editorial integrity requirements.",
+            content="This page is still being prepared.",
+            is_published=False,
+        )
+
+    def test_published_page_is_publicly_accessible(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": self.about_page.slug},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "about")
+        self.assertEqual(response.data["title"], "About the Journal")
+        self.assertEqual(
+            response.data["excerpt"],
+            "The journal mission and scope.",
+        )
+        self.assertIn("# Mission", response.data["content"])
+        self.assertIn("updated_at", response.data)
+
+    def test_unpublished_page_returns_not_found(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": self.draft_page.slug},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unknown_page_returns_not_found(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": "unknown-page"},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_page_response_only_contains_public_fields(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": self.about_page.slug},
+            )
+        )
+
+        self.assertEqual(
+            set(response.data.keys()),
+            {
+                "slug",
+                "title",
+                "excerpt",
+                "content",
+                "updated_at",
+            },
+        )
+        self.assertNotIn("is_published", response.data)

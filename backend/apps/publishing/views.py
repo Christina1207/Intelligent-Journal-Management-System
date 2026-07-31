@@ -5,7 +5,12 @@ from django.core.validators import validate_slug
 from django.http import HttpResponse,Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.pagination import PageNumberPagination
-from apps.journals.models import Issue, JournalMetadataSettings, Section
+from apps.journals.models import (
+    Issue,
+    JournalContentPage,
+    JournalMetadataSettings,
+    Section,
+)
 from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiParameter,
@@ -50,6 +55,7 @@ from .serializers import (
     PublishedArticlePublicDetailSerializer,
     PublishedArticlePublicListSerializer,
     PublishedArticleWriteSerializer,
+    JournalContentPagePublicSerializer,
 )
 from .services import PublicDownloadUnavailable, PublishingService
 
@@ -313,6 +319,25 @@ class PublicJournalView(generics.RetrieveAPIView):
     def get_object(self):
         return JournalMetadataSettings.get_current()
 
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Public Journal"],
+        auth=[],
+        responses={200: JournalContentPagePublicSerializer},
+        description=(
+            "Retrieve one published journal information or policy page."
+        ),
+    )
+)
+class PublicJournalContentPageView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = JournalContentPagePublicSerializer
+    lookup_field = "slug"
+    lookup_url_kwarg = "slug"
+
+    def get_queryset(self):
+        return JournalContentPage.objects.filter(is_published=True)
 
 @extend_schema_view(
     get=extend_schema(
