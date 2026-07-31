@@ -68,6 +68,36 @@ class Section(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+
+        if not self.manager_id:
+            return
+
+        from apps.accounts.models import Role
+
+        if not self.manager.has_role(
+            Role.RoleName.SECTION_MANAGER
+        ):
+            raise ValidationError(
+                {
+                    "manager": (
+                        "The selected user must have the "
+                        "SECTION_MANAGER role."
+                    )
+                }
+            )
+
+        if not self.manager.is_active:
+            raise ValidationError(
+                {
+                    "manager": (
+                        "An inactive user cannot be assigned "
+                        "as section manager."
+                    )
+                }
+            )
     
     def save(self, *args, **kwargs):
         if not self.slug:
