@@ -7,7 +7,13 @@ from .models import ReviewerApplication, ReviewerProfile, Role, User
 class RoleAdmin(admin.ModelAdmin):
     list_display = ["name"]
     ordering = ["name"]
+    readonly_fields = ["name"]
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 @admin.register(ReviewerApplication)
 class ReviewerApplicationAdmin(admin.ModelAdmin):

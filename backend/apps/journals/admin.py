@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     Issue,
+    JournalContentPage,
     JournalMetadataSettings,
     Section,
     SectionEditorMembership,
@@ -161,3 +162,40 @@ class SectionEditorMembershipAdmin(admin.ModelAdmin):
     ]
     autocomplete_fields = ["section", "editor", "created_by"]
     readonly_fields = ["id", "created_at", "updated_at"]
+
+@admin.register(JournalContentPage)
+class JournalContentPageAdmin(admin.ModelAdmin):
+    list_display = [
+        "title",
+        "slug",
+        "is_published",
+        "updated_at",
+    ]
+    list_filter = ["is_published", "slug"]
+    search_fields = ["title", "excerpt", "content"]
+    readonly_fields = ["created_at", "updated_at"]
+    ordering = ["slug"]
+
+    fieldsets = [
+        (
+            "Page",
+            {
+                "fields": [
+                    "slug",
+                    "title",
+                    "excerpt",
+                    "content",
+                    "is_published",
+                ]
+            },
+        ),
+        (
+            "Audit",
+            {
+                "fields": [
+                    "created_at",
+                    "updated_at",
+                ]
+            },
+        ),
+    ]

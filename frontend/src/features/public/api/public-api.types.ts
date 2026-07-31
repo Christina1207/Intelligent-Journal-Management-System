@@ -9,12 +9,16 @@ export type PublicJournalApiDto = {
   name: string;
   short_name?: string;
   description?: string;
+  logo_url?: string | null;
+  primary_color?: string;
+  default_language?: string;
   issn?: string;
   publisher?: string;
   access_policy?: string;
   peer_review_policy?: string;
   publication_frequency?: string;
   license?: string;
+  license_url?: string;
 };
 
 export type PublicArticleApiDto = {
@@ -86,23 +90,6 @@ export type PublicPageApiDto = {
   excerpt?: string;
   content: string;
   updated_at?: string;
-};
-
-export type EditorialBoardMemberApiDto = {
-  id: string;
-  name: string;
-  role: string;
-  affiliation?: string;
-  expertise?: string[];
-  email?: string;
-};
-
-export type ContactMethodApiDto = {
-  id: string;
-  title: string;
-  value: string;
-  description?: string;
-  href?: string;
 };
 
 export type PublicArticleListQuery = {

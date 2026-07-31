@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import Http404
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -14,7 +15,12 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role
-from apps.journals.models import Issue, JournalMetadataSettings, Section
+from apps.journals.models import (
+    Issue,
+    JournalContentPage,
+    JournalMetadataSettings,
+    Section,
+)
 from apps.submissions.models import (
     Submission,
     SubmissionCoAuthor,
@@ -2186,3 +2192,160 @@ class PublishingApiTests(TestCase):
             article.issue,
             publication_issue.number,
         )
+
+class PublicJournalCustomizationApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.url = reverse("public-journal")
+
+        self.journal = JournalMetadataSettings.get_current()
+        self.journal.journal_title = "University Research Journal"
+        self.journal.short_name = "URJ"
+        self.journal.description = "A configurable scientific journal."
+        self.journal.primary_color = "#24567A"
+        self.journal.default_language = "en"
+        self.journal.publisher_name = "Example University"
+        self.journal.online_issn = "1234-5678"
+        self.journal.access_policy = "Open Access"
+        self.journal.peer_review_policy = "Double-blind peer review"
+        self.journal.publication_frequency = "Quarterly"
+        self.journal.default_license_name = "CC BY 4.0"
+        self.journal.default_license_url = (
+            "https://creativecommons.org/licenses/by/4.0/"
+        )
+        self.journal.save()
+
+    def tearDown(self):
+        if self.journal.logo:
+            self.journal.logo.delete(save=False)
+
+    def test_public_journal_configuration_is_available_anonymously(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "University Research Journal")
+        self.assertEqual(response.data["short_name"], "URJ")
+        self.assertEqual(response.data["primary_color"], "#24567A")
+        self.assertEqual(response.data["default_language"], "en")
+        self.assertEqual(response.data["publisher"], "Example University")
+        self.assertEqual(response.data["issn"], "1234-5678")
+        self.assertEqual(response.data["license"], "CC BY 4.0")
+        self.assertEqual(
+            response.data["license_url"],
+            "https://creativecommons.org/licenses/by/4.0/",
+        )
+        self.assertIsNone(response.data["logo_url"])
+
+    def test_logo_url_is_absolute_when_logo_exists(self):
+        self.journal.logo = SimpleUploadedFile(
+            name="test-journal-logo.png",
+            content=b"test-logo-content",
+            content_type="image/png",
+        )
+        self.journal.save(update_fields=["logo", "updated_at"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            response.data["logo_url"].startswith(
+                "http://testserver/media/journal/branding/"
+            )
+        )
+
+    def test_internal_ranking_configuration_is_not_public(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(
+            "priority_waiting_age_weight",
+            response.data,
+        )
+        self.assertNotIn(
+            "priority_action_urgency_weight",
+            response.data,
+        )
+        self.assertNotIn("oai_admin_email", response.data)
+
+class PublicJournalContentPageApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.about_page = JournalContentPage.objects.create(
+            slug=JournalContentPage.PageType.ABOUT,
+            title="About the Journal",
+            excerpt="The journal mission and scope.",
+            content=(
+                "# Mission\n\n"
+                "The journal supports high-quality scientific research.\n\n"
+                "## Scope\n\n"
+                "The journal accepts interdisciplinary research."
+            ),
+            is_published=True,
+        )
+
+        self.draft_page = JournalContentPage.objects.create(
+            slug=JournalContentPage.PageType.PUBLICATION_ETHICS,
+            title="Publication Ethics",
+            excerpt="Editorial integrity requirements.",
+            content="This page is still being prepared.",
+            is_published=False,
+        )
+
+    def test_published_page_is_publicly_accessible(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": self.about_page.slug},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "about")
+        self.assertEqual(response.data["title"], "About the Journal")
+        self.assertEqual(
+            response.data["excerpt"],
+            "The journal mission and scope.",
+        )
+        self.assertIn("# Mission", response.data["content"])
+        self.assertIn("updated_at", response.data)
+
+    def test_unpublished_page_returns_not_found(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": self.draft_page.slug},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unknown_page_returns_not_found(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": "unknown-page"},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_page_response_only_contains_public_fields(self):
+        response = self.client.get(
+            reverse(
+                "public-journal-content-page",
+                kwargs={"slug": self.about_page.slug},
+            )
+        )
+
+        self.assertEqual(
+            set(response.data.keys()),
+            {
+                "slug",
+                "title",
+                "excerpt",
+                "content",
+                "updated_at",
+            },
+        )
+        self.assertNotIn("is_published", response.data)

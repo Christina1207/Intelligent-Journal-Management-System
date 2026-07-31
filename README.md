@@ -274,6 +274,8 @@ Configurable elements may include:
 - Email templates
 - Workflow settings
 
+Detailed institutional configuration instructions are available in the [Journal Customization Guide](docs/customization.md).
+
 The project follows the principle of separating configuration from application logic.
 
 ## Mentor-Specified Technical Concepts

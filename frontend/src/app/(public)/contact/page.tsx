@@ -1,5 +1,5 @@
+import { getPublicPage } from "@/features/public/api/public-api";
 import { PublicContactPage } from "@/features/public/pages/public-contact-page";
-import { getContactMethods } from "@/features/public/api/public-api";
 
 export const metadata = {
   title: "Contact",
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function ContactPage() {
-  const contacts = await getContactMethods();
+  const page = await getPublicPage("contact");
 
-  return <PublicContactPage contacts={contacts} />;
+  return <PublicContactPage page={page} />;
 }

@@ -60,12 +60,16 @@ export type JournalInfo = {
   name: string;
   shortName: string;
   description: string;
+  logoUrl?: string;
+  primaryColor: string;
+  defaultLanguage: string;
   issn: string;
   publisher: string;
   accessPolicy: string;
   peerReviewPolicy: string;
   publicationFrequency: string;
   license: string;
+  licenseUrl?: string;
 };
 
 export type PublicPageContent = {
@@ -74,23 +78,6 @@ export type PublicPageContent = {
   excerpt: string;
   content: string;
   updatedAt?: string;
-};
-
-export type EditorialBoardMember = {
-  id: string;
-  name: string;
-  role: string;
-  affiliation: string;
-  expertise: string[];
-  email?: string;
-};
-
-export type ContactMethod = {
-  id: string;
-  title: string;
-  value: string;
-  description: string;
-  href?: string;
 };
 export type InfoSection = {
   id: string;

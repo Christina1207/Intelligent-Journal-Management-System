@@ -1,15 +1,11 @@
 import {
   mapArticle,
-  mapContactMethod,
-  mapEditorialBoardMember,
   mapIssue,
   mapJournal,
   mapPublicPage,
   mapSection,
 } from "./public-api.mappers";
 import type {
-  ContactMethodApiDto,
-  EditorialBoardMemberApiDto,
   PaginatedApiResponse,
   PublicArticleApiDto,
   PublicArticleListQuery,
@@ -357,43 +353,6 @@ export async function getPublicPage(slug: string) {
   } catch (error) {
     if (isNotFoundError(error)) {
       return null;
-    }
-
-    throw error;
-  }
-}
-
-export async function getEditorialBoard() {
-  try {
-    const response = await publicFetch<
-      | EditorialBoardMemberApiDto[]
-      | PaginatedApiResponse<EditorialBoardMemberApiDto>
-    >("/public/editorial-board/", {}, { revalidate: 300 });
-
-    const members = Array.isArray(response) ? response : response.results;
-
-    return members.map(mapEditorialBoardMember);
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return [];
-    }
-
-    throw error;
-  }
-}
-
-export async function getContactMethods() {
-  try {
-    const response = await publicFetch<
-      ContactMethodApiDto[] | PaginatedApiResponse<ContactMethodApiDto>
-    >("/public/contact/", {}, { revalidate: 300 });
-
-    const contacts = Array.isArray(response) ? response : response.results;
-
-    return contacts.map(mapContactMethod);
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return [];
     }
 
     throw error;

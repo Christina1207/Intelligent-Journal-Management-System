@@ -1,6 +1,4 @@
 import type {
-  ContactMethodApiDto,
-  EditorialBoardMemberApiDto,
   PublicArticleApiDto,
   PublicIssueApiDto,
   PublicJournalApiDto,
@@ -8,8 +6,6 @@ import type {
   PublicSectionApiDto,
 } from "./public-api.types";
 import type {
-  ContactMethod,
-  EditorialBoardMember,
   JournalInfo,
   PublicArticle,
   PublicIssue,
@@ -26,12 +22,16 @@ export function mapJournal(dto: PublicJournalApiDto): JournalInfo {
     name: valueOrFallback(dto.name, "Journal"),
     shortName: valueOrFallback(dto.short_name, dto.name),
     description: valueOrFallback(dto.description, ""),
+    logoUrl: dto.logo_url || undefined,
+    primaryColor: valueOrFallback(dto.primary_color, "#17324d"),
+    defaultLanguage: valueOrFallback(dto.default_language, "en"),
     issn: valueOrFallback(dto.issn, ""),
     publisher: valueOrFallback(dto.publisher, ""),
     accessPolicy: valueOrFallback(dto.access_policy, ""),
     peerReviewPolicy: valueOrFallback(dto.peer_review_policy, ""),
     publicationFrequency: valueOrFallback(dto.publication_frequency, ""),
     license: valueOrFallback(dto.license, ""),
+    licenseUrl: dto.license_url || undefined,
   };
 }
 
@@ -107,28 +107,5 @@ export function mapPublicPage(dto: PublicPageApiDto): PublicPageContent {
     excerpt: dto.excerpt ?? "",
     content: dto.content,
     updatedAt: dto.updated_at,
-  };
-}
-
-export function mapEditorialBoardMember(
-  dto: EditorialBoardMemberApiDto,
-): EditorialBoardMember {
-  return {
-    id: dto.id,
-    name: dto.name,
-    role: dto.role,
-    affiliation: dto.affiliation ?? "",
-    expertise: dto.expertise ?? [],
-    email: dto.email,
-  };
-}
-
-export function mapContactMethod(dto: ContactMethodApiDto): ContactMethod {
-  return {
-    id: dto.id,
-    title: dto.title,
-    value: dto.value,
-    description: dto.description ?? "",
-    href: dto.href,
   };
 }
