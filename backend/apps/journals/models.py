@@ -433,7 +433,9 @@ class JournalContentPage(models.Model):
             "publication-ethics",
             "Publication Ethics",
         )
-        OPEN_ACCESS = "open-access", "Open Access"
+        OPEN_ACCESS = ("open-access", "Open Access")
+        EDITORIAL_BOARD = ("editorial-board", "Editorial Board")
+        CONTACT = ("contact", "Contact")
 
     slug = models.SlugField(
         max_length=80,

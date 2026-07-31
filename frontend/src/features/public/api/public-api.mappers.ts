@@ -1,6 +1,4 @@
 import type {
-  ContactMethodApiDto,
-  EditorialBoardMemberApiDto,
   PublicArticleApiDto,
   PublicIssueApiDto,
   PublicJournalApiDto,
@@ -8,8 +6,6 @@ import type {
   PublicSectionApiDto,
 } from "./public-api.types";
 import type {
-  ContactMethod,
-  EditorialBoardMember,
   JournalInfo,
   PublicArticle,
   PublicIssue,
@@ -111,28 +107,5 @@ export function mapPublicPage(dto: PublicPageApiDto): PublicPageContent {
     excerpt: dto.excerpt ?? "",
     content: dto.content,
     updatedAt: dto.updated_at,
-  };
-}
-
-export function mapEditorialBoardMember(
-  dto: EditorialBoardMemberApiDto,
-): EditorialBoardMember {
-  return {
-    id: dto.id,
-    name: dto.name,
-    role: dto.role,
-    affiliation: dto.affiliation ?? "",
-    expertise: dto.expertise ?? [],
-    email: dto.email,
-  };
-}
-
-export function mapContactMethod(dto: ContactMethodApiDto): ContactMethod {
-  return {
-    id: dto.id,
-    title: dto.title,
-    value: dto.value,
-    description: dto.description ?? "",
-    href: dto.href,
   };
 }

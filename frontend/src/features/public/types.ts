@@ -79,23 +79,6 @@ export type PublicPageContent = {
   content: string;
   updatedAt?: string;
 };
-
-export type EditorialBoardMember = {
-  id: string;
-  name: string;
-  role: string;
-  affiliation: string;
-  expertise: string[];
-  email?: string;
-};
-
-export type ContactMethod = {
-  id: string;
-  title: string;
-  value: string;
-  description: string;
-  href?: string;
-};
 export type InfoSection = {
   id: string;
   title: string;

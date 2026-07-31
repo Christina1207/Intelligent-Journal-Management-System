@@ -1,30 +1,117 @@
-import { FileText } from "lucide-react"
+import { FileText } from "lucide-react";
 
-import { EmptyState } from "@/components/common/empty-state"
+import { EmptyState } from "@/components/common/empty-state";
 
-import type { InfoSection } from "../types"
+import type { InfoSection } from "../types";
 
 type InfoContentSectionProps = {
-  sections: InfoSection[]
-  emptyTitle?: string
-  emptyDescription?: string
+  sections: InfoSection[];
+  emptyTitle?: string;
+  emptyDescription?: string;
+};
+
+const inlineContentPattern =
+  /(https?:\/\/[^\s]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
+
+function renderInlineContent(text: string) {
+  return text.split(inlineContentPattern).map((part, index) => {
+    const isEmail = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(part);
+
+    if (isEmail) {
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={`mailto:${part}`}
+          className="font-semibold text-primary underline decoration-primary/30 underline-offset-4 transition-colors hover:decoration-primary"
+        >
+          {part}
+        </a>
+      );
+    }
+
+    const isUrl = /^https?:\/\//i.test(part);
+
+    if (isUrl) {
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary underline decoration-primary/30 underline-offset-4 transition-colors hover:decoration-primary"
+        >
+          {part}
+        </a>
+      );
+    }
+
+    return part;
+  });
+}
+
+function ContentParagraph({ text }: { text: string }) {
+  const labelMatch = text.match(/^([^:\n]{1,40}):\s+([\s\S]+)$/);
+
+  if (labelMatch) {
+    return (
+      <p dir="auto">
+        <strong className="font-semibold text-foreground">
+          {labelMatch[1]}:
+        </strong>{" "}
+        {renderInlineContent(labelMatch[2])}
+      </p>
+    );
+  }
+
+  return <p dir="auto">{renderInlineContent(text)}</p>;
 }
 
 function ContentBody({ body }: { body: string }) {
-  const paragraphs = body
+  const blocks = body
     .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
+    .map((block) => block.trim())
+    .filter(Boolean);
 
   return (
     <div className="mt-4 space-y-4 break-words text-base leading-8 text-text-secondary">
-      {paragraphs.map((paragraph, index) => (
-        <p key={`${paragraph.slice(0, 30)}-${index}`} dir="auto">
-          {paragraph}
-        </p>
-      ))}
+      {blocks.map((block, index) => {
+        const lines = block
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        const isBulletList =
+          lines.length > 0 && lines.every((line) => /^[-*]\s+/.test(line));
+
+        if (isBulletList) {
+          return (
+            <ul key={`${lines[0]}-${index}`} className="space-y-2">
+              {lines.map((line) => {
+                const item = line.replace(/^[-*]\s+/, "");
+
+                return (
+                  <li key={item} className="flex gap-3" dir="auto">
+                    <span
+                      aria-hidden="true"
+                      className="mt-[0.8rem] size-1.5 shrink-0 rounded-full bg-accent"
+                    />
+                    <span>{renderInlineContent(item)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+
+        return (
+          <ContentParagraph
+            key={`${block.slice(0, 30)}-${index}`}
+            text={block}
+          />
+        );
+      })}
     </div>
-  )
+  );
 }
 
 export function InfoContentSection({
@@ -43,10 +130,10 @@ export function InfoContentSection({
           />
         </div>
       </section>
-    )
+    );
   }
 
-  const showTableOfContents = sections.length > 2
+  const showTableOfContents = sections.length > 2;
 
   return (
     <section className="py-10 sm:py-12" aria-label="Page information">
@@ -120,5 +207,5 @@ export function InfoContentSection({
         </div>
       </div>
     </section>
-  )
+  );
 }

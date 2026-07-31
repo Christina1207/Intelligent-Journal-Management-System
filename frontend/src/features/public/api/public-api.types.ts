@@ -92,23 +92,6 @@ export type PublicPageApiDto = {
   updated_at?: string;
 };
 
-export type EditorialBoardMemberApiDto = {
-  id: string;
-  name: string;
-  role: string;
-  affiliation?: string;
-  expertise?: string[];
-  email?: string;
-};
-
-export type ContactMethodApiDto = {
-  id: string;
-  title: string;
-  value: string;
-  description?: string;
-  href?: string;
-};
-
 export type PublicArticleListQuery = {
   search?: string;
   section?: string;
