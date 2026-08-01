@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-
+from pathlib import Path
 from apps.core.recommendations import RecommendationService
 from unittest.mock import MagicMock, call, patch
 
@@ -90,6 +90,58 @@ class StorageServiceTests(SimpleTestCase):
         self.assertTrue(url.startswith("http://minio:9000/journal-submissions/"))
         minio_class.assert_called_once()
         internal_client.presigned_get_object.assert_called_once()
+
+    @patch("apps.core.storage.Minio")
+    def test_temporary_download_removes_local_file(
+        self,
+        minio_class,
+    ):
+        internal_client = MagicMock()
+        internal_client.bucket_exists.return_value = True
+        minio_class.return_value = internal_client
+
+        def write_downloaded_file(
+            *,
+            bucket_name,
+            object_name,
+            file_path,
+        ):
+            Path(file_path).write_bytes(b"%PDF-test-content")
+
+        internal_client.fget_object.side_effect = (
+            write_downloaded_file
+        )
+
+        service = StorageService()
+        downloaded_path = None
+
+        with service.temporary_download(
+            "submissions/submission-1/v1/full/manuscript.pdf",
+            filename="../manuscript.pdf",
+        ) as temporary_path:
+            downloaded_path = temporary_path
+
+            self.assertTrue(temporary_path.exists())
+            self.assertEqual(
+                temporary_path.read_bytes(),
+                b"%PDF-test-content",
+            )
+            self.assertEqual(
+                temporary_path.name,
+                "manuscript.pdf",
+            )
+
+        self.assertIsNotNone(downloaded_path)
+        self.assertFalse(downloaded_path.exists())
+
+        internal_client.fget_object.assert_called_once_with(
+            bucket_name="journal-submissions",
+            object_name=(
+                "submissions/submission-1/v1/full/"
+                "manuscript.pdf"
+            ),
+            file_path=str(downloaded_path),
+        )
 
 class RecommendationScoringTests(SimpleTestCase):
     @patch.multiple(

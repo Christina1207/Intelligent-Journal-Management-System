@@ -1,7 +1,10 @@
+from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Iterator
+
 from django.conf import settings
 from minio import Minio
-from pathlib import Path
-
 
 class StorageService:
     """
@@ -69,6 +72,37 @@ class StorageService:
         )
 
         return object_name
+
+    @contextmanager
+    def temporary_download(
+        self,
+        object_name: str,
+        *,
+        filename: str = "downloaded-object.bin",
+    ) -> Iterator[Path]:
+        """
+        Stream a private MinIO object to an isolated temporary file.
+
+        The file and its containing directory are removed automatically,
+        including when processing raises an exception.
+        """
+        if not object_name:
+            raise ValueError("object_name cannot be empty.")
+
+        safe_filename = Path(filename).name
+        if not safe_filename:
+            raise ValueError("filename cannot be empty.")
+
+        with TemporaryDirectory(prefix="ijms-storage-") as directory:
+            destination = Path(directory) / safe_filename
+
+            self.client.fget_object(
+                bucket_name=self.bucket,
+                object_name=object_name,
+                file_path=str(destination),
+            )
+
+            yield destination
 
     def get_url(
         self,

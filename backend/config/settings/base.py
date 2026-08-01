@@ -171,6 +171,12 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_ROUTES = {
+    "apps.integrity.tasks.run_plagiarism_screening": {
+        "queue": "plagiarism",
+        "routing_key": "plagiarism",
+    },
+}
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BEAT_SCHEDULE = {
     "refresh-reviewer-orcid-profiles": {

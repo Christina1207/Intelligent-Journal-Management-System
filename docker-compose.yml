@@ -83,7 +83,40 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    command: celery -A config worker --loglevel=info --concurrency=2
+    command: >
+      celery -A config worker
+      --loglevel=info
+      --concurrency=2
+      --queues=celery
+
+  plagiarism_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: journal_plagiarism_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./pipeline_resources:/pipeline_resources:ro
+      - plagiarism_cache:/var/cache/ijms-plagiarism
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: >
+      celery -A config worker
+      --loglevel=info
+      --concurrency=1
+      --queues=plagiarism
+      --prefetch-multiplier=1
+      --hostname=plagiarism@%h
 
   celery_beat:
     build:
@@ -139,3 +172,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  plagiarism_cache:
