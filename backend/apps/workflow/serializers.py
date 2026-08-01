@@ -9,6 +9,9 @@ from apps.accounts.models import User
 from .constants import TRIAGE_RESULT_CHOICES
 from .models import SubmissionAssignment,TriageAssessment
 from apps.submissions.models import Submission, SubmissionVersion
+from apps.integrity.serializers import (
+    PlagiarismScreeningSummarySerializer,
+)
 
 class EligibleSectionEditorSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -152,10 +155,6 @@ class TriageCheckStateSerializer(serializers.Serializer):
     result = serializers.CharField(allow_null=True)
     note = serializers.CharField()
 
-
-class PlagiarismPlaceholderSerializer(serializers.Serializer):
-    status = serializers.CharField()
-    report = serializers.JSONField(allow_null=True)
 
 class TriageCompletedBySerializer(serializers.Serializer):
     id = serializers.UUIDField()
@@ -343,12 +342,26 @@ class TriageAssessmentDetailSerializer(serializers.Serializer):
             "full_name": full_name or user.username,
         }
 
-    @extend_schema_field(PlagiarismPlaceholderSerializer)
+    @extend_schema_field(
+        PlagiarismScreeningSummarySerializer(
+            allow_null=True
+        )
+    )
     def get_plagiarism_screening(self, assessment):
-        return {
-            "status": "NOT_AVAILABLE",
-            "report": None,
-        }
+        screening = (
+            assessment.submission_version
+            .plagiarism_screenings
+            .select_related("requested_by")
+            .order_by("-created_at")
+            .first()
+        )
+
+        if screening is None:
+            return None
+
+        return PlagiarismScreeningSummarySerializer(
+            screening
+        ).data
     
 class ManagerMonitoringEditorSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
