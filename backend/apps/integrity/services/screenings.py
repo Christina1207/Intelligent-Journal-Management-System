@@ -195,3 +195,95 @@ def request_plagiarism_screening(
         screening=screening,
         created=True,
     )
+def request_initial_plagiarism_screening(
+    *,
+    submission_version_id: str,
+) -> None:
+    """
+    Request the automatic screening for an initial manuscript version.
+
+    This function is intended to run after submission creation commits.
+    Failures are logged but must never invalidate the already committed
+    author submission.
+    """
+    try:
+        submission_version = (
+            SubmissionVersion.objects
+            .select_related("submission")
+            .get(pk=submission_version_id)
+        )
+    except SubmissionVersion.DoesNotExist:
+        logger.warning(
+            (
+                "Automatic plagiarism screening skipped because "
+                "submission version %s no longer exists."
+            ),
+            submission_version_id,
+        )
+        return
+
+    submission = submission_version.submission
+
+    if submission_version.version_number != 1:
+        logger.info(
+            (
+                "Automatic plagiarism screening skipped for "
+                "non-initial version %s."
+            ),
+            submission_version_id,
+        )
+        return
+
+    if submission.language != "ar":
+        logger.info(
+            (
+                "Automatic plagiarism screening skipped for "
+                "non-Arabic submission version %s."
+            ),
+            submission_version_id,
+        )
+        return
+
+    try:
+        result = request_plagiarism_screening(
+            submission_version=submission_version,
+            requested_by=None,
+        )
+    except ScreeningRequestError as error:
+        logger.warning(
+            (
+                "Automatic plagiarism screening was not requested "
+                "for version %s because of application error %s."
+            ),
+            submission_version_id,
+            error.code,
+        )
+        return
+    except Exception:
+        logger.exception(
+            (
+                "Unexpected failure while requesting automatic "
+                "plagiarism screening for version %s."
+            ),
+            submission_version_id,
+        )
+        return
+
+    if result.created:
+        logger.info(
+            (
+                "Automatic plagiarism screening %s created for "
+                "submission version %s."
+            ),
+            result.screening.id,
+            submission_version_id,
+        )
+    else:
+        logger.info(
+            (
+                "Existing plagiarism screening %s reused for "
+                "submission version %s."
+            ),
+            result.screening.id,
+            submission_version_id,
+        )
