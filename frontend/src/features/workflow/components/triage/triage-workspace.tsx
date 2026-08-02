@@ -8,7 +8,6 @@ import {
   FileText,
   RefreshCw,
   Save,
-  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +21,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmissionStatusBadge } from "@/features/submissions/components/submission-status-badge";
 import { managerQueryKeys } from "@/features/workflow/api/manager-query-keys";
+import { PlagiarismScreeningPanel } from "@/features/integrity/components/plagiarism-screening-panel";
+import type { PlagiarismScreeningSummary } from "@/features/integrity/types";
 import {
   completeTriage,
   deskRejectSubmission,
@@ -114,15 +115,13 @@ function getWorkspaceError(error: unknown) {
   if (error instanceof ApiError && error.status === 403) {
     return {
       title: "Triage access denied",
-      description:
-        "Your account is not permitted to manage this manuscript.",
+      description: "Your account is not permitted to manage this manuscript.",
     };
   }
 
   return {
     title: "Could not load the triage workspace",
-    description:
-      "The manuscript or its triage assessment could not be loaded.",
+    description: "The manuscript or its triage assessment could not be loaded.",
   };
 }
 
@@ -141,10 +140,7 @@ export function TriageWorkspace({ submissionId }: { submissionId: string }) {
 
   if (submissionQuery.isLoading || triageQuery.isLoading) {
     return (
-      <LoadingState
-        label="Loading triage workspace"
-        className="min-h-[55vh]"
-      />
+      <LoadingState label="Loading triage workspace" className="min-h-[55vh]" />
     );
   }
 
@@ -202,6 +198,21 @@ function TriageWorkspaceContent({
   triage: TriageState;
 }) {
   const queryClient = useQueryClient();
+  const handleScreeningChange = React.useCallback(
+    (nextScreening: PlagiarismScreeningSummary) => {
+      queryClient.setQueryData<TriageState>(
+        managerQueryKeys.triage(submission.id),
+        (current) =>
+          current
+            ? {
+                ...current,
+                plagiarism_screening: nextScreening,
+              }
+            : current,
+      );
+    },
+    [queryClient, submission.id],
+  );
   const [checks, setChecks] = React.useState<TriageCheck[]>(() =>
     triage.checks.map((check) => ({ ...check })),
   );
@@ -510,8 +521,8 @@ function TriageWorkspaceContent({
               Internal editorial notes
             </h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              These notes are restricted to the editorial workflow and are
-              never included in the author-facing decision.
+              These notes are restricted to the editorial workflow and are never
+              included in the author-facing decision.
             </p>
             <label htmlFor="triage-internal-notes" className="sr-only">
               Internal editorial notes
@@ -536,8 +547,7 @@ function TriageWorkspaceContent({
         </div>
 
         <aside className="space-y-5 lg:sticky lg:top-24">
-          {triage.status === "COMPLETED" &&
-          triage.outcome === "PROCEED" ? (
+          {triage.status === "COMPLETED" && triage.outcome === "PROCEED" ? (
             <EditorAssignmentPanel
               submissionId={submission.id}
               submissionStatus={submission.status}
@@ -619,24 +629,12 @@ function TriageWorkspaceContent({
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-border/80 bg-muted/35 p-5">
-            <div className="flex items-center gap-2">
-              <ShieldAlert
-                aria-hidden="true"
-                className="size-5 text-muted-foreground"
-              />
-              <h2 className="font-heading font-semibold text-foreground">
-                Plagiarism screening
-              </h2>
-            </div>
-            <Badge variant="outline" className="mt-3">
-              Not available
-            </Badge>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              The backend currently returns no plagiarism report. This does not
-              represent a clean result and does not block triage.
-            </p>
-          </section>
+          <PlagiarismScreeningPanel
+            submissionId={submission.id}
+            language={submission.language}
+            screening={triage.plagiarism_screening}
+            onScreeningChange={handleScreeningChange}
+          />
         </aside>
       </div>
 
@@ -783,10 +781,7 @@ function TriageActionPanel({
               label="Required checks"
               value={requiredChecksComplete ? "Complete" : "Incomplete"}
             />
-            <RecordItem
-              label="Concerns"
-              value={String(concernCount)}
-            />
+            <RecordItem label="Concerns" value={String(concernCount)} />
           </dl>
 
           <p className="mt-4 text-xs leading-5 text-muted-foreground">
