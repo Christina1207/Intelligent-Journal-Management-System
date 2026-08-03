@@ -93,7 +93,7 @@ export type PlagiarismFinding = {
 };
 
 export type PlagiarismReport = {
-  schema_version: string;
+  schema_version: "plagiarism_report_v1";
   report_metadata: {
     report_id: string;
     generated_at: string;

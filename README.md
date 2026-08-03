@@ -168,11 +168,33 @@ Published articles may include:
 
 ### 7. Plagiarism Detection
 
-The system includes initial plagiarism detection to support academic integrity.
+The system includes initial Arabic plagiarism screening as an
+editorial decision-support feature.
 
-Plagiarism detection is treated as a screening tool. It helps editors identify potential issues but does not automatically make final decisions.
+For an Arabic initial submission, the system can:
 
-Future Arabic plagiarism detection support is an important target use case.
+- Create a screening automatically after submission succeeds.
+- Process the manuscript asynchronously through a dedicated Celery
+  worker.
+- Download the private manuscript from MinIO only for processing.
+- Use lexical and semantic retrieval against a configured source
+  corpus.
+- Verify candidate passages with the local AraT5 verifier.
+- Store a versioned screening history and `plagiarism_report_v1`
+  evidence report.
+- Show summary metrics and passage-level evidence to the responsible
+  Section Manager.
+
+Plagiarism screening never automatically rejects a manuscript, changes
+its workflow status, or replaces human editorial judgment.
+
+The current version supports Arabic text-based PDFs. Models, indexes,
+and comparison-corpus data are deployment-specific external resources
+and are not stored in Git. Screening remains disabled by default until
+those resources are configured.
+
+See the [Arabic Plagiarism Screening Guide](docs/plagiarism-screening.md)
+for architecture, configuration, safeguards, and verification.
 
 ### 8. Reviewer Recommendation
 

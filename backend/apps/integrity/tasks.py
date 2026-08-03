@@ -9,7 +9,7 @@ from apps.integrity.models import PlagiarismScreening
 
 
 logger = logging.getLogger(__name__)
-
+PLAGIARISM_REPORT_SCHEMA_VERSION = "plagiarism_report_v1"
 
 @dataclass(frozen=True)
 class _FailureDetails:
@@ -85,6 +85,34 @@ def _claim_screening(
     )
     return None
 
+
+def _validate_report(report: object) -> dict:
+    """
+    Validate the application-level report contract.
+
+    The frontend and persistence layer support only the version-one
+    plagiarism report schema. An incompatible pipeline report must fail
+    safely instead of being stored as a completed screening.
+    """
+    if not isinstance(report, dict):
+        raise ValueError(
+            "The plagiarism pipeline returned a non-object report."
+        )
+
+    if (
+        report.get("schema_version")
+        != PLAGIARISM_REPORT_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "Unsupported plagiarism report schema version."
+        )
+
+    if not isinstance(report.get("summary"), dict):
+        raise ValueError(
+            "The plagiarism report has no valid summary."
+        )
+
+    return report
 
 def _execute_screening(
     screening: PlagiarismScreening,
@@ -167,25 +195,7 @@ def _execute_screening(
             ),
         ) from exc
 
-    report = result.report
-
-    if not isinstance(report, dict):
-        raise RuntimeError(
-            "The plagiarism pipeline returned a non-object report."
-        )
-
-    schema_version = report.get("schema_version")
-    if not isinstance(schema_version, str) or not schema_version:
-        raise RuntimeError(
-            "The plagiarism report has no schema version."
-        )
-
-    if not isinstance(report.get("summary"), dict):
-        raise RuntimeError(
-            "The plagiarism report has no valid summary."
-        )
-
-    return report
+    return _validate_report(result.report)
 
 
 def _failure_details(exc: Exception) -> _FailureDetails:

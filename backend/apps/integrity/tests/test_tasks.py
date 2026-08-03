@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.integrity.models import PlagiarismScreening
 from apps.integrity.tasks import (
+    _validate_report,
     run_plagiarism_screening,
 )
 from apps.journals.models import Section
@@ -207,4 +208,66 @@ class PlagiarismScreeningTaskTests(TestCase):
         self.assertEqual(
             route["routing_key"],
             "plagiarism",
+        )
+
+    def test_report_validation_accepts_schema_version_one(self):
+        report = {
+            "schema_version": "plagiarism_report_v1",
+            "summary": {
+                "plagiarism_detected": False,
+            },
+            "findings": [],
+        }
+
+        self.assertIs(_validate_report(report), report)
+
+    def test_report_validation_rejects_incompatible_schema(self):
+        report = {
+            "schema_version": "plagiarism_report_v2",
+            "summary": {
+                "plagiarism_detected": False,
+            },
+            "findings": [],
+        }
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Unsupported plagiarism report schema version.",
+        ):
+            _validate_report(report)
+
+    def test_pipeline_validation_failure_is_recorded_safely(self):
+        with patch(
+            "apps.integrity.tasks._execute_screening",
+            side_effect=ValueError(
+                "Internal incompatible report details."
+            ),
+        ):
+            result = run_plagiarism_screening.apply(
+                args=[str(self.screening.id)],
+                task_id="plagiarism-task-validation",
+            )
+
+        self.assertTrue(result.successful())
+
+        self.screening.refresh_from_db()
+
+        self.assertEqual(
+            self.screening.status,
+            PlagiarismScreening.Status.FAILED,
+        )
+        self.assertEqual(
+            self.screening.error_code,
+            "PIPELINE_VALIDATION_ERROR",
+        )
+        self.assertEqual(
+            self.screening.error_message,
+            (
+                "The plagiarism pipeline rejected its input or "
+                "configured resources."
+            ),
+        )
+        self.assertNotIn(
+            "incompatible report details",
+            self.screening.error_message,
         )
