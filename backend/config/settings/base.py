@@ -193,6 +193,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.journals.tasks.check_and_trigger_section_clustering",
         "schedule": crontab(hour=4, minute=0),  # Daily at 4am UTC
     },
+    "dispatch-review-deadline-reminders": {
+        "task": (
+            "apps.notifications.tasks."
+            "dispatch_review_deadline_reminders"
+        ),
+        "schedule": crontab(hour=8, minute=0),
+    },
 }
 
 # ------------------------------------------------------------------
