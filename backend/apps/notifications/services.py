@@ -28,11 +28,8 @@ def _recipient_name(recipient):
     return full_name or recipient.username or "there"
 
 
-def _build_action_url(journal_settings, action_path):
-    base_url = (
-        journal_settings.base_url.strip()
-        or settings.FRONTEND_URL.strip()
-    )
+def _build_action_url(action_path):
+    base_url = settings.FRONTEND_URL.strip()
 
     return (
         f"{base_url.rstrip('/')}/"
@@ -58,10 +55,7 @@ def _send_notification_email(
         return False
 
     journal_settings = JournalMetadataSettings.get_current()
-    action_url = _build_action_url(
-        journal_settings,
-        action_path,
-    )
+    action_url = _build_action_url(action_path)
 
     context = {
         "journal_title": journal_settings.journal_title,

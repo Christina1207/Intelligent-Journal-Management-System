@@ -1,14 +1,12 @@
 "use client";
 
 import { Controller, type UseFormReturn } from "react-hook-form";
-import {
-  CircleUserRound,
-  FileCheck2,
-  Info,
-  ShieldCheck,
-} from "lucide-react";
+import { CircleUserRound, FileCheck2, Info, ShieldCheck } from "lucide-react";
 
-import { FormField, getFormFieldDescription } from "@/components/common/form-field";
+import {
+  FormField,
+  getFormFieldDescription,
+} from "@/components/common/form-field";
 import { Notice } from "@/components/common/notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -304,7 +302,7 @@ export function FilesStep({ form, disabled }: SubmissionStepProps) {
         tone="warning"
         icon={ShieldCheck}
         title="Prepare a genuinely anonymized copy"
-        description="Remove author names, affiliations, acknowledgements, identifying self-references, and identifying document metadata. The frontend cannot verify anonymity automatically."
+        description="Remove author names, affiliations, acknowledgements, identifying self-references, and identifying document metadata."
       />
 
       <Controller
@@ -569,9 +567,7 @@ function Confirmation({
   id: string;
   label: string;
   disabled: boolean;
-  registration: ReturnType<
-    UseFormReturn<NewSubmissionFormValues>["register"]
-  >;
+  registration: ReturnType<UseFormReturn<NewSubmissionFormValues>["register"]>;
 }) {
   return (
     <label
