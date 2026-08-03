@@ -1,3 +1,4 @@
+from django.db import transaction
 import logging
 from datetime import timedelta
 from smtplib import SMTPException
@@ -198,48 +199,34 @@ def dispatch_review_deadline_reminders():
 
 @shared_task(**EMAIL_TASK_OPTIONS)
 def send_review_deadline_reminder_email(assignment_id):
-    reminder_days = settings.REVIEW_DEADLINE_REMINDER_DAYS
-
-    if reminder_days <= 0:
-        return False
-
-    now = timezone.now()
-    reminder_limit = now + timedelta(days=reminder_days)
-
-    assignment = (
-        ReviewerAssignment.objects
-        .select_related(
-            "reviewer",
-            "version",
-            "version__submission",
-            "version__submission__section",
+    with transaction.atomic():
+        assignment = (
+            ReviewerAssignment.objects
+            .select_for_update(of=("self",))
+            .select_related(
+                "reviewer",
+                "version__submission",
+            )
+            .filter(
+                pk=assignment_id,
+                status=ReviewerAssignment.Status.ACCEPTED,
+                review__isnull=True,
+                review_reminder_sent_at__isnull=True,
+            )
+            .first()
         )
-        .filter(
-            pk=assignment_id,
-            status=ReviewerAssignment.Status.ACCEPTED,
-            review__isnull=True,
-            review_reminder_sent_at__isnull=True,
-            review_deadline__gte=now,
-            review_deadline__lte=reminder_limit,
+
+        if assignment is None:
+            return False
+
+        sent = send_review_deadline_reminder(assignment)
+
+        if not sent:
+            return False
+
+        assignment.review_reminder_sent_at = timezone.now()
+        assignment.save(
+            update_fields=["review_reminder_sent_at"]
         )
-        .first()
-    )
 
-    if assignment is None:
-        return False
-
-    sent = send_review_deadline_reminder(assignment)
-
-    if not sent:
-        return False
-
-    updated_count = (
-        ReviewerAssignment.objects.filter(
-            pk=assignment.pk,
-            review_reminder_sent_at__isnull=True,
-        ).update(
-            review_reminder_sent_at=timezone.now(),
-        )
-    )
-
-    return updated_count == 1
+        return True
