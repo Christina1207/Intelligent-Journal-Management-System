@@ -1,0 +1,13 @@
+{{ heading }}
+
+Hello {{ recipient_name }},
+
+{{ message }}
+
+{% for detail in details %}{{ detail.label }}: {{ detail.value }}
+{% endfor %}
+{{ action_label }}:
+{{ action_url }}
+
+This notification was sent by {{ journal_title }}.
+Please sign in to the journal system for complete information.
