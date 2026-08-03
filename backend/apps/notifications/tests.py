@@ -132,7 +132,7 @@ class NotificationEmailTests(TestCase):
         )
         self.assertIn(
             (
-                "https://journal.example/reviewer/"
+                "https://fallback.example/reviewer/"
                 f"assignments/{self.assignment.id}"
             ),
             message.body,
@@ -203,7 +203,7 @@ class NotificationEmailTests(TestCase):
         )
         self.assertIn(
             (
-                "https://journal.example/"
+                "https://fallback.example/"
                 f"section-editor/submissions/{self.submission.id}"
             ),
             mail.outbox[0].body,
@@ -233,7 +233,7 @@ class NotificationEmailTests(TestCase):
         )
         self.assertIn(
             (
-                "https://journal.example/articles/"
+                "https://fallback.example/articles/"
                 "a-test-manuscript"
             ),
             mail.outbox[0].body,
