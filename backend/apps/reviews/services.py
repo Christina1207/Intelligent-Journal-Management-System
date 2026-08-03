@@ -1,4 +1,5 @@
 from django.db import transaction
+from functools import partial
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils import timezone
 from apps.accounts.models import Role, ReviewerProfile
@@ -162,7 +163,17 @@ class ReviewService:
                 submission,
                 Submission.Status.UNDER_REVIEW,
             )
+        from apps.notifications.tasks import (
+            send_reviewer_invitation_email,
+        )
 
+        transaction.on_commit(
+            partial(
+                send_reviewer_invitation_email.delay,
+                str(assignment.id),
+            ),
+            robust=True,
+        )
         return assignment
 
     
@@ -374,7 +385,7 @@ class ReviewService:
     #  MARK ASSIGNMENT EXPIRED                                             #
     # ------------------------------------------------------------------ #
 
-        # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------ #
     # EXPIRE OVERDUE PENDING INVITATIONS
     # ------------------------------------------------------------------ #
 
@@ -540,6 +551,18 @@ class ReviewService:
             target_status,
         )
 
+        from apps.notifications.tasks import (
+            send_author_decision_email,
+        )
+
+        transaction.on_commit(
+            partial(
+                send_author_decision_email.delay,
+                str(current_version.id),
+                False,
+            ),
+            robust=True,
+        )
         return current_version
 
     @staticmethod

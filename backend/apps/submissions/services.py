@@ -308,20 +308,38 @@ class SubmissionService:
             review_deadline = response_deadline + timedelta(
                 days=REVISION_REVIEW_DEADLINE_DAYS,
             )
+            carried_assignments = []
+
             for assignment in accepted_assignments:
-                ReviewerAssignment.objects.create(
+                carried_assignment = ReviewerAssignment.objects.create(
                     version=new_version,
                     reviewer=assignment.reviewer,
-                    assigned_by=submission.assigned_editor or assignment.assigned_by,
+                    assigned_by=(
+                        submission.assigned_editor
+                        or assignment.assigned_by
+                    ),
                     carried_from=assignment,
                     status=ReviewerAssignment.Status.ACCEPTED,
                     response_deadline=response_deadline,
                     review_deadline=review_deadline,
                 )
+                carried_assignments.append(carried_assignment)
             transition_submission(
                 submission,
                 Submission.Status.UNDER_REVIEW,
             )
+            from apps.notifications.tasks import (
+                send_revision_ready_email,
+            )
+
+            for carried_assignment in carried_assignments:
+                transaction.on_commit(
+                    partial(
+                        send_revision_ready_email.delay,
+                        str(carried_assignment.id),
+                    ),
+                    robust=True,
+                )
 
             logger.info(
                 "Revision v%d created for submission %s. "

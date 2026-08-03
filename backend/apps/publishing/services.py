@@ -2,6 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.db import transaction
 from django.http import Http404
 from django.utils import timezone
+from functools import partial
 
 from apps.accounts.models import Role
 from apps.core.storage import StorageService
@@ -186,6 +187,17 @@ class PublishingService:
                 "published_at",
                 "updated_at",
             ]
+        )
+        from apps.notifications.tasks import (
+            send_article_published_email,
+        )
+
+        transaction.on_commit(
+            partial(
+                send_article_published_email.delay,
+                str(article.id),
+            ),
+            robust=True,
         )
 
         return article
