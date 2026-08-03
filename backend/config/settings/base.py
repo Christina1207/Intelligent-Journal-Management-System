@@ -31,6 +31,7 @@ LOCAL_APPS = [
     "apps.accounts",
     "apps.journals",
     "apps.submissions",
+    "apps.integrity",
     "apps.workflow",
     "apps.reviews",
     "apps.publishing",
@@ -170,6 +171,12 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_ROUTES = {
+    "apps.integrity.tasks.run_plagiarism_screening": {
+        "queue": "plagiarism",
+        "routing_key": "plagiarism",
+    },
+}
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BEAT_SCHEDULE = {
     "refresh-reviewer-orcid-profiles": {
@@ -203,3 +210,171 @@ MINIO_USE_SSL     = config('MINIO_USE_SSL', default=False, cast=bool)
 # ------------------------------------------------------------------
 EMBEDDING_MODEL_NAME = config('EMBEDDING_MODEL_NAME', default='all-MiniLM-L6-v2')
 EMBEDDING_DIMENSIONS = config('EMBEDDING_DIMENSIONS', default=384, cast=int)
+
+# ------------------------------------------------------------------
+# Plagiarism detection
+# ------------------------------------------------------------------
+PLAGIARISM_ENABLED = config(
+    "PLAGIARISM_ENABLED",
+    default=False,
+    cast=bool,
+)
+
+PLAGIARISM_RESOURCE_ROOT = Path(
+    config(
+        "PLAGIARISM_RESOURCE_ROOT",
+        default="/pipeline_resources",
+    )
+)
+
+PLAGIARISM_CACHE_ROOT = Path(
+    config(
+        "PLAGIARISM_CACHE_ROOT",
+        default="/var/cache/ijms-plagiarism",
+    )
+)
+
+PLAGIARISM_DATABASE_URL = config(
+    "PLAGIARISM_DATABASE_URL",
+    default="",
+)
+
+PLAGIARISM_SOURCE_TYPE = config(
+    "PLAGIARISM_SOURCE_TYPE",
+    default="",
+)
+
+PLAGIARISM_PIPELINE_VERSION = config(
+    "PLAGIARISM_PIPELINE_VERSION",
+    default="383efcaca1b074cc60bd1fb7a7488f719ae8b183",
+)
+
+PLAGIARISM_CHECKPOINT_ID = config(
+    "PLAGIARISM_CHECKPOINT_ID",
+    default="f2_x2_o1_c1/best_model.pt",
+)
+
+PLAGIARISM_SEMANTIC_BACKEND = config(
+    "PLAGIARISM_SEMANTIC_BACKEND",
+    default="local",
+)
+
+PLAGIARISM_E5_MODEL_DIRECTORY = Path(
+    config(
+        "PLAGIARISM_E5_MODEL_DIRECTORY",
+        default=str(
+            PLAGIARISM_RESOURCE_ROOT
+            / "models"
+            / "multilingual-e5-base"
+        ),
+    )
+)
+
+PLAGIARISM_ARAT5_MODEL_DIRECTORY = Path(
+    config(
+        "PLAGIARISM_ARAT5_MODEL_DIRECTORY",
+        default=str(
+            PLAGIARISM_RESOURCE_ROOT
+            / "models"
+            / "AraT5v2-base-1024"
+        ),
+    )
+)
+
+PLAGIARISM_CHECKPOINT_PATH = Path(
+    config(
+        "PLAGIARISM_CHECKPOINT_PATH",
+        default=str(
+            PLAGIARISM_RESOURCE_ROOT
+            / "models"
+            / "verifier"
+            / "f2_x2_o1_c1"
+            / "best_model.pt"
+        ),
+    )
+)
+
+PLAGIARISM_SEMANTIC_CACHE_DIRECTORY = Path(
+    config(
+        "PLAGIARISM_SEMANTIC_CACHE_DIRECTORY",
+        default=str(
+            PLAGIARISM_RESOURCE_ROOT
+            / "cache"
+            / "semantic"
+        ),
+    )
+)
+
+PLAGIARISM_BM25_CACHE_DIRECTORY = Path(
+    config(
+        "PLAGIARISM_BM25_CACHE_DIRECTORY",
+        default=str(
+            PLAGIARISM_CACHE_ROOT / "bm25"
+        ),
+    )
+)
+
+PLAGIARISM_DEVICE = config(
+    "PLAGIARISM_DEVICE",
+    default="cpu",
+)
+
+PLAGIARISM_MIXED_PRECISION = config(
+    "PLAGIARISM_MIXED_PRECISION",
+    default="none",
+)
+
+PLAGIARISM_VERIFIER_BATCH_SIZE = config(
+    "PLAGIARISM_VERIFIER_BATCH_SIZE",
+    default=2,
+    cast=int,
+)
+
+PLAGIARISM_VERIFIER_MAX_LENGTH = config(
+    "PLAGIARISM_VERIFIER_MAX_LENGTH",
+    default=512,
+    cast=int,
+)
+
+PLAGIARISM_E5_DEVICE = config(
+    "PLAGIARISM_E5_DEVICE",
+    default="cpu",
+)
+
+PLAGIARISM_E5_BATCH_SIZE = config(
+    "PLAGIARISM_E5_BATCH_SIZE",
+    default=4,
+    cast=int,
+)
+
+PLAGIARISM_LEXICAL_TOP_K = config(
+    "PLAGIARISM_LEXICAL_TOP_K",
+    default=10,
+    cast=int,
+)
+
+PLAGIARISM_SEMANTIC_TOP_K = config(
+    "PLAGIARISM_SEMANTIC_TOP_K",
+    default=10,
+    cast=int,
+)
+
+PLAGIARISM_FORCE_REBUILD_BM25_CACHE = config(
+    "PLAGIARISM_FORCE_REBUILD_BM25_CACHE",
+    default=False,
+    cast=bool,
+)
+
+PLAGIARISM_MAX_FILE_SIZE_BYTES = config(
+    "PLAGIARISM_MAX_FILE_SIZE_BYTES",
+    default=50 * 1024 * 1024,
+    cast=int,
+)
+
+PLAGIARISM_MINIMUM_PDF_USABLE_CHARACTERS = config(
+    "PLAGIARISM_MINIMUM_PDF_USABLE_CHARACTERS",
+    default=20,
+    cast=int,
+)
+
+PLAGIARISM_PDF_PAGE_SEPARATOR = "\n\n"

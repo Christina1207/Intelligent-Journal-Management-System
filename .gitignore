@@ -52,4 +52,6 @@ models/
 
 mediafiles/
 
+/pipeline_resources/
+
 !frontend/src/features/public/data/

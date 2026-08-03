@@ -5,6 +5,7 @@ import type {
 } from "@/features/submissions/types";
 import type { UserRole } from "@/types/auth";
 import type { PaginatedApiResponse } from "@/types/api";
+import type { PlagiarismScreeningSummary } from "@/features/integrity/types";
 
 export type ManagerQueueSection = SubmissionSectionSummary & {
   description: string;
@@ -110,11 +111,6 @@ export type TriageCompletedBy = {
   full_name: string;
 };
 
-export type PlagiarismScreeningPlaceholder = {
-  status: "NOT_AVAILABLE";
-  report: null;
-};
-
 export type TriageState = {
   assessment_id: string | null;
   submission_id: string;
@@ -130,7 +126,7 @@ export type TriageState = {
   updated_at: string | null;
   completed_at: string | null;
   completed_by: TriageCompletedBy | null;
-  plagiarism_screening: PlagiarismScreeningPlaceholder;
+  plagiarism_screening: PlagiarismScreeningSummary | null;
 };
 
 export type TriageCheckInput = {

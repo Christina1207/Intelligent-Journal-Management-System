@@ -7,12 +7,16 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    libgomp1 \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    python -m pip install \
+        --timeout 1000 \
+        --retries 20 \
+        -r requirements.txt
 
 COPY . .
 

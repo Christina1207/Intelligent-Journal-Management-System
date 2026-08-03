@@ -1,5 +1,8 @@
 import logging
 from datetime import timedelta
+from functools import partial
+
+from django.conf import settings
 
 from django.db import transaction
 from django.db.models import Count, Q
@@ -78,19 +81,21 @@ class SubmissionService:
         # TODO check author has AUTHOR role here or in the view?
         # TODO check how the author is passed(token)
         """
-        Create a new submission with v1 atomically.
-        - Uploads PDF to MinIO
-        - Creates Submission record
-        - Creates SubmissionVersion(v1)
-        - Dispatches embedding Celery task after commit
+        Create a new submission and its initial manuscript version.
 
-        File upload happens before DB writes — if upload fails,
-        no DB records are created. If DB write fails after upload,
-        the orphaned MinIO object is acceptable (storage is cheap,
-        correctness is not).
+        - Creates the Submission and co-author records.
+        - Uploads the full and blinded PDFs to MinIO.
+        - Creates SubmissionVersion v1.
+        - Registers embedding generation after commit.
+        - Registers automatic plagiarism screening for Arabic v1
+          after commit when plagiarism detection is enabled.
 
-        # TODO Phase 7: implement MinIO cleanup on DB failure via
-        # post-transaction hook or a periodic orphan cleanup task.
+        Database writes run inside one atomic transaction. If an upload
+        fails, database changes are rolled back and already uploaded
+        objects are deleted on a best-effort basis.
+
+        Post-commit processing failures must not invalidate the already
+        committed author submission.
         """
         coauthors_data = validated_data.pop("coauthors", [])
         submission = Submission.objects.create(
@@ -130,7 +135,7 @@ class SubmissionService:
             )
             uploaded_objects.append(blinded_object_name)
 
-            SubmissionVersion.objects.create(
+            initial_version = SubmissionVersion.objects.create(
                 submission=submission,
                 version_number=1,
                 file=full_object_name,
@@ -147,15 +152,50 @@ class SubmissionService:
                     )
             raise
 
-        # Dispatch embedding task after transaction commits
-        # Import here to avoid circular imports
+        # Register independent post-commit jobs. Using robust callbacks
+        # prevents one broker or callback failure from blocking the others
+        # or turning an already committed submission into an API error.
+        # Register independent post-commit jobs.
         from .tasks import generate_submission_embedding
+
+        submission_id = str(submission.id)
+
+
+        def dispatch_embedding():
+            generate_submission_embedding.delay(submission_id)
+
+
         transaction.on_commit(
-            lambda: generate_submission_embedding.delay(str(submission.id))
+            dispatch_embedding,
+            robust=True,
         )
 
+        if (
+            settings.PLAGIARISM_ENABLED
+            and submission.language == "ar"
+            and initial_version.version_number == 1
+        ):
+            from apps.integrity.services.screenings import (
+                request_initial_plagiarism_screening,
+            )
+
+            submission_version_id = str(initial_version.id)
+
+            def request_initial_screening():
+                request_initial_plagiarism_screening(
+                    submission_version_id=submission_version_id,
+                )
+
+            transaction.on_commit(
+                request_initial_screening,
+                robust=True,
+            )
+
         logger.info(
-            "Submission %s created with v1. Embedding task dispatched.",
+            (
+                "Submission %s created with v1. "
+                "Post-commit processing registered."
+            ),
             submission.id,
         )
 
