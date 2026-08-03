@@ -36,6 +36,7 @@ LOCAL_APPS = [
     "apps.reviews",
     "apps.publishing",
     "apps.discovery",
+    "apps.notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -192,7 +193,43 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.journals.tasks.check_and_trigger_section_clustering",
         "schedule": crontab(hour=4, minute=0),  # Daily at 4am UTC
     },
+    "dispatch-review-deadline-reminders": {
+        "task": (
+            "apps.notifications.tasks."
+            "dispatch_review_deadline_reminders"
+        ),
+        "schedule": crontab(hour=8, minute=0),
+    },
 }
+
+# ------------------------------------------------------------------
+# Email notifications
+# ------------------------------------------------------------------
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=10, cast=int)
+DEFAULT_FROM_EMAIL = config(
+    "DEFAULT_FROM_EMAIL",
+    default="IJMS <no-reply@example.com>",
+)
+
+FRONTEND_URL = config(
+    "FRONTEND_URL",
+    default="http://localhost:3000",
+)
+
+REVIEW_DEADLINE_REMINDER_DAYS = config(
+    "REVIEW_DEADLINE_REMINDER_DAYS",
+    default=2,
+    cast=int,
+)
 
 # ------------------------------------------------------------------
 # MinIO

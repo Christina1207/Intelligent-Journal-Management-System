@@ -1,3 +1,4 @@
+from functools import partial
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -156,6 +157,18 @@ class AssignmentService:
             update_fields=("assigned_editor",),
         )
 
+        from apps.notifications.tasks import (
+            send_editor_assignment_email,
+        )
+
+        transaction.on_commit(
+            partial(
+                send_editor_assignment_email.delay,
+                str(assignment.id),
+            ),
+            robust=True,
+        )
+
         return assignment
 
     @staticmethod
@@ -291,7 +304,17 @@ class AssignmentService:
         # Keep the manuscript in its current workflow state.
         submission.assigned_editor = editor
         submission.save(update_fields=["assigned_editor"])
+        from apps.notifications.tasks import (
+            send_editor_assignment_email,
+        )
 
+        transaction.on_commit(
+            partial(
+                send_editor_assignment_email.delay,
+                str(assignment.id),
+            ),
+            robust=True,
+        )
         return assignment
     
 class TriageService:
@@ -665,6 +688,18 @@ class TriageService:
         transition_submission(
             submission,
             Submission.Status.REJECTED,
+        )
+        from apps.notifications.tasks import (
+            send_author_decision_email,
+        )
+
+        transaction.on_commit(
+            partial(
+                send_author_decision_email.delay,
+                str(version.id),
+                True,
+            ),
+            robust=True,
         )
 
         return assessment

@@ -111,6 +111,14 @@ class ReviewerAssignment(models.Model):
     response_deadline = models.DateTimeField()
     review_deadline   = models.DateTimeField()
     assigned_at       = models.DateTimeField(auto_now_add=True)
+    review_reminder_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the one-time review deadline reminder was "
+            "successfully sent."
+        ),
+    )
     cancelled_at = models.DateTimeField(
         null=True,
         blank=True,
