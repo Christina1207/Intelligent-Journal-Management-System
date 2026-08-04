@@ -38,9 +38,5 @@ export function DashboardPage() {
     );
   }
 
-  return (
-    <EditorialAnalyticsDashboard
-      priorityItemBasePath={isEditorInChief ? "/eic/manuscripts" : undefined}
-    />
-  );
+  return <EditorialAnalyticsDashboard />;
 }

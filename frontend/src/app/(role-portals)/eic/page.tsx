@@ -8,7 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function EditorInChiefOverviewRoute() {
-  return (
-    <EditorialAnalyticsDashboard priorityItemBasePath="/eic/manuscripts" />
-  );
+  return <EditorialAnalyticsDashboard />;
 }
