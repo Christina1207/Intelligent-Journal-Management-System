@@ -12,7 +12,7 @@ import type { UserRole } from "@/types/roles";
 
 export type EditorialWorkspaceRole = Extract<
   UserRole,
-  "SECTION_MANAGER" | "SECTION_EDITOR" | "REVIEWER"
+  "EDITOR_IN_CHIEF" | "SECTION_MANAGER" | "SECTION_EDITOR" | "REVIEWER"
 >;
 
 export type EditorialNavigationItem = {
@@ -33,6 +33,19 @@ export const EDITORIAL_WORKSPACES: Record<
   EditorialWorkspaceRole,
   EditorialWorkspaceConfig
 > = {
+  EDITOR_IN_CHIEF: {
+    label: "Editor-in-Chief Workspace",
+    shortLabel: "Editor-in-Chief",
+    homeHref: "/eic",
+    navigation: [
+      {
+        activePrefixes: ["/eic/manuscripts"],
+        href: "/eic",
+        label: "Overview",
+        icon: LayoutDashboard,
+      },
+    ],
+  },
   SECTION_MANAGER: {
     label: "Section Manager Workspace",
     shortLabel: "Section Manager",

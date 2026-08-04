@@ -37,8 +37,8 @@ export interface SectionTopicAnalyticsResponse {
 export interface EditorialAnalyticsSummary {
   total_submissions: number;
   total_publications: number;
-  accepted_submissions: number;
-  rejected_submissions: number;
+  accepted_count: number;
+  rejected_count: number;
   acceptance_rate: number;
   rejection_rate: number;
   median_decision_duration_days: number | null;
@@ -46,7 +46,7 @@ export interface EditorialAnalyticsSummary {
 }
 
 export interface AnalyticsStatusCount {
-  status: SubmissionStatus;
+  code: SubmissionStatus;
   label: string;
   count: number;
 }
@@ -64,7 +64,7 @@ export interface AnalyticsSectionCount {
 
 export interface AnalyticsTopicCount {
   label: string;
-  count: number;
+  submission_count: number;
 }
 
 export interface AnalyticsTopicDistribution {
@@ -75,7 +75,7 @@ export interface AnalyticsTopicDistribution {
 export interface AnalyticsOverdueWork {
   overdue_invitations: number;
   overdue_reviews: number;
-  affected_submissions: number;
+  total: number;
 }
 
 export interface PrioritySection {
@@ -85,7 +85,7 @@ export interface PrioritySection {
 
 export interface PriorityEditor {
   id: string;
-  name: string;
+  full_name: string;
 }
 
 export interface PriorityFactor {
@@ -118,6 +118,7 @@ export interface DurationDefinitions {
 
 export interface EditorialAnalyticsDashboardResponse {
   generated_at: string;
+  period_months: number;
   summary: EditorialAnalyticsSummary;
   status_distribution: AnalyticsStatusCount[];
   submissions_over_time: AnalyticsTimePoint[];
