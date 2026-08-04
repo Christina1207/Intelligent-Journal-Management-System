@@ -4,6 +4,7 @@ import type {
   PublicationDraft,
   PublicationRecord,
   PublicationRecordListResponse,
+  PublicationUpdatePayload,
 } from "@/features/publishing/types";
 import { apiClient } from "@/lib/api/client";
 
@@ -21,6 +22,16 @@ export function getPublicationRecords(page: number) {
 
 export function getPublicationRecord(articleId: string) {
   return apiClient.get<PublicationRecord>(`/publishing/articles/${articleId}/`);
+}
+
+export function updatePublicationRecord(
+  articleId: string,
+  payload: PublicationUpdatePayload,
+) {
+  return apiClient.patch<PublicationRecord>(
+    `/publishing/articles/${articleId}/`,
+    payload,
+  );
 }
 
 export function publishPublicationRecord(articleId: string) {

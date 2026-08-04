@@ -1,6 +1,7 @@
 import {
   BarChart3,
   ClipboardCheck,
+  FileOutput,
   FileSearch,
   LayoutDashboard,
   Library,
@@ -47,6 +48,11 @@ export const EDITORIAL_WORKSPACES: Record<
         href: "/eic/issues",
         label: "Issues",
         icon: Library,
+      },
+      {
+        href: "/eic/publishing",
+        label: "Publishing",
+        icon: FileOutput,
       },
     ],
   },
