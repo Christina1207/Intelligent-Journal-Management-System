@@ -10,6 +10,26 @@ urlpatterns = [
         name="publishing-create-draft",
     ),
     path(
+        "publishing/issues/",
+        views.IssueManagementListCreateView.as_view(),
+        name="publishing-issue-list",
+    ),
+    path(
+        "publishing/issues/<uuid:issue_id>/",
+        views.IssueManagementDetailView.as_view(),
+        name="publishing-issue-detail",
+    ),
+    path(
+        "publishing/issues/<uuid:issue_id>/open/",
+        views.OpenIssueView.as_view(),
+        name="publishing-issue-open",
+    ),
+    path(
+        "publishing/issues/<uuid:issue_id>/close/",
+        views.CloseIssueView.as_view(),
+        name="publishing-issue-close",
+    ),
+    path(
         "publishing/articles/",
         views.ArticleManagementListView.as_view(),
         name="publishing-article-list",

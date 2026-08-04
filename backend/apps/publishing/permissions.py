@@ -58,3 +58,13 @@ class CanPublishArticle(_EditorialRolePermission):
             Role.RoleName.ADMIN,
         }
     )
+
+class CanManageIssues(_EditorialRolePermission):
+    message = (
+        "Only the Editor-in-Chief can manage journal issues."
+    )
+    allowed_roles = frozenset(
+        {
+            Role.RoleName.EDITOR_IN_CHIEF,
+        }
+    )
