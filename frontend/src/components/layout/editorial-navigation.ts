@@ -39,10 +39,14 @@ export const EDITORIAL_WORKSPACES: Record<
     homeHref: "/eic",
     navigation: [
       {
-        activePrefixes: ["/eic/manuscripts"],
         href: "/eic",
         label: "Overview",
         icon: LayoutDashboard,
+      },
+      {
+        href: "/eic/issues",
+        label: "Issues",
+        icon: Library,
       },
     ],
   },

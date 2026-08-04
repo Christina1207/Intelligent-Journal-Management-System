@@ -1,4 +1,6 @@
 import type {
+  IssueManagementRecord,
+  IssueWritePayload,
   PublicationDraft,
   PublicationRecord,
   PublicationRecordListResponse,
@@ -24,5 +26,32 @@ export function getPublicationRecord(articleId: string) {
 export function publishPublicationRecord(articleId: string) {
   return apiClient.post<PublicationRecord>(
     `/publishing/articles/${articleId}/publish/`,
+  );
+}
+
+export function getIssues() {
+  return apiClient.get<IssueManagementRecord[]>("/publishing/issues/");
+}
+
+export function createIssue(payload: IssueWritePayload) {
+  return apiClient.post<IssueManagementRecord>("/publishing/issues/", payload);
+}
+
+export function updateIssue(issueId: string, payload: IssueWritePayload) {
+  return apiClient.patch<IssueManagementRecord>(
+    `/publishing/issues/${issueId}/`,
+    payload,
+  );
+}
+
+export function openIssue(issueId: string) {
+  return apiClient.post<IssueManagementRecord>(
+    `/publishing/issues/${issueId}/open/`,
+  );
+}
+
+export function closeIssue(issueId: string) {
+  return apiClient.post<IssueManagementRecord>(
+    `/publishing/issues/${issueId}/close/`,
   );
 }

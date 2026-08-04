@@ -1,4 +1,31 @@
 import type { PaginatedApiResponse } from "@/types/api";
+export type IssueStatus = "draft" | "published" | "archived";
+
+export type IssueManagementRecord = {
+  id: string;
+  title: string;
+  slug: string;
+  volume: string;
+  number: string;
+  year: number;
+  description: string;
+  status: IssueStatus;
+  is_current: boolean;
+  published_at: string | null;
+  article_count: number;
+  published_article_count: number;
+  draft_article_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IssueWritePayload = {
+  title: string;
+  volume: string;
+  number: string;
+  year: number;
+  description: string;
+};
 export type PublicationStatus = "draft" | "published" | "retracted";
 
 export type PublicationDraftStatus = PublicationStatus;
