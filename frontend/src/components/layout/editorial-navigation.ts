@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Building2,
   ClipboardCheck,
   FileOutput,
   FileSearch,
@@ -53,6 +54,16 @@ export const EDITORIAL_WORKSPACES: Record<
         href: "/eic/publishing",
         label: "Publishing",
         icon: FileOutput,
+      },
+      {
+        href: "/eic/sections",
+        label: "Sections",
+        icon: Building2,
+      },
+      {
+        href: "/eic/reviewer-applications",
+        label: "Reviewer applications",
+        icon: UserRoundCheck,
       },
     ],
   },

@@ -2,15 +2,15 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from apps.accounts.models import Role
+from apps.accounts.models import Role, User
 from .models import Section
 from .permissions import SectionManagementPermission
-from .serializers import SectionManagementSerializer, AssignSectionManagerSerializer, SectionSerializer
+from .serializers import SectionManagementSerializer, AssignSectionManagerSerializer, SectionSerializer,SectionManagerCandidateSerializer 
 from .services import SectionManagementService
 from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 
-from .permissions import CanViewTopicAnalytics,CanViewJournalAnalytics
+from .permissions import CanViewTopicAnalytics,CanViewJournalAnalytics,IsEditorInChief 
 from .serializers import TopicAnalyticsDashboardSerializer, EditorialAnalyticsDashboardSerializer
 from .topic_analytics import TopicAnalyticsService
 from .editorial_analytics import EditorialAnalyticsService
@@ -23,6 +23,21 @@ class SectionListView(generics.ListAPIView):
         # Only expose active sections via the API
         # Inactive sections are admin-only concern
         return Section.objects.filter(is_active=True)
+
+class SectionManagerCandidateListView(generics.ListAPIView):
+    permission_classes = [IsEditorInChief]
+    serializer_class = SectionManagerCandidateSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            User.objects.filter(
+                is_active=True,
+                roles__name=Role.RoleName.SECTION_MANAGER,
+            )
+            .distinct()
+            .order_by("first_name", "last_name", "username")
+        )
 
 class SectionManagementViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):

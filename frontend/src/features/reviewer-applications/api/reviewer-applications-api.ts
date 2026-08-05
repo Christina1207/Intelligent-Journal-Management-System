@@ -70,9 +70,11 @@ export function updateReviewerApplication(
 export async function getReviewerApplications({
   page,
   status,
+  sectionId,
 }: {
   page: number;
   status: ReviewerApplicationListStatus;
+  sectionId?: string;
 }) {
   const query = new URLSearchParams({
     page: String(page),
@@ -80,6 +82,10 @@ export async function getReviewerApplications({
 
   if (status !== "ALL") {
     query.set("status", status);
+  }
+
+  if (sectionId) {
+    query.set("section", sectionId);
   }
 
   return apiClient.get<PaginatedResponse<ReviewerApplication>>(

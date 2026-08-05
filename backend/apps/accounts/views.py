@@ -4,6 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import NotFound, ValidationError
+from uuid import UUID
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -214,6 +215,15 @@ class ReviewerApplicationView(generics.GenericAPIView):
                 "Optionally filter applications by status."
             ),
         ),
+        OpenApiParameter(
+            name="section",
+            location=OpenApiParameter.QUERY,
+            required=False,
+            type=OpenApiTypes.UUID,
+            description=(
+                "Optionally filter applications by journal section."
+            ),
+        ),
     ],
     responses={
         200: ReviewerApplicationSerializer(many=True),
@@ -259,35 +269,51 @@ class ReviewerApplicationListView(generics.ListAPIView):
                 section__manager=user,
             )
 
-        raw_status = self.request.query_params.get(
-            "status"
-        )
+        raw_status = self.request.query_params.get("status")
 
-        if not raw_status:
-            return queryset
+        if raw_status:
+            normalized_status = raw_status.strip().upper()
 
-        normalized_status = raw_status.strip().upper()
+            if (
+                normalized_status
+                not in ReviewerApplication.Status.values
+            ):
+                allowed_statuses = ", ".join(
+                    ReviewerApplication.Status.values
+                )
 
-        if (
-            normalized_status
-            not in ReviewerApplication.Status.values
-        ):
-            allowed_statuses = ", ".join(
-                ReviewerApplication.Status.values
+                raise ValidationError(
+                    {
+                        "status": (
+                            "Invalid status. Use one of: "
+                            f"{allowed_statuses}."
+                        )
+                    }
+                )
+
+            queryset = queryset.filter(
+                status=normalized_status,
             )
 
-            raise ValidationError(
-                {
-                    "status": (
-                        "Invalid status. Use one of: "
-                        f"{allowed_statuses}."
-                    )
-                }
+        raw_section = self.request.query_params.get("section")
+
+        if raw_section:
+            try:
+                section_id = UUID(raw_section.strip())
+            except (AttributeError, TypeError, ValueError):
+                raise ValidationError(
+                    {
+                        "section": (
+                            "Enter a valid section UUID."
+                        )
+                    }
+                )
+
+            queryset = queryset.filter(
+                section_id=section_id,
             )
 
-        return queryset.filter(
-            status=normalized_status,
-        )
+        return queryset
 
 @extend_schema(
     tags=["Reviewer Applications"],
