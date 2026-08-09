@@ -1,0 +1,354 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "setup": {
+                "groups": {},
+                "checks": {
+                        "author login returned 200": {
+                            "fails": 0,
+                            "name": "author login returned 200",
+                            "path": "::setup::author login returned 200",
+                            "id": "a5932ced04cfdda5d8b4e69cded5b543",
+                            "passes": 1
+                        },
+                        "author login returned an access token": {
+                            "path": "::setup::author login returned an access token",
+                            "id": "c18072b20bbd15c6cfe4e32d187d9fa2",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "author login returned an access token"
+                        },
+                        "manager login returned 200": {
+                            "name": "manager login returned 200",
+                            "path": "::setup::manager login returned 200",
+                            "id": "8f6e525b14aa18d1434cf4b2e0ae023c",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "manager login returned an access token": {
+                            "name": "manager login returned an access token",
+                            "path": "::setup::manager login returned an access token",
+                            "id": "4cc263aa70986a913a7f89356ece0a30",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "author_submission_discovery returned 200": {
+                            "name": "author_submission_discovery returned 200",
+                            "path": "::setup::author_submission_discovery returned 200",
+                            "id": "f2b9552297ebb13382be0298268a1967",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "author_submission_discovery returned JSON": {
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "author_submission_discovery returned JSON",
+                            "path": "::setup::author_submission_discovery returned JSON",
+                            "id": "3109d132a2433ec689047c61b96a7e0d"
+                        },
+                        "manager_queue_discovery returned 200": {
+                            "id": "6c2471d24b1db2437b695e8e806b432f",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "manager_queue_discovery returned 200",
+                            "path": "::setup::manager_queue_discovery returned 200"
+                        },
+                        "manager_queue_discovery returned JSON": {
+                            "path": "::setup::manager_queue_discovery returned JSON",
+                            "id": "d5e3f367bb32766c2e6c2bf71bc4dc50",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "manager_queue_discovery returned JSON"
+                        }
+                    },
+                "name": "setup",
+                "path": "::setup",
+                "id": "5c0f8025f7e0b6654089e5b00e950f1a"
+            }
+        },
+        "checks": {
+            "author_submission_list returned 200": {
+                "path": "::author_submission_list returned 200",
+                "id": "b2fe9394cbb5d91f7a382c1e30561dea",
+                "passes": 186,
+                "fails": 0,
+                "name": "author_submission_list returned 200"
+            },
+            "author_submission_list returned JSON": {
+                "passes": 186,
+                "fails": 0,
+                "name": "author_submission_list returned JSON",
+                "path": "::author_submission_list returned JSON",
+                "id": "b0b4325486b5c2161ae350ae385cf495"
+            },
+            "manager_queue returned 200": {
+                "name": "manager_queue returned 200",
+                "path": "::manager_queue returned 200",
+                "id": "48a5647a29acb24d3892cc992aa9f91b",
+                "passes": 194,
+                "fails": 0
+            },
+            "manager_queue returned JSON": {
+                "name": "manager_queue returned JSON",
+                "path": "::manager_queue returned JSON",
+                "id": "a10b3483bcfd2ab3e4c252f30ceeae91",
+                "passes": 194,
+                "fails": 0
+            },
+            "author_dashboard returned 200": {
+                "name": "author_dashboard returned 200",
+                "path": "::author_dashboard returned 200",
+                "id": "bfa77f8edf0ea28b1fa0965efa8deb26",
+                "passes": 186,
+                "fails": 0
+            },
+            "author_dashboard returned JSON": {
+                "passes": 186,
+                "fails": 0,
+                "name": "author_dashboard returned JSON",
+                "path": "::author_dashboard returned JSON",
+                "id": "ecdd6cbdedb10740fbd11ab4e52ed69d"
+            },
+            "manager_monitoring returned 200": {
+                "name": "manager_monitoring returned 200",
+                "path": "::manager_monitoring returned 200",
+                "id": "666f70427a03bfef591459a2ded211e3",
+                "passes": 194,
+                "fails": 0
+            },
+            "manager_monitoring returned JSON": {
+                "id": "fa67751cbfa0e8658a3da35e7042c403",
+                "passes": 194,
+                "fails": 0,
+                "name": "manager_monitoring returned JSON",
+                "path": "::manager_monitoring returned JSON"
+            },
+            "author_submission_detail returned 200": {
+                "name": "author_submission_detail returned 200",
+                "path": "::author_submission_detail returned 200",
+                "id": "c9bd0b4e98f1a9322e2c282b04e926b7",
+                "passes": 186,
+                "fails": 0
+            },
+            "author_submission_detail returned JSON": {
+                "name": "author_submission_detail returned JSON",
+                "path": "::author_submission_detail returned JSON",
+                "id": "3257437f28ec85d3d224f648fe513a6f",
+                "passes": 186,
+                "fails": 0
+            },
+            "manager_submission_detail returned 200": {
+                "name": "manager_submission_detail returned 200",
+                "path": "::manager_submission_detail returned 200",
+                "id": "350af3de0736d773ec84cc2852447e00",
+                "passes": 194,
+                "fails": 0
+            },
+            "manager_submission_detail returned JSON": {
+                "name": "manager_submission_detail returned JSON",
+                "path": "::manager_submission_detail returned JSON",
+                "id": "8a3cbecd61db2449adcb6ca316d11f63",
+                "passes": 194,
+                "fails": 0
+            },
+            "manager_triage returned 200": {
+                "passes": 194,
+                "fails": 0,
+                "name": "manager_triage returned 200",
+                "path": "::manager_triage returned 200",
+                "id": "edafac5975ffd8ed8e40627a9e32bf69"
+            },
+            "manager_triage returned JSON": {
+                "path": "::manager_triage returned JSON",
+                "id": "8795d19e3a0e033cde4ee324b35816ec",
+                "passes": 194,
+                "fails": 0,
+                "name": "manager_triage returned JSON"
+            },
+            "author_submission_versions returned 200": {
+                "name": "author_submission_versions returned 200",
+                "path": "::author_submission_versions returned 200",
+                "id": "713ae36255d1da09ccfba724a66cea10",
+                "passes": 186,
+                "fails": 0
+            },
+            "author_submission_versions returned JSON": {
+                "path": "::author_submission_versions returned JSON",
+                "id": "0081164790b2a8d7c2ae5a64bcf523e4",
+                "passes": 186,
+                "fails": 0,
+                "name": "author_submission_versions returned JSON"
+            }
+        }
+    },
+    "metrics": {
+        "http_req_duration{performance_class:ordinary}": {
+            "p(99)": 145.00848900000005,
+            "max": 2365.0938,
+            "avg": 73.80204509283814,
+            "med": 75.9406,
+            "p(90)": 89.73775,
+            "p(95)": 102.97954,
+            "thresholds": {
+                "p(99)<4000": false,
+                "p(95)<2000": false
+            }
+        },
+        "vus": {
+            "max": 4,
+            "value": 1,
+            "min": 1
+        },
+        "iterations": {
+            "count": 380,
+            "rate": 3.1104204056989437
+        },
+        "data_received": {
+            "rate": 20494.27356706034,
+            "count": 2503785
+        },
+        "http_req_duration{performance_class:dashboard}": {
+            "max": 1822.1396,
+            "avg": 67.98271562500007,
+            "med": 69.83949999999999,
+            "p(90)": 84.45659,
+            "p(95)": 95.92996,
+            "p(99)": 132.48439500000003,
+            "thresholds": {
+                "p(95)<3000": false,
+                "p(99)<5000": false
+            }
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(99)": 141.88162099999997,
+            "max": 2365.0938,
+            "avg": 71.28807946194226,
+            "med": 73.2464,
+            "p(90)": 88.15285,
+            "p(95)": 101.14800999999997
+        },
+        "http_req_blocked": {
+            "p(95)": 0,
+            "p(99)": 0.19473699999999913,
+            "max": 10.6271,
+            "avg": 0.012399737532808403,
+            "med": 0,
+            "p(90)": 0
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 1524,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "iteration_duration": {
+            "p(95)": 1706.95613,
+            "p(99)": 2013.079004999998,
+            "max": 3819.6212,
+            "avg": 1269.031472894736,
+            "med": 1237.7211000000002,
+            "p(90)": 1652.64498
+        },
+        "http_req_duration": {
+            "avg": 71.28807946194226,
+            "med": 73.2464,
+            "p(90)": 88.15285,
+            "p(95)": 101.14800999999997,
+            "p(99)": 141.88162099999997,
+            "max": 2365.0938
+        },
+        "http_req_connecting": {
+            "avg": 0.0017646325459317585,
+            "med": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "max": 0.5673
+        },
+        "checks": {
+            "passes": 3048,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "http_req_receiving": {
+            "avg": 0.13201620734908134,
+            "med": 0,
+            "p(90)": 0.5349700000000001,
+            "p(95)": 0.5837249999999996,
+            "p(99)": 0.9578039999999998,
+            "max": 6.5617
+        },
+        "http_req_tls_handshaking": {
+            "p(95)": 0,
+            "p(99)": 0,
+            "max": 0,
+            "avg": 0,
+            "med": 0,
+            "p(90)": 0
+        },
+        "http_req_sending": {
+            "max": 1.0872,
+            "avg": 0.012134973753280837,
+            "med": 0,
+            "p(90)": 0,
+            "p(95)": 0.022224999999999773,
+            "p(99)": 0.506416
+        },
+        "data_sent": {
+            "count": 679408,
+            "rate": 5561.169755250284
+        },
+        "http_req_waiting": {
+            "avg": 71.14392828084,
+            "med": 73.1748,
+            "p(90)": 87.95106000000001,
+            "p(95)": 100.84251499999998,
+            "p(99)": 141.74001799999996,
+            "max": 2365.0938
+        },
+        "vus_max": {
+            "max": 4,
+            "value": 4,
+            "min": 4
+        },
+        "http_req_duration{performance_class:authentication}": {
+            "p(90)": 407.31935000000004,
+            "p(95)": 409.13642500000003,
+            "p(99)": 410.59008500000004,
+            "max": 410.9535,
+            "avg": 392.78275,
+            "med": 392.78275,
+            "thresholds": {
+                "p(95)<2000": false,
+                "p(99)<4000": false
+            }
+        },
+        "http_reqs": {
+            "count": 1524,
+            "rate": 12.474422890224185
+        }
+    },
+    "setup_data": {
+        "authorSubmissionIds": [
+            "ee66a7f3-6f63-4a8c-8071-3df577c88e53"
+        ],
+        "authorToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzg1OTUxNjQ0LCJpYXQiOjE3ODU5NDgwNDQsImp0aSI6IjBkMTkyNTkyMmUyZjQ0N2JhMWFkMTIyZjMwZDJkZDQwIiwidXNlcl9pZCI6IjBiOTkwZmEzLTQxYjItNDJkOC1hODAxLTI2ODVhYzcwZGJhMyJ9.c6JdpTzNzeVux8JMJc_Lqe7CIVKE-I4GQuEXQxRRht4",
+        "managerSubmissionIds": [
+            "ee66a7f3-6f63-4a8c-8071-3df577c88e53",
+            "aa965f59-776d-4c6c-b989-de2869f9f28f",
+            "260a8bdb-a3b8-4cb7-bfe7-15e8ce29d409",
+            "d4192aeb-649f-479d-a0ea-81a1cf8b2bba",
+            "de0fb81e-679b-415e-98e4-00e6b457a3f6",
+            "0f01ef5e-328e-44b7-a3e2-6743157de019"
+        ],
+        "managerToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzg1OTUxNjQ0LCJpYXQiOjE3ODU5NDgwNDQsImp0aSI6ImJkNDIzMjEzMzM2OTQ4MzZiYWY1MzIyNDMwZjkzNmM5IiwidXNlcl9pZCI6IjY1ZDI2ZTAxLWQwMWEtNDI2NS1hZmEwLTNkZGQwOWQyYTQ3ZiJ9.7mZZzgP46dB9g4amylfzvjjyRK3ZNbK52YvOY2H0oOw"
+    }
+}
