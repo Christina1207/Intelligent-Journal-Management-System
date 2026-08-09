@@ -16,6 +16,22 @@ class SectionManagerBriefSerializer(serializers.Serializer):
     email = serializers.EmailField()
     full_name = serializers.CharField(allow_blank=True)
 
+class SectionManagerCandidateSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(
+        source="get_full_name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "full_name",
+        ]
+        read_only_fields = fields
+
 class SectionManagementSerializer(serializers.ModelSerializer):
     manager = serializers.SerializerMethodField()
 

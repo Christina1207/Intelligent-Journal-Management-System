@@ -1,5 +1,5 @@
-from django.db.models import Q
-
+from django.db.models import Q, Count
+from apps.journals.models import Issue
 from apps.accounts.models import Role
 
 from .models import PublishedArticle
@@ -48,3 +48,28 @@ def publishing_records_for(user):
         return queryset.none()
 
     return queryset.filter(scope).distinct()
+
+def issue_management_records():
+    return (
+        Issue.objects.annotate(
+            article_count=Count("articles"),
+            published_article_count=Count(
+                "articles",
+                filter=Q(
+                    articles__status=PublishedArticle.Status.PUBLISHED,
+                ),
+            ),
+            draft_article_count=Count(
+                "articles",
+                filter=Q(
+                    articles__status=PublishedArticle.Status.DRAFT,
+                ),
+            ),
+        )
+        .order_by(
+            "-is_current",
+            "-year",
+            "volume",
+            "number",
+        )
+    )

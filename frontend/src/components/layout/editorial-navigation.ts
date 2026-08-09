@@ -1,6 +1,8 @@
 import {
   BarChart3,
+  Building2,
   ClipboardCheck,
+  FileOutput,
   FileSearch,
   LayoutDashboard,
   Library,
@@ -12,7 +14,7 @@ import type { UserRole } from "@/types/roles";
 
 export type EditorialWorkspaceRole = Extract<
   UserRole,
-  "SECTION_MANAGER" | "SECTION_EDITOR" | "REVIEWER"
+  "EDITOR_IN_CHIEF" | "SECTION_MANAGER" | "SECTION_EDITOR" | "REVIEWER"
 >;
 
 export type EditorialNavigationItem = {
@@ -33,6 +35,38 @@ export const EDITORIAL_WORKSPACES: Record<
   EditorialWorkspaceRole,
   EditorialWorkspaceConfig
 > = {
+  EDITOR_IN_CHIEF: {
+    label: "Editor-in-Chief Workspace",
+    shortLabel: "Editor-in-Chief",
+    homeHref: "/eic",
+    navigation: [
+      {
+        href: "/eic",
+        label: "Overview",
+        icon: LayoutDashboard,
+      },
+      {
+        href: "/eic/issues",
+        label: "Issues",
+        icon: Library,
+      },
+      {
+        href: "/eic/publishing",
+        label: "Publishing",
+        icon: FileOutput,
+      },
+      {
+        href: "/eic/sections",
+        label: "Sections",
+        icon: Building2,
+      },
+      {
+        href: "/eic/reviewer-applications",
+        label: "Reviewer applications",
+        icon: UserRoundCheck,
+      },
+    ],
+  },
   SECTION_MANAGER: {
     label: "Section Manager Workspace",
     shortLabel: "Section Manager",

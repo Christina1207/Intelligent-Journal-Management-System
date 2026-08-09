@@ -1,5 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.utils import timezone
 from functools import partial
@@ -17,6 +17,117 @@ from .models import PublishedArticle, PublishedArticleAuthor
 class PublicDownloadUnavailable(Exception):
     pass
 
+
+class IssueLifecycleService:
+    @staticmethod
+    def open_issue(*, issue: Issue) -> Issue:
+        try:
+            with transaction.atomic():
+                issue = (
+                    Issue.objects
+                    .select_for_update()
+                    .get(pk=issue.pk)
+                )
+
+                if issue.status != Issue.Status.DRAFT:
+                    raise ValidationError(
+                        "Only a draft issue can be opened."
+                    )
+
+                metadata_errors = {}
+
+                if not issue.title.strip():
+                    metadata_errors["title"] = (
+                        "Title is required before opening the issue."
+                    )
+
+                if not issue.volume.strip():
+                    metadata_errors["volume"] = (
+                        "Volume is required before opening the issue."
+                    )
+
+                if not issue.number.strip():
+                    metadata_errors["number"] = (
+                        "Issue number is required before opening the issue."
+                    )
+
+                if metadata_errors:
+                    raise ValidationError(metadata_errors)
+
+                current_issue = (
+                    Issue.objects
+                    .select_for_update()
+                    .filter(is_current=True)
+                    .exclude(pk=issue.pk)
+                    .first()
+                )
+
+                if current_issue is not None:
+                    raise ValidationError(
+                        "Close the current issue before opening another one."
+                    )
+
+                issue.status = Issue.Status.PUBLISHED
+                issue.is_current = True
+                issue.published_at = timezone.now()
+                issue.save(
+                    update_fields=[
+                        "status",
+                        "is_current",
+                        "published_at",
+                        "updated_at",
+                    ]
+                )
+
+                return issue
+
+        except IntegrityError as exc:
+            raise ValidationError(
+                "Another issue became current while this issue "
+                "was being opened. Refresh and try again."
+            ) from exc
+
+    @staticmethod
+    @transaction.atomic
+    def close_issue(*, issue: Issue) -> Issue:
+        issue = (
+            Issue.objects
+            .select_for_update()
+            .get(pk=issue.pk)
+        )
+
+        if (
+            issue.status != Issue.Status.PUBLISHED
+            or not issue.is_current
+        ):
+            raise ValidationError(
+                "Only the current open issue can be closed."
+            )
+
+        has_draft_articles = (
+            issue.articles
+            .select_for_update()
+            .filter(status=PublishedArticle.Status.DRAFT)
+            .exists()
+        )
+
+        if has_draft_articles:
+            raise ValidationError(
+                "This issue still contains publication drafts. "
+                "Publish or remove them before closing the issue."
+            )
+
+        issue.status = Issue.Status.ARCHIVED
+        issue.is_current = False
+        issue.save(
+            update_fields=[
+                "status",
+                "is_current",
+                "updated_at",
+            ]
+        )
+
+        return issue
 
 class PublishingService:
     PUBLIC_DOWNLOAD_EXPIRES_IN_SECONDS = 3600
@@ -165,11 +276,12 @@ class PublishingService:
                     "publishing."
                 )
 
-        if publication_issue.status != Issue.Status.PUBLISHED:
+        if (
+            publication_issue.status != Issue.Status.PUBLISHED
+            or not publication_issue.is_current
+        ):
             raise ValidationError(
-                "Articles can only be published in an issue with "
-                "status 'published'. Current issue status: "
-                f"'{publication_issue.status}'."
+                "Articles can only be published in the current open issue."
             )
 
         article.publication_issue = publication_issue

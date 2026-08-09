@@ -9,6 +9,15 @@ export const reviewerApplicationQueryKeys = {
 
   lists: () => [...reviewerApplicationQueryKeys.all, "list"] as const,
 
-  list: (page: number, status: ReviewerApplicationListStatus) =>
-    [...reviewerApplicationQueryKeys.lists(), page, status] as const,
+  list: (
+    page: number,
+    status: ReviewerApplicationListStatus,
+    sectionId?: string,
+  ) =>
+    [
+      ...reviewerApplicationQueryKeys.lists(),
+      page,
+      status,
+      sectionId ?? "all-sections",
+    ] as const,
 };

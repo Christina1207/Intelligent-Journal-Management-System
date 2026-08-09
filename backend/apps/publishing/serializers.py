@@ -124,6 +124,91 @@ class PublicIssueSerializer(serializers.ModelSerializer):
     def get_year(self, obj) -> str:
         return str(obj.year)
 
+class IssueManagementSerializer(serializers.ModelSerializer):
+    volume = serializers.CharField(
+        max_length=50,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    number = serializers.CharField(
+        max_length=50,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    year = serializers.IntegerField(
+        min_value=1,
+        max_value=9999,
+    )
+    article_count = serializers.IntegerField(read_only=True)
+    published_article_count = serializers.IntegerField(read_only=True)
+    draft_article_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Issue
+        fields = [
+            "id",
+            "title",
+            "slug",
+            "volume",
+            "number",
+            "year",
+            "description",
+            "status",
+            "is_current",
+            "published_at",
+            "article_count",
+            "published_article_count",
+            "draft_article_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "slug",
+            "status",
+            "is_current",
+            "published_at",
+            "article_count",
+            "published_article_count",
+            "draft_article_count",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        workflow_fields = {
+            "status",
+            "is_current",
+            "published_at",
+        }
+        supplied_workflow_fields = workflow_fields.intersection(
+            getattr(self, "initial_data", {}).keys()
+        )
+
+        if supplied_workflow_fields:
+            raise serializers.ValidationError(
+                {
+                    field: (
+                        "This field is controlled by the issue "
+                        "lifecycle and cannot be edited directly."
+                    )
+                    for field in supplied_workflow_fields
+                }
+            )
+
+        if (
+            self.instance is not None
+            and self.instance.status != Issue.Status.DRAFT
+        ):
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "Only draft issues can have their metadata edited."
+                    )
+                }
+            )
+
+        return attrs
 
 class PublishedArticleAuthorPublicSerializer(serializers.ModelSerializer):
     class Meta:
@@ -409,25 +494,37 @@ class PublishedArticleWriteSerializer(serializers.ModelSerializer):
                 "the metadata endpoint."
             )
 
-        if (
-            self.instance is not None
-            and self.instance.status
-            == PublishedArticle.Status.PUBLISHED
-            and "publication_issue" in attrs
-        ):
+        if "publication_issue" in attrs:
             publication_issue = attrs["publication_issue"]
 
-            if publication_issue is None:
-                errors["publication_issue"] = (
-                    "A published article must remain assigned to a "
-                    "published issue."
-                )
-            elif publication_issue.status != Issue.Status.PUBLISHED:
-                errors["publication_issue"] = (
-                    "A published article can only be moved to an "
-                    "issue with status 'published'."
-                )
+            if (
+                self.instance is not None
+                and self.instance.status
+                == PublishedArticle.Status.PUBLISHED
+            ):
+                if publication_issue is None:
+                    errors["publication_issue"] = (
+                        "A published article must remain assigned to its issue."
+                    )
+                elif (
+                    publication_issue.pk
+                    != self.instance.publication_issue_id
+                ):
+                    errors["publication_issue"] = (
+                        "Published articles cannot be moved between issues."
+                    )
 
+            elif (
+                publication_issue is not None
+                and (
+                    publication_issue.status != Issue.Status.PUBLISHED
+                    or not publication_issue.is_current
+                )
+            ):
+                errors["publication_issue"] = (
+                    "A publication draft can only be assigned to the "
+                    "current open issue."
+                )
         if errors:
             raise serializers.ValidationError(errors)
 

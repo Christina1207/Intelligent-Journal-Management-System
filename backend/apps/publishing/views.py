@@ -33,8 +33,12 @@ from .permissions import (
     CanCreatePublicationDraft,
     CanPublishArticle,
     IsPublishingStaff,
+    CanManageIssues,
 )
-from .selectors import publishing_records_for
+from .selectors import (
+    issue_management_records,
+    publishing_records_for,
+)
 from apps.submissions.models import Submission
 
 from .exporters import (
@@ -56,8 +60,10 @@ from .serializers import (
     PublishedArticlePublicListSerializer,
     PublishedArticleWriteSerializer,
     JournalContentPagePublicSerializer,
+    IssueManagementSerializer,
+    PublicIssueSerializer,
 )
-from .services import PublicDownloadUnavailable, PublishingService
+from .services import IssueLifecycleService, PublicDownloadUnavailable, PublishingService
 
 class PublicReaderPagination(PageNumberPagination):
     page_size = 10
@@ -161,7 +167,32 @@ ARTICLE_EXPORT_CONTENT = {
     },
 }
 
+ISSUE_STATUS_PARAMETER = OpenApiParameter(
+    name="status",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    enum=Issue.Status.values,
+    description="Filter issues by lifecycle status.",
+)
 
+def raise_issue_api_validation_error(
+    exc: DjangoValidationError,
+) -> None:
+    if hasattr(exc, "message_dict"):
+        raise ValidationError(exc.message_dict)
+
+    messages = getattr(exc, "messages", None) or [str(exc)]
+
+    raise ValidationError(
+        {
+            "detail": (
+                messages[0]
+                if len(messages) == 1
+                else messages
+            )
+        }
+    )
 class IgnoreFormatQueryContentNegotiation(BaseContentNegotiation):
     """
     DRF reserves ?format= for renderer selection. The citation export endpoint
@@ -401,6 +432,180 @@ class PublicSectionDetailView(generics.RetrieveAPIView):
 
 @extend_schema_view(
     get=extend_schema(
+        tags=["Issue Management"],
+        parameters=[ISSUE_STATUS_PARAMETER],
+        responses={200: IssueManagementSerializer(many=True)},
+        description="List all journal issues for the Editor-in-Chief.",
+    ),
+    post=extend_schema(
+        tags=["Issue Management"],
+        request=IssueManagementSerializer,
+        responses={
+            201: IssueManagementSerializer,
+            400: OpenApiResponse(
+                description="The issue metadata is invalid."
+            ),
+        },
+        description="Create an upcoming draft issue.",
+    ),
+)
+class IssueManagementListCreateView(
+    generics.ListCreateAPIView
+):
+    permission_classes = [CanManageIssues]
+    serializer_class = IssueManagementSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = issue_management_records()
+        status_value = self.request.query_params.get(
+            "status",
+            "",
+        ).strip()
+
+        if not status_value:
+            return queryset
+
+        if status_value not in Issue.Status.values:
+            raise ValidationError(
+                {
+                    "status": (
+                        "Invalid issue status. Allowed values are: "
+                        f"{', '.join(Issue.Status.values)}."
+                    )
+                }
+            )
+
+        return queryset.filter(status=status_value)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        issue = serializer.save()
+
+        issue = issue_management_records().get(pk=issue.pk)
+        response_serializer = self.get_serializer(issue)
+
+        headers = self.get_success_headers(
+            response_serializer.data
+        )
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Issue Management"],
+        responses={200: IssueManagementSerializer},
+        description="Retrieve one issue management record.",
+    ),
+    patch=extend_schema(
+        tags=["Issue Management"],
+        request=IssueManagementSerializer,
+        responses={
+            200: IssueManagementSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "The issue is not a draft or the metadata is invalid."
+                )
+            ),
+        },
+        description="Update metadata for a draft issue.",
+    ),
+)
+class IssueManagementDetailView(
+    generics.RetrieveUpdateAPIView
+):
+    permission_classes = [CanManageIssues]
+    serializer_class = IssueManagementSerializer
+    lookup_url_kwarg = "issue_id"
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_queryset(self):
+        return issue_management_records()
+
+
+class OpenIssueView(APIView):
+    permission_classes = [CanManageIssues]
+
+    @extend_schema(
+        tags=["Issue Management"],
+        request=None,
+        responses={
+            200: IssueManagementSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "The issue cannot be opened or another issue "
+                    "is already current."
+                )
+            ),
+            404: OpenApiResponse(
+                description="Issue was not found."
+            ),
+        },
+        description=(
+            "Open a draft issue and make it the current public issue."
+        ),
+    )
+    def post(self, request, issue_id):
+        issue = get_object_or_404(Issue, pk=issue_id)
+
+        try:
+            issue = IssueLifecycleService.open_issue(issue=issue)
+        except DjangoValidationError as exc:
+            raise_issue_api_validation_error(exc)
+
+        issue = issue_management_records().get(pk=issue.pk)
+
+        return Response(
+            IssueManagementSerializer(issue).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class CloseIssueView(APIView):
+    permission_classes = [CanManageIssues]
+
+    @extend_schema(
+        tags=["Issue Management"],
+        request=None,
+        responses={
+            200: IssueManagementSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "The issue is not current or still contains "
+                    "publication drafts."
+                )
+            ),
+            404: OpenApiResponse(
+                description="Issue was not found."
+            ),
+        },
+        description=(
+            "Close the current issue and preserve it in the archive."
+        ),
+    )
+    def post(self, request, issue_id):
+        issue = get_object_or_404(Issue, pk=issue_id)
+
+        try:
+            issue = IssueLifecycleService.close_issue(issue=issue)
+        except DjangoValidationError as exc:
+            raise_issue_api_validation_error(exc)
+
+        issue = issue_management_records().get(pk=issue.pk)
+
+        return Response(
+            IssueManagementSerializer(issue).data,
+            status=status.HTTP_200_OK,
+        )
+
+@extend_schema_view(
+    get=extend_schema(
         tags=["Public Issues"],
         auth=[],
         responses={200: PublicIssueSerializer(many=True)},
@@ -413,7 +618,12 @@ class PublicIssueListView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return Issue.objects.filter(status=Issue.Status.PUBLISHED)
+        return Issue.objects.filter(
+            status__in=[
+                Issue.Status.PUBLISHED,
+                Issue.Status.ARCHIVED,
+            ]
+        )
 
 
 @extend_schema_view(
@@ -437,24 +647,10 @@ class PublicCurrentIssueView(generics.RetrieveAPIView):
             is_current=True,
         ).first()
 
-        if current_issue:
-            return current_issue
+        if current_issue is None:
+            raise Http404("No current issue is available.")
 
-        latest_issue = (
-            Issue.objects.filter(status=Issue.Status.PUBLISHED)
-            .order_by(
-                F("published_at").desc(nulls_last=True),
-                "-year",
-                "volume",
-                "number",
-            )
-            .first()
-        )
-
-        if latest_issue:
-            return latest_issue
-
-        raise Http404("No current issue is available.")
+        return current_issue
 
 
 @extend_schema_view(
@@ -475,7 +671,12 @@ class PublicIssueDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = "slug"
 
     def get_queryset(self):
-        return Issue.objects.filter(status=Issue.Status.PUBLISHED)
+        return Issue.objects.filter(
+            status__in=[
+                Issue.Status.PUBLISHED,
+                Issue.Status.ARCHIVED,
+            ]
+        )
 @extend_schema_view(
     get=extend_schema(
         tags=["Public Articles"],

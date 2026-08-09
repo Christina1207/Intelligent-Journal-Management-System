@@ -13,6 +13,10 @@ import type {
   PriorityQueueItem,
 } from "@/features/intelligence/types";
 
+type EditorialAnalyticsDashboardProps = {
+  priorityItemBasePath?: string;
+};
+
 function formatPercentage(value: number) {
   return `${value.toFixed(1)}%`;
 }
@@ -55,7 +59,9 @@ function humanize(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-export function EditorialAnalyticsDashboard() {
+export function EditorialAnalyticsDashboard({
+  priorityItemBasePath,
+}: EditorialAnalyticsDashboardProps) {
   const analyticsQuery = useQuery({
     queryKey: intelligenceQueryKeys.editorialDashboard,
     queryFn: getEditorialAnalyticsDashboard,
@@ -119,7 +125,10 @@ export function EditorialAnalyticsDashboard() {
           }}
         />
       ) : analyticsQuery.data ? (
-        <DashboardContent data={analyticsQuery.data} />
+        <DashboardContent
+          data={analyticsQuery.data}
+          priorityItemBasePath={priorityItemBasePath}
+        />
       ) : null}
     </div>
   );
@@ -127,8 +136,10 @@ export function EditorialAnalyticsDashboard() {
 
 function DashboardContent({
   data,
+  priorityItemBasePath,
 }: {
   data: EditorialAnalyticsDashboardResponse;
+  priorityItemBasePath?: string;
 }) {
   const summary = data.summary;
 
@@ -146,7 +157,7 @@ function DashboardContent({
     ...data.topic_distribution.topics.map((topic) => ({
       key: topic.label,
       label: topic.label,
-      value: topic.count,
+      value: topic.submission_count,
     })),
     ...(data.topic_distribution.unclassified_count > 0
       ? [
@@ -180,13 +191,13 @@ function DashboardContent({
         <SummaryCard
           label="Acceptance rate"
           value={formatPercentage(summary.acceptance_rate)}
-          hint={`${summary.accepted_submissions} accepted final outcomes`}
+          hint={`${summary.accepted_count} accepted final outcomes`}
         />
 
         <SummaryCard
           label="Rejection rate"
           value={formatPercentage(summary.rejection_rate)}
-          hint={`${summary.rejected_submissions} rejected final outcomes`}
+          hint={`${summary.rejected_count} rejected final outcomes`}
         />
 
         <SummaryCard
@@ -209,7 +220,7 @@ function DashboardContent({
         >
           <DistributionList
             items={data.status_distribution.map((item) => ({
-              key: item.status,
+              key: item.code,
               label: item.label,
               value: item.count,
             }))}
@@ -267,13 +278,16 @@ function DashboardContent({
             value={data.overdue_work.overdue_reviews}
           />
           <OverdueMetric
-            label="Affected submissions"
-            value={data.overdue_work.affected_submissions}
+            label="Total overdue items"
+            value={data.overdue_work.total}
           />
         </dl>
       </section>
 
-      <PriorityQueue items={data.priority_queue} />
+      <PriorityQueue
+        items={data.priority_queue}
+        priorityItemBasePath={priorityItemBasePath}
+      />
 
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
         <h2 className="font-semibold text-slate-950">Duration definitions</h2>
@@ -508,7 +522,13 @@ function OverdueMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function PriorityQueue({ items }: { items: PriorityQueueItem[] }) {
+function PriorityQueue({
+  items,
+  priorityItemBasePath,
+}: {
+  items: PriorityQueueItem[];
+  priorityItemBasePath?: string;
+}) {
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-200 p-5">
@@ -531,6 +551,7 @@ function PriorityQueue({ items }: { items: PriorityQueueItem[] }) {
               key={item.submission_id}
               item={item}
               position={index + 1}
+              priorityItemBasePath={priorityItemBasePath}
             />
           ))}
         </div>
@@ -542,9 +563,11 @@ function PriorityQueue({ items }: { items: PriorityQueueItem[] }) {
 function PriorityQueueItemCard({
   item,
   position,
+  priorityItemBasePath,
 }: {
   item: PriorityQueueItem;
   position: number;
+  priorityItemBasePath?: string;
 }) {
   return (
     <article className="p-5">
@@ -558,12 +581,16 @@ function PriorityQueueItemCard({
           </div>
 
           <h3 className="mt-3 font-semibold text-slate-950">
-            <Link
-              href={`/manager/submissions/${item.submission_id}`}
-              className="hover:text-blue-700 hover:underline"
-            >
-              {item.title}
-            </Link>
+            {priorityItemBasePath ? (
+              <Link
+                href={`${priorityItemBasePath}/${item.submission_id}`}
+                className="hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {item.title}
+              </Link>
+            ) : (
+              item.title
+            )}
           </h3>
 
           <p className="mt-2 text-sm text-slate-500">
@@ -573,7 +600,7 @@ function PriorityQueueItemCard({
 
           <p className="mt-1 text-sm text-slate-500">
             Responsible editor:{" "}
-            {item.assigned_editor?.name ?? "Not yet assigned"}
+            {item.assigned_editor?.full_name ?? "Not yet assigned"}
           </p>
         </div>
 

@@ -553,7 +553,7 @@ class PublishingServiceTests(TestCase):
         self.assertIsNone(article.published_at)
         self.assertIsNone(article.publication_issue_id)
 
-    def test_publish_article_honors_explicit_published_issue(self):
+    def test_publish_article_honors_explicit_current_issue(self):
         submission = self._create_submission()
         article = PublishingService.create_draft_from_submission(
             actor=self.editor,
@@ -566,7 +566,7 @@ class PublishingServiceTests(TestCase):
             year=timezone.now().year,
             status=Issue.Status.PUBLISHED,
             published_at=timezone.now(),
-            is_current=False,
+            is_current=True,
         )
 
         article.publication_issue = issue
@@ -635,7 +635,7 @@ class PublishingServiceTests(TestCase):
 
                 with self.assertRaisesMessage(
                     ValidationError,
-                    "status 'published'",
+                    "current open issue",
                 ):
                     PublishingService.publish_article(article)
 
@@ -2131,7 +2131,7 @@ class PublishingApiTests(TestCase):
             status.HTTP_400_BAD_REQUEST,
         )
         self.assertIn(
-            "status 'published'",
+            "cannot be moved between issues",
             str(move_response.data),
         )
 
@@ -2154,6 +2154,7 @@ class PublishingApiTests(TestCase):
             year=timezone.now().year,
             status=Issue.Status.PUBLISHED,
             published_at=timezone.now(),
+            is_current=True,
         )
 
         self.client.force_authenticate(self.manager)

@@ -256,11 +256,6 @@ class Issue(models.Model):
                 exclude_pk=self.pk,
             )
 
-        if self.is_current:
-            type(self).objects.exclude(pk=self.pk).filter(is_current=True).update(
-                is_current=False,
-            )
-
         super().save(*args, **kwargs)
 
     class Meta:

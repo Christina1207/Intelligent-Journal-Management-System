@@ -1,6 +1,6 @@
 export const publishingQueryKeys = {
   all: ["publishing"] as const,
-
+  issues: () => [...publishingQueryKeys.all, "issues"] as const,
   records: () => [...publishingQueryKeys.all, "records"] as const,
 
   recordList: (page: number) =>

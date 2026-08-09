@@ -2,14 +2,21 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { publishPublicationRecord } from "@/features/publishing/api";
+import { updatePublicationRecord } from "@/features/publishing/api";
 import { publishingQueryKeys } from "@/features/publishing/query-keys";
+import type { PublicationUpdatePayload } from "@/features/publishing/types";
 
-export function usePublishPublicationRecord() {
+type UpdatePublicationRecordVariables = {
+  articleId: string;
+  payload: PublicationUpdatePayload;
+};
+
+export function useUpdatePublicationRecord() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (articleId: string) => publishPublicationRecord(articleId),
+    mutationFn: ({ articleId, payload }: UpdatePublicationRecordVariables) =>
+      updatePublicationRecord(articleId, payload),
     onSuccess: (record) => {
       queryClient.setQueryData(publishingQueryKeys.record(record.id), record);
 

@@ -46,7 +46,14 @@ class IssueAdmin(admin.ModelAdmin):
     list_filter = ["status", "is_current", "year", "published_at"]
     search_fields = ["title", "slug", "volume", "number", "description"]
     prepopulated_fields = {"slug": ("title",)}
-    readonly_fields = ["id", "created_at", "updated_at"]
+    readonly_fields = [
+    "id",
+    "status",
+    "is_current",
+    "published_at",
+    "created_at",
+    "updated_at",
+]
 
 @admin.register(JournalMetadataSettings)
 class JournalMetadataSettingsAdmin(admin.ModelAdmin):

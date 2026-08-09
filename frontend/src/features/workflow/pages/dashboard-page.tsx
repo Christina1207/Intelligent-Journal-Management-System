@@ -16,9 +16,9 @@ export function DashboardPage() {
       />
     );
   }
+  const isEditorInChief = hasRole(USER_ROLE.EDITOR_IN_CHIEF);
 
-  const canViewJournalAnalytics =
-    hasRole(USER_ROLE.EDITOR_IN_CHIEF) || hasRole(USER_ROLE.ADMIN);
+  const canViewJournalAnalytics = isEditorInChief || hasRole(USER_ROLE.ADMIN);
 
   if (!canViewJournalAnalytics) {
     return (
