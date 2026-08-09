@@ -1,691 +1,1556 @@
 # Intelligent Journal Management System
 
-An open-source electronic system for managing peer-reviewed scientific journals, enhanced with artificial intelligence and scientific text analysis to support decision-making in academic publishing.
+**Intelligent Journal Management System (IJMS)** is an open-source electronic platform for managing peer-reviewed scientific journals, enhanced with artificial intelligence and scientific text analysis to support editorial decision-making.
 
-## Project Objective
+The system supports the complete scientific publishing lifecycle:
 
-The objective of this project is to develop an open-source electronic system for managing peer-reviewed scientific journals.
+**Submission → Editorial Screening → Peer Review → Revision → Decision → Publishing → Archiving**
 
-The system focuses on building a reusable and customizable platform that supports the full scientific publishing life cycle:
+IJMS was developed as a bachelor's graduation project in **Software Engineering and Artificial Intelligence**, using the **University of Aleppo Journal** as a case study.
 
-**Submission → Review → Evaluation → Publishing**
+The project combines a complete journal-management workflow with intelligent features including reviewer recommendation, topic modeling, manuscript prioritization, analytical dashboards, and an Arabic plagiarism-detection pipeline.
 
-The project integrates AI techniques and scientific text analysis to improve editorial workflows, support scientific integrity, and help editors make better data-driven decisions.
+> AI features in IJMS are designed as **decision-support tools**. They assist editors but never automatically accept, reject, or accuse a manuscript of plagiarism.
 
-The system is designed so that different academic institutions and university journals can adopt it without needing to redevelop the platform from scratch.
+---
 
-## Main Goals
+## Table of Contents
 
-The project aims to:
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [System Roles](#system-roles)
+- [Editorial Workflow](#editorial-workflow)
+- [Intelligent Features](#intelligent-features)
+  - [Reviewer Recommendation](#reviewer-recommendation)
+  - [Topic Modeling](#topic-modeling)
+  - [Manuscript Prioritization](#manuscript-prioritization)
+  - [Arabic Plagiarism Screening](#arabic-plagiarism-screening)
+- [Publishing and Discovery](#publishing-and-discovery)
+- [Journal Customization](#journal-customization)
+- [Notifications](#notifications)
+- [System Architecture](#system-architecture)
+- [Technology Stack](#technology-stack)
+- [Repository Structure](#repository-structure)
+- [Getting Started](#getting-started)
+- [Plagiarism Pipeline Configuration](#plagiarism-pipeline-configuration)
+- [API Documentation](#api-documentation)
+- [Testing](#testing)
+- [Security and Research Ethics](#security-and-research-ethics)
+- [Current Limitations](#current-limitations)
+- [Project Context](#project-context)
+- [License](#license)
 
-- Provide a digital platform for managing scientific journal workflows.
-- Support authors, reviewers, editors, editors-in-chief, copyeditors, and administrators.
-- Enable electronic paper submission and metadata entry.
-- Support peer review, editorial decisions, revision rounds, and publishing.
-- Improve scientific integrity through initial plagiarism detection.
-- Recommend suitable reviewers based on paper topics and reviewer expertise.
-- Extract research topics from submitted papers using NLP and topic modeling.
-- Help editorial boards prioritize paper processing using transparent ranking criteria.
-- Provide analytical dashboards for publishing trends and research indicators.
-- Support customization for different journals, institutions, and editorial policies.
-- Demonstrate strong software engineering practices in a real academic publishing system.
+---
 
-## Scope
+# Overview
 
-The system supports the entire scientific publishing life cycle, including:
+IJMS provides a reusable foundation for academic institutions that need to manage scientific journals electronically.
 
-1. User and role management
-2. Electronic submission
-3. Manuscript upload
-4. Metadata entry
-5. Section assignment
-6. Peer review
-7. Double-blind review support
-8. Multiple review rounds
-9. Submission versioning
-10. Editorial decision management
-11. Copyediting
-12. Electronic publishing
-13. Issue archiving
-14. Plagiarism screening
-15. Reviewer recommendation
-16. Topic modeling
-17. Metadata extraction
-18. Intelligent paper ranking / prioritization
-19. Analytical dashboards
-20. Journal customization
+Instead of focusing only on manuscript submission, the system models the complete interaction between:
 
-Advanced AI features are intended to support editorial decision-making, not replace human judgment.
+- Authors
+- Reviewers
+- Section Editors
+- Section Managers
+- Editors-in-Chief
+- Administrators
+- Readers
 
-## Core Workflow
+The system manages manuscript versions, editorial assignments, reviewer invitations, multiple review rounds, editorial decisions, publishing, journal issues, notifications, public article discovery, and journal configuration.
 
-The expected workflow is:
+AI and NLP components are integrated into the editorial workflow to assist with:
 
-1. An author creates an account.
-2. The author submits a manuscript with metadata and files.
-3. The submission is assigned to a journal section.
-4. A section manager or editor assigns a section editor.
-5. The section editor manages the review process.
-6. Reviewers are invited.
-7. Reviewers accept or decline review invitations.
-8. Reviewers submit review reports.
-9. The editor evaluates the reports.
-10. The editor makes a decision.
-11. The author may upload a revised version.
-12. Multiple review rounds may occur.
-13. The submission is accepted, rejected, or returned for modification.
-14. Accepted submissions move to copyediting.
-15. Final articles are published and archived in issues.
+- Reviewer selection
+- Manuscript clustering
+- Topic extraction
+- Editorial workload prioritization
+- Research analytics
+- Scientific-integrity screening
 
-## Main System Features
+The project follows a **single-journal-per-deployment** model. Each installation can be customized for a different journal or academic institution without modifying the core workflow implementation.
 
-### 1. User and Role Management
+---
 
-The system supports multiple user roles involved in the publishing workflow, including:
+# Key Features
 
-- Author / Researcher
-- Reviewer
-- Section Editor
-- Section Manager
-- Editor-in-Chief
-- Copyeditor
-- System Administrator
-- Reader
+| Area | Status |
+|---|---|
+| Authentication and role-based access control | ✅ Implemented |
+| Electronic manuscript submission | ✅ Implemented |
+| Submission metadata and co-authors | ✅ Implemented |
+| Private manuscript storage | ✅ Implemented |
+| Submission versioning | ✅ Implemented |
+| Section Manager triage | ✅ Implemented |
+| Desk rejection | ✅ Implemented |
+| Section Editor assignment | ✅ Implemented |
+| Reviewer applications | ✅ Implemented |
+| Reviewer invitation workflow | ✅ Implemented |
+| Double-blind peer review | ✅ Implemented |
+| Reviewer deadlines | ✅ Implemented |
+| Multiple review rounds | ✅ Implemented |
+| Editorial decisions | ✅ Implemented |
+| Reviewer recommendation | ✅ Implemented |
+| Topic modeling and clustering | ✅ Implemented |
+| Manuscript prioritization | ✅ Implemented |
+| Editorial analytics | ✅ Implemented |
+| Arabic plagiarism screening | ✅ Implemented |
+| Publication draft creation | ✅ Implemented |
+| Issue management | ✅ Implemented |
+| Continuous publication workflow | ✅ Implemented |
+| Public article portal | ✅ Implemented |
+| Metadata exports | ✅ Implemented |
+| OAI-PMH provider | ✅ Implemented |
+| Email notifications | ✅ Implemented |
+| Journal identity customization | ✅ Implemented |
+| Configurable public journal pages | ✅ Implemented |
+| Scanned-PDF plagiarism OCR | ❌ Not currently supported |
+| Multi-journal tenancy | ❌ Outside current scope |
 
-A user may have more than one role.
+---
 
-The system uses role-based access control to ensure that users can only access the actions and data relevant to their responsibilities.
+# System Roles
 
-### 2. Electronic Submission System
+IJMS uses role-based access control to separate responsibilities across the scientific-publishing workflow.
 
-Authors can submit scientific papers electronically by entering required metadata and uploading manuscript files.
+A single user may have multiple roles where appropriate.
 
-Submissions may include:
+## Author
 
-- Title
+Authors can:
+
+- Register and manage their profile.
+- Submit manuscripts.
+- Enter manuscript metadata.
+- Add co-authors.
+- Upload full and anonymized manuscript files.
+- Track manuscript status.
+- Read editorial decision letters.
+- View anonymized reviewer feedback.
+- Upload revised manuscript versions.
+- Submit responses to reviewers.
+- Apply to become reviewers.
+
+---
+
+## Reviewer
+
+Approved reviewers can:
+
+- Receive review invitations.
+- Accept or decline initial invitations.
+- Access assigned blinded manuscripts.
+- Submit structured review reports.
+- Provide recommendations such as:
+  - Accept
+  - Minor Revision
+  - Major Revision
+  - Reject
+- Write comments for authors.
+- Write confidential comments for editors.
+- Participate in revision rounds.
+- Track review deadlines.
+
+Reviewer identities remain protected from authors under the double-blind review workflow.
+
+---
+
+## Section Editor
+
+A Section Editor is responsible for manuscripts assigned by the Section Manager.
+
+The Section Editor can:
+
+- Access assigned manuscripts.
+- Review manuscript information and editorial history.
+- Search eligible reviewers.
+- View intelligent reviewer recommendations.
+- Invite multiple reviewers.
+- Monitor reviewer invitations.
+- Replace or cancel reviewers when necessary.
+- Monitor active review deadlines.
+- Read submitted reviews.
+- Make editorial decisions.
+- Request minor or major revisions.
+- Manage subsequent review rounds.
+- Accept or reject manuscripts.
+- Hand accepted manuscripts to the publishing workflow.
+
+---
+
+## Section Manager
+
+A Section Manager supervises submissions belonging to a specific scientific section.
+
+The Section Manager can:
+
+- Monitor submissions in the managed section.
+- Perform initial manuscript triage.
+- Complete editorial screening checklists.
+- Perform desk rejection when necessary.
+- Review plagiarism-screening results.
+- Assign and reassign Section Editors.
+- Monitor section-level workflow progress.
+- Monitor delayed submissions.
+- Monitor editorial workload.
+- Review reviewer applications for the section.
+
+---
+
+## Editor-in-Chief
+
+The Editor-in-Chief provides journal-wide editorial oversight.
+
+The Editor-in-Chief can:
+
+- Access journal-level analytical information.
+- Monitor activity across sections.
+- Review reviewer applications across sections.
+- Manage publication issues.
+- Manage the continuous-publication lifecycle.
+- Monitor journal-wide publishing activity.
+
+---
+
+## Administrator
+
+Administrators manage institutional and system configuration, including:
+
+- User accounts.
+- Role assignments.
+- Journal configuration.
+- Scientific sections.
+- Section Managers and editorial memberships.
+- Journal identity and branding.
+- Public journal content.
+- Operational configuration through the administration interface.
+
+---
+
+## Reader
+
+Readers use the public journal portal to:
+
+- Browse published articles.
+- Search the journal archive.
+- Browse sections and issues.
+- View article metadata.
+- Download published manuscripts where available.
+- Export bibliographic metadata.
+
+---
+
+# Editorial Workflow
+
+The core editorial workflow is implemented as a controlled sequence of state transitions.
+
+```mermaid
+flowchart TD
+    A[Author submits manuscript] --> B[Section Manager triage]
+
+    B -->|Desk Reject| R[Rejected]
+    B -->|Passes triage| C[Assign Section Editor]
+
+    C --> D[Section Editor selects reviewers]
+    D --> E[Reviewer invitations]
+
+    E --> F[Required reviewers accept]
+    F --> G[Peer review]
+
+    G --> H[Reviews completed]
+    H --> I[Section Editor decision]
+
+    I -->|Reject| R
+    I -->|Minor / Major Revision| J[Author uploads revision]
+    J --> K[Revision review round]
+    K --> H
+
+    I -->|Accept| L[Accepted]
+    L --> M[Create publication draft]
+    M --> N[Assign to publication issue]
+    N --> O[Publish article]
+```
+
+## 1. Submission
+
+The author submits:
+
+- Manuscript title
 - Abstract
 - Keywords
 - Language
-- Author information
 - Co-author information
 - Journal section
-- Manuscript file
-- Cover letter
-- References
-- Additional metadata
+- Cover letter when applicable
+- Full manuscript
+- Blinded manuscript
 
-### 3. Peer-Review System
+The original submission becomes **version 1**.
 
-The system supports scientific peer review, including:
+Subsequent revisions create new versions instead of replacing the previous manuscript.
 
-- Reviewer assignment
-- Reviewer invitations
-- Review deadlines
-- Review reports
-- Double-blind review
-- Confidential comments for editors
-- Comments for authors
-- Reviewer recommendations
-- Review status tracking
+---
 
-### 4. Multiple Review Rounds and Submission Versioning
+## 2. Section Manager Triage
 
-The system supports multiple review rounds.
+New submissions are routed to the responsible Section Manager.
 
-When authors submit revised manuscripts, previous versions are preserved instead of overwritten. This allows editors and reviewers to track the evolution of a submission across the review process.
+The manager performs initial editorial screening and can either:
 
-Authors upload revised manuscripts with the revised PDF and an optional response to reviewers. Review deadlines for the new round are set by backend editorial policy.
+- Reject the submission through a desk rejection, or
+- Assign a Section Editor to manage the manuscript.
 
-### 5. Publishing Decision Management
+Assignment history is preserved while the submission maintains a current responsible editor.
 
-Editors can manage decisions such as:
+---
 
-- Accept
-- Reject
-- Minor revision
-- Major revision
-- Resubmission required
-- Send to copyediting
-- Publish
+## 3. Reviewer Selection
 
-The system tracks decisions, decision letters, timestamps, and the responsible editorial user where appropriate.
+The assigned Section Editor can manually search eligible reviewers or use the reviewer recommendation system.
 
-### 6. Electronic Publishing
+The system filters reviewers according to editorial eligibility rules before presenting them to the editor.
 
-Accepted submissions can move to publishing, where they may be assigned to issues and made available as published articles.
+Multiple reviewers may be invited simultaneously.
 
-Published articles may include:
+---
 
-- Title
-- Abstract
-- Authors
-- DOI or identifier
-- Publication date
-- Issue
-- PDF file
-- Metadata for indexing
-- View and download statistics
+## 4. Reviewer Invitations
 
-### 7. Plagiarism Detection
+Reviewers initially receive invitations rather than immediate manuscript access.
 
-The system includes initial Arabic plagiarism screening as an
-editorial decision-support feature.
+An invitation includes:
 
-For an Arabic initial submission, the system can:
+- Response deadline
+- Review deadline
+- Manuscript metadata appropriate for the double-blind workflow
 
-- Create a screening automatically after submission succeeds.
-- Process the manuscript asynchronously through a dedicated Celery
-  worker.
-- Download the private manuscript from MinIO only for processing.
-- Use lexical and semantic retrieval against a configured source
-  corpus.
-- Verify candidate passages with the local AraT5 verifier.
-- Store a versioned screening history and `plagiarism_report_v1`
-  evidence report.
-- Show summary metrics and passage-level evidence to the responsible
-  Section Manager.
+Reviewers may accept or decline the initial invitation.
 
-Plagiarism screening never automatically rejects a manuscript, changes
-its workflow status, or replaces human editorial judgment.
+Once the configured number of required reviewers has accepted, remaining pending invitations are automatically expired.
 
-The current version supports Arabic text-based PDFs. Models, indexes,
-and comparison-corpus data are deployment-specific external resources
-and are not stored in Git. Screening remains disabled by default until
-those resources are configured.
+This prevents a review round from accumulating more accepted reviewers than required.
 
-See the [Arabic Plagiarism Screening Guide](docs/plagiarism-screening.md)
-for architecture, configuration, safeguards, and verification.
+---
 
-### 8. Reviewer Recommendation
+## 5. Peer Review
 
-The system recommends suitable reviewers by analyzing the submitted paper and comparing it with reviewer expertise.
+Accepted reviewers receive access to the blinded manuscript.
 
-Reviewer recommendation may consider:
+Each reviewer submits:
 
-- Paper title
-- Paper abstract
-- Extracted topics
-- Reviewer research interests
-- Reviewer expertise
-- Reviewer workload
-- Previous review history
-- Availability
-- Conflict of interest indicators, when available
+- Recommendation
+- Comments for the author
+- Optional confidential comments for the editor
 
-The recommendation output is treated as a ranked list of suggestions, not as automatic reviewer assignment.
+The submission becomes ready for an editorial decision once the required review conditions are satisfied.
 
-### 9. Topic Modeling
+---
 
-The system uses topic modeling to automatically extract research topics from submission titles and abstracts.
+## 6. Editorial Decision
 
-Topic modeling supports:
+The assigned Section Editor evaluates the review reports and can issue:
 
-- Reviewer recommendation
-- Submission clustering
-- Editorial dashboards
-- Research trend analysis
-- Thematic grouping of published articles
+- **Accept**
+- **Reject**
+- **Minor Revision**
+- **Major Revision**
 
-### 10. Intelligent Paper Ranking / Prioritization
+Decision letters and decision metadata are preserved with the corresponding manuscript version.
 
-The system may include a transparent ranking or prioritization model to help the editorial board organize submission processing.
+---
 
-The first implementation should use a weighted heuristic rather than an opaque model.
+## 7. Revision Rounds
 
-Possible ranking factors include:
+When revision is requested:
 
-- Submission completeness
-- Topic relevance
-- Editorial priority
-- Reviewer availability
-- Deadline urgency
-- Similarity to journal scope
-- Section workload
+1. The author receives the decision and reviewer feedback.
+2. The author uploads a new manuscript version.
+3. The author may provide a response to reviewers.
+4. Reviewers from the previous round are carried into the revision workflow according to editorial rules.
+5. New reviews are submitted for the revised version.
+6. The Section Editor makes another decision.
 
-This feature supports editorial workflow management but does not determine acceptance or rejection.
+The previous manuscript versions, reviews, and decisions remain preserved.
 
-### 11. Metadata Extraction
+---
 
-The system may use machine learning or text processing techniques to extract metadata from submitted papers.
+## 8. Acceptance and Publishing
 
-Possible extracted metadata includes:
+Once accepted, the manuscript can enter the publishing domain.
 
-- Title
-- Abstract
-- Keywords
-- Author names
-- Affiliations
-- References
-- Language
-- Research topics
+The system creates a publication draft based on the accepted manuscript version.
 
-Extracted metadata should remain reviewable and editable by humans.
+The publication workflow then manages article metadata and issue assignment before the article is made publicly available.
 
-### 12. Analytical Dashboards
+---
 
-Dashboards provide insights for editors and administrators.
+# Reviewer Applications
 
-Possible indicators include:
+Registered authors can apply to become reviewers.
 
-- Number of submissions
-- Submission status distribution
-- Average review duration
-- Reviewer workload
-- Acceptance rate
-- Rejection rate
-- Active research topics
-- Publishing trends
-- Delayed reviews
-- Published article counts
-- Section-level statistics
+An application includes:
 
-### 13. Customization Support
+- Requested scientific section
+- Expertise description
+- Research keywords
+- Reviewer profile information
 
-The system is designed to be reusable by different academic institutions.
+Applications may be reviewed by:
 
-Configurable elements may include:
+- The responsible Section Manager
+- The Editor-in-Chief
+- Administrators
 
-- Journal name
+Possible application states are:
+
+```text
+PENDING
+APPROVED
+REJECTED
+```
+
+When approved, the system:
+
+- Adds the Reviewer role to the user.
+- Preserves the existing Author role.
+- Creates or updates the reviewer profile.
+- Associates the reviewer with the approved section.
+- Stores reviewer expertise.
+- Prepares reviewer information for intelligent recommendation.
+
+This allows researchers to switch between their Author and Reviewer workspaces without using separate accounts.
+
+---
+
+# Intelligent Features
+
+The intelligent components of IJMS are designed to support editorial decisions while keeping final authority with human editors.
+
+---
+
+## Reviewer Recommendation
+
+IJMS includes an intelligent reviewer recommendation system for Section Editors.
+
+The process has two main stages:
+
+### 1. Eligibility Filtering
+
+Before computing recommendation scores, the system removes reviewers who should not be considered.
+
+Examples include:
+
+- Inactive users.
+- Users without Reviewer authorization.
+- Reviewers outside the manuscript's section.
+- The manuscript author.
+- Co-authors or identity conflicts.
+- Reviewers previously invited in the current round.
+- Reviewers already active on the same manuscript.
+- Reviewers who reached the configured workload limit.
+
+This ensures that expertise similarity is only calculated for reviewers who can actually be assigned.
+
+### 2. Expertise Matching
+
+Eligible reviewers are ranked using signals derived from:
+
+- The manuscript abstract.
+- Reviewer expertise descriptions.
+- Manuscript keywords.
+- Reviewer expertise keywords.
+
+Semantic similarity measures how closely the research content of the manuscript corresponds to the reviewer's expertise.
+
+Keyword coverage provides an additional interpretable signal.
+
+The result is a ranked list of reviewer suggestions.
+
+> Reviewer recommendation never automatically assigns a reviewer. The Section Editor remains responsible for the final selection.
+
+---
+
+## Topic Modeling
+
+IJMS uses topic modeling to discover thematic groups within submissions belonging to a scientific section.
+
+The pipeline operates primarily on manuscript abstracts.
+
+```mermaid
+flowchart LR
+    A[Submission abstracts]
+    --> B[Sentence embeddings]
+    --> C[UMAP dimensionality reduction]
+    --> D[BERTopic clustering]
+    --> E[c-TF-IDF topic keywords]
+    --> F[Stored submission topics]
+```
+
+The implementation uses:
+
+- Sentence-transformer embeddings
+- UMAP
+- BERTopic
+- c-TF-IDF representative keywords
+
+A submission can also be marked as an outlier when BERTopic cannot assign it to a meaningful cluster.
+
+Topic information supports:
+
+- Editorial analytics
+- Research-trend analysis
+- Submission grouping
+- Reviewer recommendation context
+- Section-level topic dashboards
+
+---
+
+## Manuscript Prioritization
+
+Editorial queues can contain many active manuscripts at different workflow stages.
+
+IJMS therefore provides a transparent manuscript-prioritization mechanism to help editors identify submissions requiring attention.
+
+The prioritization logic uses interpretable workflow indicators rather than a black-box acceptance model.
+
+Factors may include:
+
+- Time spent waiting.
+- Urgency of the current workflow state.
+- Reviewer shortages.
+- Overdue reviewer invitations.
+- Overdue reviews.
+- Number of completed revision rounds.
+
+The resulting priority is intended for **queue organization only**.
+
+It has no authority over scientific acceptance or rejection.
+
+---
+
+## Arabic Plagiarism Screening
+
+IJMS includes an Arabic plagiarism-detection pipeline developed as part of the project.
+
+The system is designed for **initial scientific-integrity screening**, not for issuing automatic plagiarism accusations.
+
+The integrated pipeline follows a multi-stage retrieval and verification architecture:
+
+```mermaid
+flowchart TD
+    A[Arabic manuscript]
+    --> B[Text extraction]
+    --> C[Normalization and segmentation]
+
+    C --> D[BM25 lexical retrieval]
+    C --> E[Multilingual E5 semantic retrieval]
+
+    D --> F[Candidate source passages]
+    E --> F
+
+    F --> G[AraT5 Siamese verifier]
+    G --> H[Evidence aggregation]
+    H --> I[Plagiarism report]
+    I --> J[Section Manager review]
+```
+
+### Pipeline Components
+
+The plagiarism subsystem includes:
+
+- Arabic text preprocessing.
+- Offset-preserving manuscript segmentation.
+- BM25 lexical candidate retrieval.
+- Multilingual-E5 semantic embeddings.
+- Semantic candidate retrieval.
+- Hybrid lexical/semantic retrieval.
+- A trained AraT5 Siamese passage-pair verifier.
+- Evidence aggregation.
+- Passage-level evidence.
+- Human-review reporting.
+
+### Asynchronous Execution
+
+Plagiarism analysis can be computationally expensive.
+
+It therefore runs through a dedicated Celery queue and worker:
+
+```text
+plagiarism queue
+        ↓
+dedicated plagiarism worker
+        ↓
+pipeline resources
+        ↓
+stored screening report
+```
+
+This isolates expensive model inference from the normal application worker.
+
+### Editorial Integration
+
+For supported submissions, a screening can be created after manuscript submission.
+
+The screening lifecycle supports states such as:
+
+```text
+QUEUED
+RUNNING
+COMPLETED
+FAILED
+```
+
+The responsible Section Manager can inspect the completed report.
+
+The report contains:
+
+- Summary statistics.
+- Detected evidence passages.
+- Source passages.
+- Source information.
+- Character offsets.
+- Verification scores.
+- Human-review indicators.
+
+Reports use the versioned:
+
+```text
+plagiarism_report_v1
+```
+
+schema.
+
+### Scientific-Integrity Safeguards
+
+Plagiarism screening:
+
+- Does **not** automatically reject a manuscript.
+- Does **not** modify the manuscript workflow status.
+- Does **not** describe similarity as proven misconduct.
+- Does **not** treat zero detected matches as proof of originality.
+- Requires human editorial interpretation.
+
+### Current Plagiarism Scope
+
+The current integration supports:
+
+- Arabic manuscripts.
+- Text-based PDF files.
+
+The current implementation does **not** perform OCR for scanned PDFs.
+
+Models, semantic indexes, trained checkpoints, and comparison-corpus data are deployment-specific resources and are intentionally not stored in the Git repository.
+
+For detailed configuration, see:
+
+```text
+docs/plagiarism-screening.md
+```
+
+---
+
+# Publishing and Discovery
+
+Accepted manuscripts enter a dedicated publication workflow.
+
+## Publication Drafts
+
+An accepted submission can be converted into a publication draft.
+
+The publication record maintains a relationship with the accepted manuscript version so the publishing workflow remains traceable to the editorial process.
+
+---
+
+## Issue Management
+
+The system supports journal issues and continuous publication.
+
+The Editor-in-Chief can manage the current publication issue and control transitions between active and archived issues.
+
+Published articles are associated with journal issues and publication metadata.
+
+---
+
+## Public Journal Portal
+
+The public-facing journal interface supports:
+
+- Published article browsing.
+- Article search.
+- Filtering.
+- Pagination.
+- Scientific section browsing.
+- Issue browsing.
+- Journal archives.
+- Article detail pages.
+- PDF downloads.
+- Related content.
+- Publication metadata.
+
+---
+
+## Metadata Export
+
+Published article metadata can be exported using common scholarly formats including:
+
+- BibTeX
+- RIS
+- Dublin Core
+
+---
+
+## OAI-PMH
+
+IJMS exposes an **OAI-PMH provider** for scholarly metadata harvesting.
+
+The provider is available through:
+
+```text
+/oai
+```
+
+and supports standard OAI-PMH operations for academic discovery systems.
+
+This enables interoperability with:
+
+- Institutional repositories.
+- Academic harvesters.
+- Library discovery services.
+- Scholarly search infrastructure.
+
+---
+
+# Journal Customization
+
+IJMS is designed to be reusable by different institutions.
+
+The system follows a **single-journal-per-deployment** architecture while allowing journal-specific configuration to remain separate from core business logic.
+
+Administrators can configure journal identity and public information without changing application source code.
+
+## Journal Identity
+
+Configurable information includes:
+
+- Journal title
+- Short name
+- Description
+- Publisher
 - Journal logo
-- Visual identity
-- Editorial policies
-- Scientific sections or departments
-- Roles and permissions
-- Review deadlines
-- Publishing settings
-- Email templates
-- Workflow settings
+- Primary brand color
+- Print ISSN
+- Online ISSN
+- Default language
+- Publication license
+- Access policy
+- Peer-review policy
+- Publication frequency
+- OAI-PMH metadata
 
-Detailed institutional configuration instructions are available in the [Journal Customization Guide](docs/customization.md).
+---
 
-The project follows the principle of separating configuration from application logic.
+## Public Journal Content
 
-## Mentor-Specified Technical Concepts
+The system supports configurable journal information pages including:
 
-This project integrates several technical concepts from Software Engineering, Artificial Intelligence, and Scientific Publishing.
+- About the Journal
+- Author Guidelines
+- Publication Ethics
+- Open Access
+- Editorial Board
+- Contact
 
-### 1. Software Engineering
+Published content is available through the public portal, while draft content remains private.
 
-The project applies the following software engineering concepts:
+---
 
-- Functional and non-functional requirements analysis
-- Study and evaluation of existing open-source journal management systems, such as Open Journal Systems (OJS)
-- Component-based software engineering
-- Quality assurance and testing
-- System documentation and user manuals
-- Engineering of reusable systems
-- Separation of configuration from application logic, also known as Configuration vs. Code
-- Design of customizable systems
+## Scientific Sections
 
-These concepts are reflected in the architecture through modular design, reusable components, configurable settings, role-based permissions, testing, and documentation.
+Administrators can manage:
 
-### 2. Artificial Intelligence
+- Scientific sections
+- Section activation
+- Section Managers
+- Section Editors
+- Editorial memberships
 
-The project integrates AI and scientific text analysis techniques, including:
+Workflow role semantics themselves remain controlled by application logic so institutional customization cannot silently bypass security rules.
 
-- Plagiarism detection
-- Natural Language Processing (NLP) for analyzing research titles and abstracts
-- Topic modeling for automated research topic extraction
-- Reviewer recommendation systems
-- Semantic matching between research papers and reviewer expertise
-- Intelligent paper ranking and prioritization
-- Metadata extraction using Machine Learning (ML)
+Detailed configuration instructions are available in:
 
-AI features are designed as decision-support tools. They assist editors and reviewers but do not replace human editorial judgment.
+```text
+docs/customization.md
+```
 
-### 3. Supporting Concepts
+---
 
-The project also addresses supporting concepts related to scientific publishing and digital platforms, including:
+# Notifications
 
-- Scientific publishing workflows
-- Research ethics
-- Digital content management
-- User Experience (UX) for editors and researchers
+IJMS includes asynchronous email notifications for important editorial events.
 
-These concepts influence workflow design, review management, access control, publication management, and interface requirements.
+Supported notifications include:
 
-## Technology Stack
+- Reviewer invitation
+- Section Editor assignment
+- Editorial decision
+- Desk rejection
+- Revision-related events
+- Upcoming review deadline
+- Article publication
 
-### Backend
+Notifications are dispatched through Celery after relevant database transactions successfully commit.
 
-- Django
-- Django REST Framework
-- PostgreSQL
-- pgvector
-- Celery
-- Redis
-- MinIO
-- drf-spectacular
-- Simple JWT
+This prevents email failures from rolling back editorial operations.
 
-### Frontend
+Scheduled review reminders are handled through **Celery Beat**.
 
-- Next.js
-- React
+Notification messages are designed to respect double-blind confidentiality and avoid exposing sensitive manuscript or review information through email.
 
-### AI and NLP
+---
 
-- Python-based NLP modules
-- Sentence embeddings
-- Topic modeling
-- Semantic similarity
-- Plagiarism detection components
-- Metadata extraction components
+# System Architecture
 
-### Development and Deployment
+IJMS follows a **modular monolith** architecture.
+
+The application is deployed as one main backend system while separating business domains into independent Django applications.
+
+```mermaid
+flowchart TB
+
+    USER[Authors / Reviewers / Editors / Readers]
+
+    FRONTEND[Next.js + React Frontend]
+    BACKEND[Django + Django REST Framework]
+
+    DB[(PostgreSQL + pgvector)]
+    STORAGE[(MinIO Object Storage)]
+    REDIS[(Redis)]
+
+    CELERY[Celery Worker]
+    BEAT[Celery Beat]
+    PLAG[Dedicated Plagiarism Worker]
+
+    AI[AI / NLP Components]
+    OAI[OAI-PMH Harvesters]
+
+    USER --> FRONTEND
+    FRONTEND -->|REST API / JWT| BACKEND
+
+    BACKEND --> DB
+    BACKEND --> STORAGE
+    BACKEND --> REDIS
+
+    REDIS --> CELERY
+    REDIS --> PLAG
+
+    BEAT --> REDIS
+
+    CELERY --> DB
+    PLAG --> AI
+    PLAG --> DB
+    PLAG --> STORAGE
+
+    OAI -->|OAI-PMH| BACKEND
+```
+
+## Architectural Principles
+
+The project follows several software-engineering principles:
+
+- Modular domain separation.
+- REST-based client/server communication.
+- Layered backend design.
+- Service-layer business logic.
+- Centralized workflow transitions.
+- Role-based authorization.
+- Asynchronous processing for expensive tasks.
+- Separation of configuration from application logic.
+- Private object storage for manuscripts.
+- Preservation of workflow history.
+- Human oversight for AI-assisted decisions.
+
+---
+
+# Technology Stack
+
+## Backend
+
+- **Python**
+- **Django 5**
+- **Django REST Framework**
+- **Simple JWT**
+- **drf-spectacular**
+- **Celery**
+- **django-celery-beat**
+- **Redis**
+
+---
+
+## Database
+
+- **PostgreSQL**
+- **pgvector**
+
+PostgreSQL stores both traditional journal-management data and vector representations used by intelligent features.
+
+---
+
+## Frontend
+
+- **Next.js 16**
+- **React 19**
+- **TypeScript**
+- **TanStack Query**
+- **Axios**
+- **React Hook Form**
+- **Zod**
+- **Tailwind CSS**
+- **shadcn**
+- **Lucide React**
+
+---
+
+## File Storage
+
+- **MinIO**
+
+Private manuscript files are stored separately from the application database.
+
+---
+
+## AI and NLP
+
+- **Sentence Transformers**
+- **BERTopic**
+- **UMAP**
+- **scikit-learn**
+- **PyTorch**
+- **Hugging Face Transformers**
+- **multilingual-E5**
+- **AraT5**
+
+---
+
+## Development and Deployment
+
+- **Docker**
+- **Docker Compose**
+- **Git**
+- **GitHub**
+
+---
+
+# Backend Domains
+
+The Django backend is divided into domain-oriented applications.
+
+| Application | Responsibility |
+|---|---|
+| `accounts` | Users, roles, reviewer profiles and reviewer applications |
+| `journals` | Journal configuration, scientific sections and issues |
+| `submissions` | Manuscripts, metadata, co-authors, versions and topics |
+| `workflow` | Editorial assignments and workflow state |
+| `reviews` | Reviewer management, invitations and reviews |
+| `integrity` | Plagiarism-screening integration |
+| `publishing` | Publication drafts and published articles |
+| `discovery` | OAI-PMH scholarly metadata provider |
+| `notifications` | Asynchronous editorial notifications |
+
+Complex workflow operations are implemented through services rather than placing business logic directly inside API views.
+
+---
+
+# Repository Structure
+
+A simplified repository structure is:
+
+```text
+Intelligent-Journal-Management-System/
+│
+├── backend/
+│   │
+│   ├── apps/
+│   │   ├── accounts/
+│   │   ├── discovery/
+│   │   ├── integrity/
+│   │   ├── journals/
+│   │   ├── notifications/
+│   │   ├── publishing/
+│   │   ├── reviews/
+│   │   ├── submissions/
+│   │   └── workflow/
+│   │
+│   ├── config/
+│   ├── plagiarism_core/
+│   ├── manage.py
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   ├── features/
+│   ├── lib/
+│   └── package.json
+│
+├── docs/
+│
+├── pipeline_resources/
+│   └── ...
+│
+├── .env.example
+├── docker-compose.yml
+└── README.md
+```
+
+`pipeline_resources/` is deployment-specific and is not intended to contain trained models or datasets tracked through Git.
+
+---
+
+# Getting Started
+
+## Prerequisites
+
+Recommended development environment:
 
 - Docker
 - Docker Compose
 - Git
-- GitHub
-- Environment-based configuration
+- Node.js 20+ if running the frontend outside Docker
+- npm
 
-## Architecture Overview
+The plagiarism subsystem additionally requires external model and index resources if enabled.
 
-The project follows a **modular monolith** architecture.
+---
 
-This means the system is deployed as one main application while keeping the internal codebase organized into clear domain-based modules.
-
-This architecture is suitable for the project because it provides:
-
-- Simpler deployment
-- Easier debugging
-- Clear separation of responsibilities
-- Lower operational complexity than microservices
-- Good maintainability for an academic graduation project
-- A path for future extraction of AI services if needed
-
-Suggested backend modules include:
-
-- `accounts`: users, roles, permissions, authentication
-- `journals`: journal configuration, sections, issues, publishing settings
-- `submissions`: submissions, submission versions, co-authors, manuscript files
-- `reviews`: reviewer invitations, review assignments, review reports
-- `workflow`: editorial workflow orchestration and state transitions
-- `publishing`: published articles, issue assignment, public metadata
-- `ai_services`: plagiarism detection, reviewer recommendation, topic modeling, metadata extraction, analytics support
-
-## Development Philosophy
-
-The project follows these principles:
-
-- Build the core editorial workflow before advanced AI features.
-- Keep the system modular and maintainable.
-- Prefer clear code over clever code.
-- Keep business logic separated from API and UI layers.
-- Use services for complex workflow operations.
-- Preserve submission, review, and decision history.
-- Support configurability instead of hardcoding journal-specific values.
-- Treat AI as a decision-support layer.
-- Prioritize security, permissions, testing, and documentation.
-- Design the system so it can be extended after the graduation project.
-
-## Repository Structure
-
-The expected repository structure is:
-
-```text
-intelligent-journal-management-system/
-│
-├── backend/
-│   ├── accounts/
-│   ├── journals/
-│   ├── submissions/
-│   ├── reviews/
-│   ├── workflow/
-│   ├── publishing/
-│   ├── ai_services/
-│   └── config/
-│
-├── frontend/
-│   └── ...
-│
-├── docs/
-│   ├── workflow.md
-│   ├── api-guidelines.md
-│   ├── user-roles.md
-│   └── ai/
-│       ├── plagiarism-detection.md
-│       ├── reviewer-recommendation.md
-│       └── topic-modeling.md
-│
-├── AGENTS.md
-├── ARCHITECTURE.md
-├── ROADMAP.md
-├── DECISIONS.md
-├── CONTRIBUTING.md
-├── README.md
-├── .env.example
-├── .gitignore
-└── docker-compose.yml
-```
-
-The actual structure may evolve as the implementation progresses.
-
-## Suggested Development Roadmap
-
-### Phase 1: Project Setup and Documentation
-
-- Repository setup
-- Docker environment
-- Backend and frontend setup
-- README
-- AGENTS.md
-- Architecture documentation
-- Environment configuration
-
-### Phase 2: User and Role Management
-
-- User model
-- Authentication
-- Roles
-- Permissions
-- Basic user profile
-- Admin configuration
-
-### Phase 3: Journal Configuration
-
-- Journal settings
-- Sections or departments
-- Editorial policies
-- Issue structure
-- Customization foundations
-
-### Phase 4: Submission Management
-
-- Submission model
-- Metadata entry
-- Manuscript upload
-- Co-authors
-- Submission status
-- Submission versioning
-
-### Phase 5: Editorial Workflow
-
-- Section editor assignment
-- Workflow state transitions
-- Editorial task tracking
-- Decision history
-
-### Phase 6: Review Workflow
-
-- Reviewer invitations
-- Review assignments
-- Review reports
-- Review deadlines
-- Double-blind review support
-- Multiple review rounds
-
-### Phase 7: Copyediting and Publishing
-
-- Copyediting workflow
-- Accepted article preparation
-- Issue assignment
-- Published article archive
-- Public article metadata
-
-### Phase 8: Topic Modeling
-
-- Title and abstract preprocessing
-- Topic extraction
-- Topic storage
-- Dashboard and recommendation support
-
-### Phase 9: Reviewer Recommendation
-
-- Reviewer expertise profiles
-- Semantic matching
-- Ranked reviewer suggestions
-- Workload-aware recommendation
-
-### Phase 10: Plagiarism Detection
-
-- Initial plagiarism screening
-- Similarity scoring
-- Result storage
-- Editor review interface
-- Arabic NLP considerations
-
-### Phase 11: Metadata Extraction
-
-- Metadata extraction from manuscript files
-- Human review and correction
-- Integration with submission form
-
-### Phase 12: Intelligent Ranking and Dashboards
-
-- Weighted prioritization model
-- Editorial dashboards
-- Publishing trend analysis
-- Research indicators
-
-## AI Design Principles
-
-AI features should follow these rules:
-
-- AI supports human decision-making.
-- AI does not automatically accept or reject papers.
-- AI outputs should be explainable where possible.
-- AI results should be stored as recommendations, scores, or extracted metadata.
-- Editors should be able to review and override AI suggestions.
-- AI modules should be loosely coupled from the core workflow.
-- Expensive AI tasks should be suitable for asynchronous processing.
-
-## Security and Ethics
-
-The system must respect scientific publishing ethics and protect sensitive editorial information.
-
-Important security and ethical considerations include:
-
-- Protecting manuscript files
-- Protecting reviewer identities in double-blind review
-- Protecting confidential editor comments
-- Preventing unauthorized access to submissions and reviews
-- Treating plagiarism results as indicators, not final judgments
-- Avoiding fully automated editorial decisions
-- Maintaining auditability of important actions
-- Preserving review and decision history
-
-## Configuration vs. Code
-
-The system should avoid hardcoding journal-specific values.
-
-Values that should be configurable include:
-
-- Journal name
-- Journal logo
-- Visual identity
-- Sections
-- Roles and permissions
-- Review deadlines
-- Editorial policies
-- Email templates
-- Publishing settings
-- Workflow behavior where practical
-
-This supports reuse across different journals and institutions.
-
-## Quality Assurance
-
-The project should include testing and quality assurance practices.
-
-Backend tests should cover:
-
-- Model behavior
-- Serializer validation
-- API permissions
-- Workflow transitions
-- Role-based access control
-- Submission versioning
-- Review assignment rules
-- Double-blind review restrictions
-- Important service functions
-
-Suggested backend commands:
+## 1. Clone the Repository
 
 ```bash
-python manage.py test
+git clone https://github.com/Christina1207/Intelligent-Journal-Management-System.git
+cd Intelligent-Journal-Management-System
 ```
+
+---
+
+## 2. Create the Environment File
+
+Copy the example configuration:
+
+### Linux / macOS
+
+```bash
+cp .env.example .env
+```
+
+### Windows PowerShell
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Update sensitive values before starting the system.
+
+Important configuration areas include:
+
+```text
+Django
+PostgreSQL
+Redis
+Celery
+MinIO
+Email
+Frontend URL
+Embedding configuration
+Plagiarism pipeline configuration
+```
+
+Never commit the real `.env` file.
+
+---
+
+## 3. Start Backend Infrastructure
+
+The project uses Docker Compose for the backend infrastructure.
+
+```bash
+docker compose up --build
+```
+
+Core services include:
+
+- PostgreSQL
+- Redis
+- MinIO
+- Database migrations
+- Django backend
+- Celery worker
+- Celery Beat
+- Dedicated plagiarism worker
+
+The Django API is normally available at:
+
+```text
+http://localhost:8000
+```
+
+---
+
+## 4. Start the Frontend
+
+If the frontend is being run outside Docker:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend is normally available at:
+
+```text
+http://localhost:3000
+```
+
+For a production frontend build:
+
+```bash
+npm run build
+npm run start
+```
+
+---
+
+## 5. Stop the Environment
+
+```bash
+docker compose down
+```
+
+To also remove named development volumes:
+
+```bash
+docker compose down -v
+```
+
+> Removing volumes deletes locally persisted PostgreSQL, Redis, MinIO, and other volume data. Use this command carefully.
+
+---
+
+# Environment Configuration
+
+The repository contains:
+
+```text
+.env.example
+```
+
+with the main configuration variables required by the application.
+
+Important variables include:
+
+```env
+SECRET_KEY=
+DEBUG=
+ALLOWED_HOSTS=
+
+POSTGRES_DB=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_HOST=
+POSTGRES_PORT=
+
+CELERY_BROKER_URL=
+CELERY_RESULT_BACKEND=
+
+MINIO_ENDPOINT=
+MINIO_PUBLIC_ENDPOINT=
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_BUCKET_NAME=
+
+FRONTEND_URL=
+
+EMAIL_BACKEND=
+EMAIL_HOST=
+EMAIL_PORT=
+EMAIL_HOST_USER=
+EMAIL_HOST_PASSWORD=
+
+EMBEDDING_MODEL_NAME=
+EMBEDDING_DIMENSIONS=
+```
+
+Do not use example passwords or development secrets in a real deployment.
+
+---
+
+# Plagiarism Pipeline Configuration
+
+The plagiarism pipeline is **disabled by default** because its resources are deployment-specific.
+
+Enable it only after the required resources are configured.
+
+```env
+PLAGIARISM_ENABLED=True
+```
+
+The deployment must provide resources such as:
+
+```text
+multilingual-E5 model
+AraT5 base model
+trained verifier checkpoint
+indexed source corpus
+semantic embedding cache
+BM25 cache
+```
+
+Typical configuration includes:
+
+```env
+PLAGIARISM_RESOURCE_ROOT=
+PLAGIARISM_CACHE_ROOT=
+PLAGIARISM_DATABASE_URL=
+PLAGIARISM_SOURCE_TYPE=
+
+PLAGIARISM_E5_MODEL_DIRECTORY=
+PLAGIARISM_ARAT5_MODEL_DIRECTORY=
+PLAGIARISM_CHECKPOINT_PATH=
+PLAGIARISM_SEMANTIC_CACHE_DIRECTORY=
+PLAGIARISM_BM25_CACHE_DIRECTORY=
+```
+
+Models, datasets, source corpora, generated indexes, reports, and secrets should **not** be committed to Git.
+
+See:
+
+```text
+docs/plagiarism-screening.md
+```
+
+for detailed deployment and verification instructions.
+
+---
+
+# API Documentation
+
+The backend exposes a versioned REST API under:
+
+```text
+/api/v1/
+```
+
+Interactive OpenAPI documentation is generated using **drf-spectacular**.
+
+## Swagger UI
+
+```text
+http://localhost:8000/api/v1/docs/
+```
+
+## ReDoc
+
+```text
+http://localhost:8000/api/v1/redoc/
+```
+
+## OpenAPI Schema
+
+```text
+http://localhost:8000/api/v1/schema/
+```
+
+Authentication uses JWT bearer tokens.
+
+Example:
+
+```http
+Authorization: Bearer <access-token>
+```
+
+---
+
+# OAI-PMH
+
+The scholarly discovery provider is available at:
+
+```text
+http://localhost:8000/oai
+```
+
+or:
+
+```text
+http://localhost:8000/oai/
+```
+
+It exposes journal publication metadata to compatible scholarly harvesting systems.
+
+---
+
+# Testing
+
+## Backend
+
+Run Django system checks:
+
+```bash
+python manage.py check
+```
+
+or inside the running backend container:
+
+```bash
+docker compose exec backend python manage.py check
+```
+
+Check for missing migrations:
 
 ```bash
 python manage.py makemigrations --check --dry-run
 ```
 
-Frontend verification should cover:
+Run backend tests:
 
-- Form validation
-- Role-based visibility
-- API integration
-- Loading states
-- Error states
-- Usability for authors, reviewers, editors, and administrators
+```bash
+python manage.py test
+```
 
-## API Documentation
+or:
 
-The backend API should be documented using drf-spectacular.
+```bash
+docker compose exec backend python manage.py test
+```
 
-The project should provide:
+Individual applications can also be tested independently:
 
-- OpenAPI schema
-- Swagger UI or similar interactive documentation
-- Clear endpoint naming
-- Consistent response formats
-- Permission-aware API behavior
+```bash
+python manage.py test apps.submissions
+python manage.py test apps.workflow
+python manage.py test apps.reviews
+python manage.py test apps.publishing
+python manage.py test apps.integrity
+python manage.py test apps.notifications
+```
 
-## Current Status
+---
 
-This project is under active development as a graduation project.
+## Frontend
 
-The first implementation priority is the core editorial workflow:
+```bash
+cd frontend
+npm run lint
+npm run build
+```
 
-1. User and role management
-2. Journal sections
-3. Submission creation
-4. Submission versioning
-5. Section editor assignment
-6. Review workflow
-7. Editorial decisions
-8. Publishing workflow
+The project includes validation of major workflows such as:
 
-Advanced AI features will be added incrementally after the core workflow is stable.
+- Submission creation
+- Editorial triage
+- Section Editor assignment
+- Reviewer invitations
+- Peer review
+- Revision rounds
+- Editorial decisions
+- Publishing handoff
+- Role permissions
+- Double-blind confidentiality
+- Plagiarism-screening access controls
+- Notifications
 
-## License
+---
 
-This project is intended to be open-source.
+# Security and Research Ethics
 
-A specific license should be selected before public release.
+Scientific manuscripts and peer reviews contain sensitive and potentially unpublished information.
 
-Possible options include:
+IJMS therefore treats security and research ethics as core system requirements.
 
-- MIT License
-- Apache License 2.0
-- GNU GPLv3
+Important safeguards include:
 
-## Notes
+- JWT-based authentication.
+- Role-based authorization.
+- Section-scoped editorial permissions.
+- Private manuscript storage.
+- Double-blind reviewer protection.
+- Restricted access to confidential review information.
+- Restricted plagiarism evidence access.
+- No manuscript attachments in notification emails.
+- Environment-based secret management.
+- Workflow-history preservation.
+- Human oversight for AI recommendations.
 
-This system is designed as both:
+---
 
-1. A functional journal management platform.
-2. A software engineering graduation project demonstrating reusable system design, configurable architecture, quality assurance, documentation, and AI integration.
+## AI Ethics
 
-The implementation should prioritize correctness, maintainability, and extensibility over unnecessary complexity.
+AI outputs are never treated as final scientific judgments.
+
+### Reviewer Recommendation
+
+The recommendation system suggests candidates but cannot assign them automatically.
+
+### Manuscript Prioritization
+
+Priority scores organize editorial queues but do not influence scientific acceptance.
+
+### Topic Modeling
+
+Topics are analytical representations and are not scientific classifications enforced by the workflow.
+
+### Plagiarism Detection
+
+Similarity evidence indicates possible overlap requiring editorial review.
+
+A detection is **not proof of plagiarism**, and absence of detected evidence is **not proof of originality**.
+
+---
+
+# Current Limitations
+
+The current project has several intentional scope limitations.
+
+## Single-Journal Deployment
+
+Each installation represents one journal.
+
+The project does not currently implement multi-tenant hosting of multiple independent journals from one deployment.
+
+---
+
+## Plagiarism Language Scope
+
+The integrated plagiarism pipeline currently targets Arabic manuscripts.
+
+---
+
+## Scanned PDFs
+
+The plagiarism pipeline expects text-based PDF documents.
+
+OCR for scanned manuscript images is not currently included.
+
+---
+
+## External AI Resources
+
+Large models, trained checkpoints, source corpora, and generated semantic indexes are not distributed through Git.
+
+A deployment enabling plagiarism analysis must provide those resources separately.
+
+---
+
+## Human Editorial Authority
+
+The intelligent components are deliberately not permitted to make final editorial decisions.
+
+Acceptance, rejection, reviewer assignment, and scientific-integrity decisions remain under human editorial control.
+
+---
+
+# Design Principles
+
+The development of IJMS follows the following principles:
+
+1. **Human-centered AI**
+
+   Intelligent features provide evidence and recommendations rather than automatic editorial judgments.
+
+2. **Clear domain boundaries**
+
+   Accounts, submissions, reviews, workflow, publishing, integrity, and discovery are represented by separate backend modules.
+
+3. **Centralized business rules**
+
+   Complex workflow operations are handled through services and centralized transition rules.
+
+4. **Historical traceability**
+
+   Manuscript versions, assignments, reviews, and decisions are preserved.
+
+5. **Configuration over hardcoding**
+
+   Journal identity and institutional content remain configurable.
+
+6. **Asynchronous expensive work**
+
+   Notifications, clustering, reminders, and plagiarism processing can run outside synchronous HTTP requests.
+
+7. **Privacy by design**
+
+   Double-blind identities, confidential comments, private manuscripts, and integrity reports are protected by authorization rules.
+
+8. **Explainable decision support**
+
+   Where possible, AI results expose scores, evidence, keywords, or contributing workflow indicators.
+
+---
+
+# Project Context
+
+This project was developed as a bachelor's graduation project in **Software Engineering and Artificial Intelligence**.
+
+Its objective is to analyze and develop an open-source electronic system for managing peer-reviewed scientific journals while enhancing the system with AI and scientific-text-analysis techniques.
+
+The project focuses on building a reusable and customizable platform covering the complete academic-publishing lifecycle:
+
+```text
+Submission
+    ↓
+Editorial Screening
+    ↓
+Peer Review
+    ↓
+Evaluation
+    ↓
+Revision
+    ↓
+Editorial Decision
+    ↓
+Publishing
+    ↓
+Archiving and Discovery
+```
+
+The **University of Aleppo Journal** was used as the principal institutional case study.
+
+The intelligent components were developed to improve:
+
+- Scientific-integrity screening.
+- Reviewer selection.
+- Editorial workload management.
+- Research-topic analysis.
+- Publishing analytics.
+- Data-supported editorial decision-making.
+
+---
+
+# Documentation
+
+Additional project documentation is available under:
+
+```text
+docs/
+```
+
+Important documents include:
+
+```text
+docs/plagiarism-screening.md
+docs/customization.md
+```
+
+The REST API is additionally documented through the generated OpenAPI interface.
+
+---
+
+# License
+
+The project is intended for open-source release.
+
+An explicit open-source `LICENSE` file has not yet been included in the repository and should be added before public redistribution or reuse under a defined software license.
+
+---
+
+# Intelligent Journal Management System
+
+**Open-source journal management enhanced with human-centered AI for scientific publishing.**
