@@ -101,7 +101,7 @@ def generate_submission_embedding(self, submission_id: str):
         return
 
     try:
-        embedding = EmbeddingService.generate_combined(texts)
+        embedding = EmbeddingService.generate(submission.abstract)
         Submission.objects.filter(id=submission_id).update(
             abstract_embedding=embedding
         )

@@ -3,6 +3,8 @@ from bertopic import BERTopic
 from celery import shared_task
 from django.utils import timezone
 from umap import UMAP
+from sklearn.feature_extraction.text import CountVectorizer
+from bertopic.vectorizers import ClassTfidfTransformer
 
 from config.constants import MIN_SUBMISSIONS_FOR_CLUSTERING, CELERY_TASK_MAX_RETRIES
 
@@ -115,7 +117,22 @@ def cluster_section_topics(self, section_id: str):
         n_neighbors = min(15, len(submissions) - 1)
         n_components = min(5, max(1, len(submissions) - 2))
         umap_model = UMAP(n_neighbors=n_neighbors, n_components=n_components, min_dist=0.0, metric="cosine", random_state=42)
-        topic_model = BERTopic(min_topic_size=2, umap_model=umap_model)
+        vectorizer_model = CountVectorizer(
+            stop_words="english",
+            ngram_range=(1, 2),
+            min_df=1,
+        )
+
+        ctfidf_model = ClassTfidfTransformer(
+            reduce_frequent_words=True,
+        )
+
+        topic_model = BERTopic(
+            min_topic_size=2,
+            umap_model=umap_model,
+            vectorizer_model=vectorizer_model,
+            ctfidf_model=ctfidf_model,
+        )
         topics, _ = topic_model.fit_transform(docs, embeddings=embeddings)
     except Exception as exc:
         logger.error(
@@ -138,9 +155,16 @@ def cluster_section_topics(self, section_id: str):
             label = None
             keywords = []
         else:
-            label = topic_info.loc[
-                topic_info["Topic"] == topic_id, "Name"
-            ].values[0]
+            keywords = topic_keywords.get(topic_id, [])
+
+            label = (
+                " · ".join(
+                    word.replace("_", " ").title()
+                    for word in keywords[:4]
+                )
+                if keywords
+                else f"Topic {topic_id}"
+            )
             keywords = topic_keywords.get(topic_id, [])
 
         SubmissionTopic.objects.update_or_create(
